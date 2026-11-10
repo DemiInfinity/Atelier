@@ -1,0 +1,19 @@
+# Build output
+/bin/
+/atelier
+
+# Local data (SQLite database, hosted repos)
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Secrets
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
