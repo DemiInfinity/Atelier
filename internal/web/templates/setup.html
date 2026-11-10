@@ -1,0 +1,30 @@
+{{define "content"}}
+<main class="center-page">
+  <div class="auth-card">
+    <div class="auth-logo">{{template "logo"}}</div>
+    <h1 class="display">Welcome to your studio</h1>
+    <p class="muted">Create the owner account. You're the only person who signs in to this Atelier.</p>
+    {{template "flash" .}}
+    <form method="post" action="/setup" class="stack">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" required autocomplete="username" value="{{with .Data}}{{.Username}}{{end}}" placeholder="deminimmo">
+      </div>
+      <div class="field">
+        <label for="display_name">Display name <span class="muted">(optional)</span></label>
+        <input id="display_name" name="display_name" autocomplete="name" value="{{with .Data}}{{.DisplayName}}{{end}}">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required minlength="10" autocomplete="new-password">
+        <span class="hint">At least 10 characters. Passkeys arrive in a later update.</span>
+      </div>
+      <div class="field">
+        <label for="password_confirm">Confirm password</label>
+        <input id="password_confirm" name="password_confirm" type="password" required minlength="10" autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary btn-lg" type="submit">Create account</button>
+    </form>
+  </div>
+</main>
+{{end}}

@@ -1,0 +1,83 @@
+{{define "logo"}}<svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="2" y="2" width="24" height="24" rx="7" stroke="currentColor" stroke-width="2"/><path d="M9 19 L14 8 L19 19 M11 15 H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{{end}}
+
+{{define "topbar"}}
+<header class="topbar">
+  <a href="/" class="brand">{{template "logo"}}<span>Atelier</span></a>
+  <nav class="topnav" aria-label="Primary">
+    <a href="/" {{if eq .Nav "home"}}aria-current="page"{{end}}>Home</a>
+    <a href="/{{.Me.Name}}" {{if eq .Nav "repos"}}aria-current="page"{{end}}>Repositories</a>
+    <a href="/settings/tokens" {{if eq .Nav "tokens"}}aria-current="page"{{end}}>Settings</a>
+  </nav>
+  <div class="topbar-end">
+    <a href="/new" class="icon-btn" aria-label="New repository"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5 V19 M5 12 H19"/></svg></a>
+    <a href="/{{.Me.Name}}" class="avatar" aria-label="Your profile">{{.Me.Initial}}</a>
+    <form method="post" action="/signout"><button class="btn btn-ghost btn-sm" type="submit">Sign out</button></form>
+  </div>
+</header>
+{{end}}
+
+{{define "flash"}}
+{{if .Error}}<div class="flash flash-error" role="alert">{{.Error}}</div>{{end}}
+{{if .Notice}}<div class="flash flash-ok" role="status">Saved.</div>{{end}}
+{{end}}
+
+{{define "repohead"}}
+<div class="repohead">
+  <div class="wrap">
+    <div class="repohead-title">
+      <p class="repo-name"><a href="/{{.Repo.Owner}}" class="muted-link">{{.Repo.Owner}}</a> <span class="slash">/</span> <a href="{{.Base}}"><strong>{{.Repo.Name}}</strong></a></p>
+      {{if .Repo.Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
+      {{if eq .Repo.OwnerKind "company"}}<span class="pill pill-violet">Company</span>{{end}}
+    </div>
+    <nav class="tabs" aria-label="Repository">
+      <a href="{{.Base}}" {{if eq .Tab "code"}}aria-current="page"{{end}}>Code</a>
+      <a href="{{.Base}}/issues" {{if eq .Tab "issues"}}aria-current="page"{{end}}>Issues</a>
+      <a href="{{.Base}}/pulls" {{if eq .Tab "pulls"}}aria-current="page"{{end}}>Pull requests</a>
+      <span class="tab-soon" title="Coming in Phase 3">Actions</span>
+      <span class="tab-soon" title="Coming in Phase 3">Releases</span>
+      <a href="{{.Base}}/commits/{{.Default}}" {{if eq .Tab "commits"}}aria-current="page"{{end}}>Commits</a>
+      <a href="{{.Base}}/settings" {{if eq .Tab "settings"}}aria-current="page"{{end}}>Settings</a>
+    </nav>
+  </div>
+</div>
+{{end}}
+
+{{/* Account settings side menu. Pass the active key: tokens, keys, passkeys, backups, import. */}}
+{{define "accountnav"}}
+<nav class="side-nav" aria-label="Account settings">
+  <a href="/settings/tokens" {{if eq . "tokens"}}aria-current="page"{{end}}>Access tokens</a>
+  <a href="/settings/keys" {{if eq . "keys"}}aria-current="page"{{end}}>SSH keys</a>
+  <a href="/settings/passkeys" {{if eq . "passkeys"}}aria-current="page"{{end}}>Passkeys</a>
+  <a href="/settings/backups" {{if eq . "backups"}}aria-current="page"{{end}}>Backups and storage</a>
+  <a href="/settings/import" {{if eq . "import"}}aria-current="page"{{end}}>Import</a>
+</nav>
+{{end}}
+
+{{define "crumbs"}}
+<p class="crumbs"><a href="{{.Base}}/tree/{{.Ref}}">{{.Repo.Name}}</a>{{range .Crumbs}} <span class="slash">/</span> <a href="{{.URL}}">{{.Name}}</a>{{end}}</p>
+{{end}}
+
+{{define "lastcommit"}}
+{{if .}}<div class="lastcommit">
+  <span class="avatar avatar-sm" aria-hidden="true">{{initial .Author}}</span>
+  <strong>{{.Author}}</strong>
+  <span class="lastcommit-msg">{{.Subject}}</span>
+  <span class="mono muted">{{.Short}}</span>
+  <span class="muted">{{ago .When}}</span>
+</div>{{end}}
+{{end}}
+
+{{/* Clone box. Pass the HTTPS clone URL. When the SSH server is on,
+     static/sshkeys.js adds an HTTPS/SSH switch (the choice is remembered). */}}
+{{define "clone"}}
+<div class="clone" data-clone-https="{{.}}">
+  <span class="clone-label">Clone</span>
+  <span class="clone-proto" role="group" aria-label="Clone over" hidden>
+    <button type="button" data-clone-proto="https" aria-pressed="true">HTTPS</button>
+    <button type="button" data-clone-proto="ssh" aria-pressed="false">SSH</button>
+  </span>
+  <input class="clone-url" id="clone-url" value="{{.}}" readonly aria-label="Clone URL">
+  <button type="button" class="clone-copy" data-copy="#clone-url" aria-label="Copy clone URL"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+</div>
+<script src="/static/sshkeys.js" defer></script>
+{{end}}

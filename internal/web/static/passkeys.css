@@ -1,0 +1,31 @@
+/* Settings → Passkeys, and the passkey button on the sign-in page. */
+
+.pk-align-end { align-items: flex-end; }
+.pk-note { background: var(--surface); }
+.pk-row { align-items: flex-start; }
+.pk-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--amber-chip);
+  color: var(--amber);
+  flex: 0 0 auto;
+}
+.pk-rename { margin-top: 4px; }
+.pk-rename > summary { cursor: pointer; display: inline-block; list-style: none; }
+.pk-rename > summary::-webkit-details-marker { display: none; }
+.pk-rename-form { margin-top: 8px; max-width: 420px; }
+.pk-rename-form input { min-height: 30px; padding: 4px 10px; }
+@media (max-width: 520px) {
+  .pk-row { flex-wrap: wrap; }
+  .pk-row > form { margin-left: 44px; }
+}
+
+/* sign-in page */
+.pk-signin { display: flex; flex-direction: column; gap: 16px; }
+.pk-signin[hidden], .or[hidden] { display: none; }
+.pk-btn svg { color: var(--amber); }
+[data-passkey-error][hidden], [data-passkey-note][hidden] { display: none; }

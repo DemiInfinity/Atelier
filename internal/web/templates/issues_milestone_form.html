@@ -1,0 +1,30 @@
+{{define "head"}}{{template "issues-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap narrow stack-lg">
+  <div class="stack-sm">
+    <p class="small"><a class="muted-link" href="{{$v.Base}}/milestones">← Milestones</a></p>
+    <h1 class="h-display">{{$d.Heading}}</h1>
+  </div>
+  {{template "flash" .}}
+  <form method="post" action="{{if $d.M}}{{$v.Base}}/milestones/{{$d.M.ID}}/edit{{else}}{{$v.Base}}/milestones/new{{end}}" class="card stack">
+    <div class="field">
+      <label for="title">Title</label>
+      <input id="title" name="title" required maxlength="100" value="{{$d.MTitle}}" placeholder="e.g. v1.0">
+    </div>
+    <div class="field">
+      <label for="due">Due date <span class="muted small">(optional)</span></label>
+      <input id="due" name="due" type="date" value="{{$d.Due}}">
+    </div>
+    <div class="field">
+      <label for="description">Description <span class="muted small">(optional, Markdown)</span></label>
+      <textarea id="description" name="description" rows="6" class="issue-textarea">{{$d.Desc}}</textarea>
+    </div>
+    <div class="row-end">
+      <a class="btn btn-ghost" href="{{$v.Base}}/milestones">Cancel</a>
+      <button class="btn btn-primary" type="submit">{{if $d.M}}Save changes{{else}}Create milestone{{end}}</button>
+    </div>
+  </form>
+</main>
+{{end}}

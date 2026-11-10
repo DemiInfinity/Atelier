@@ -1,0 +1,96 @@
+{{/* Shared pieces for the pull request pages. Names start with "pulls-". */}}
+
+{{define "pulls-head"}}<link rel="stylesheet" href="/static/pulls.css"><script src="/static/pulls.js" defer></script>{{end}}
+
+{{/* Pull request icon in its state colour. Pass a store.Pull. */}}
+{{define "pulls-icon"}}{{if .IsMerged}}<svg class="pr-icon is-merged" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" role="img" aria-label="Merged pull request"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7 V17 M6 7 c0 4 6 5 10 5"/></svg>{{else if .IsClosed}}<svg class="pr-icon is-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" role="img" aria-label="Closed pull request"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7 V17 M15 4 L21 10 M21 4 L15 10 M18 13 V17"/></svg>{{else}}<svg class="pr-icon is-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" role="img" aria-label="Open pull request"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7 V17 M18 17 V9 c0-2-1-3-3-3 H11 M13 4 L11 6 L13 8"/></svg>{{end}}{{end}}
+
+{{/* State pill. Pass a store.Pull. */}}
+{{define "pulls-state"}}<span class="pr-state {{if .IsMerged}}is-merged{{else if .IsClosed}}is-closed{{else}}is-open{{end}}">{{template "pulls-icon" .}}{{if .IsMerged}}Merged{{else if .IsClosed}}Closed{{else}}Open{{end}}</span>{{end}}
+
+{{define "pulls-branch"}}<span class="pr-branch mono">{{.}}</span>{{end}}
+
+{{/* Marks non-owner actors. Pass the kind. */}}
+{{define "pulls-actor"}}{{if eq . "agent"}} <span class="pill pill-violet">agent</span>{{else if eq . "bot"}} <span class="pill pill-violet">bot</span>{{else if eq . "token"}} <span class="pill">token</span>{{end}}{{end}}
+
+{{/* One note to self. Pass a *pullNoteView. */}}
+{{define "pulls-note"}}<article class="pr-note{{if .Resolved}} is-resolved{{end}}" id="note-{{.ID}}">{{template "pulls-note-inner" .}}</article>{{end}}
+
+{{define "pulls-note-inner"}}
+  <header class="pr-note-head small">
+    <span class="avatar avatar-sm" aria-hidden="true">{{initial .AuthorName}}</span>
+    <strong class="text-2">{{.AuthorName}}</strong>{{template "pulls-actor" .AuthorKind}}
+    <span class="muted"><time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time></span>
+    {{if .Resolved}}<span class="pill pr-pill-ok">Resolved</span>{{end}}
+    {{if not .Current}}<span class="pill" title="Written on commit {{short .CommitSHA}}; the line may have changed since">Outdated</span>{{end}}
+  </header>
+  <div class="markdown pr-note-body">{{.HTML}}</div>
+  <form method="post" action="{{.URL}}/notes/{{.ID}}/resolve" class="pr-note-actions">
+    <input type="hidden" name="back" value="{{.Back}}">
+    {{if .Resolved}}<input type="hidden" name="resolved" value="0"><button class="btn btn-xs" type="submit">Unresolve</button>
+    {{else}}<input type="hidden" name="resolved" value="1"><button class="btn btn-xs" type="submit">Resolve</button>{{end}}
+  </form>
+{{end}}
+
+{{/* A note form. Pass a pullNoteForm (Line 0 for the JS template). */}}
+{{define "pulls-note-form"}}
+<form method="post" action="{{.URL}}/notes" class="pr-note-form stack-sm">
+  <input type="hidden" name="commit" value="{{.Commit}}">
+  <input type="hidden" name="path" value="{{.Path}}">
+  <input type="hidden" name="side" value="{{.Side}}">
+  <input type="hidden" name="line" value="{{if .Line}}{{.Line}}{{end}}">
+  <label class="small" for="{{.ID}}">Note to self on line <span class="pr-note-line">{{if .Line}}{{.Line}}{{end}}</span></label>
+  <textarea id="{{.ID}}" name="body" rows="3" required maxlength="65536" placeholder="Something to come back to before merging…"></textarea>
+  <div class="row-end">
+    <a class="btn btn-sm btn-ghost pr-note-cancel" href="{{.Cancel}}">Cancel</a>
+    <button class="btn btn-sm btn-primary" type="submit">Add note</button>
+  </div>
+</form>
+{{end}}
+
+{{/* A file's diff. Pass a pullFileView (its URL is empty when notes are off). */}}
+{{define "pulls-file"}}{{$f := .}}{{$c := .}}
+<section class="pr-file" id="{{$f.Anchor}}" aria-label="{{$f.Path}}">
+  <header class="pr-file-head">
+    <span class="pr-file-status is-{{$f.Status}}" title="{{$f.Status}}">{{if eq $f.Status "added"}}A{{else if eq $f.Status "deleted"}}D{{else if eq $f.Status "renamed"}}R{{else}}M{{end}}<span class="sr-only"> ({{$f.Status}})</span></span>
+    <span class="pr-file-path mono">{{if $f.OldPath}}<span class="muted">{{$f.OldPath}} →</span> {{end}}{{$f.Path}}</span>
+    {{if $f.Open}}<span class="pr-dot" title="{{$f.Open}} unresolved notes"><span class="sr-only">{{$f.Open}} unresolved notes</span></span>{{end}}
+    <span class="pr-counts small"><span class="pr-plus">+{{$f.Additions}}</span> <span class="pr-minus">−{{$f.Deletions}}</span></span>
+    {{if and $c.Commit (ne $f.Status "deleted")}}<a class="btn btn-xs" href="{{$c.RepoBase}}/blob/{{$c.Commit}}/{{$f.Path}}">View file</a>{{end}}
+  </header>
+  {{if $f.Binary}}<p class="pr-file-empty muted small">Binary file not shown.</p>
+  {{else if not $f.LineViews}}<p class="pr-file-empty muted small">{{if $f.Truncated}}This diff is too large to show here.{{else}}No line changes (renamed or mode change only).{{end}}</p>
+  {{else}}
+  <div class="table-scroll">
+    <table class="pr-diff">
+      <caption class="sr-only">Changes to {{$f.Path}}</caption>
+      {{range $f.LineViews}}
+      {{if eq .Kind "hunk"}}<tr class="pr-l is-hunk"><td class="pr-ln" colspan="2"></td><td class="pr-code">{{.Text}}</td></tr>
+      {{else if eq .Kind "meta"}}<tr class="pr-l is-meta"><td class="pr-ln" colspan="2"></td><td class="pr-code">{{.Text}}</td></tr>
+      {{else}}<tr class="pr-l is-{{.Kind}}" id="{{.ID}}">
+        <td class="pr-ln">{{if .Old}}{{.Old}}{{end}}</td><td class="pr-ln">{{if .New}}{{.New}}{{end}}</td>
+        <td class="pr-code">{{if $c.URL}}<a class="pr-note-add" href="{{$c.URL}}/files?path={{$f.Path}}&amp;side={{.Side}}&amp;line={{.Num}}#{{.ID}}" data-path="{{$f.Path}}" data-side="{{.Side}}" data-line="{{.Num}}" aria-label="Add a note on {{if eq .Side "old"}}old{{else}}new{{end}} line {{.Num}} of {{$f.Path}}">+</a>{{end}}<span class="pr-mark" aria-hidden="true">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}-{{else}} {{end}}</span>{{.Text}}</td>
+      </tr>
+      {{if .Notes}}<tr class="pr-notes-row"><td colspan="3"><div class="pr-inline-notes">{{range .Notes}}{{template "pulls-note" .}}{{end}}</div></td></tr>{{end}}
+      {{if .Form}}<tr class="pr-notes-row" id="note-form"><td colspan="3">{{template "pulls-note-form" .Form}}</td></tr>{{end}}
+      {{end}}
+      {{end}}
+    </table>
+  </div>
+  {{if $f.Truncated}}<p class="pr-file-empty muted small">Only the first part of this diff is shown.</p>{{end}}
+  {{end}}
+</section>
+{{end}}
+
+{{/* Commit rows. Pass a pullCommitList. */}}
+{{define "pulls-commits"}}
+<ol class="pr-commits">
+  {{range .Commits}}<li class="pr-commit">
+    <svg class="pr-commit-dot" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2 V8 M12 16 V22"/></svg>
+    <span class="avatar avatar-sm" aria-hidden="true">{{initial .Author}}</span>
+    <a class="pr-commit-subject" href="{{$.Base}}/commit/{{.Hash}}">{{.Subject}}</a>
+    <a class="mono small muted-link" href="{{$.Base}}/commit/{{.Hash}}" aria-label="Commit {{.Short}}">{{.Short}}</a>
+    <time class="small muted nowrap" datetime="{{.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .When}}">{{ago .When}}</time>
+  </li>{{end}}
+</ol>
+{{end}}

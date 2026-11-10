@@ -1,0 +1,52 @@
+/* Settings → SSH keys, and the HTTPS/SSH switch in the clone box. */
+
+.sshk-code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 6px;
+  overflow-wrap: anywhere;
+}
+.sshk-off { background: var(--surface); border-color: var(--border-strong); color: var(--text-2); }
+.sshk-textarea { resize: vertical; min-height: 96px; font-size: 13px; line-height: 1.5; word-break: break-all; }
+.sshk-row { align-items: flex-start; }
+.sshk-row .pill { font-family: var(--font-mono); font-size: 11px; vertical-align: 1px; }
+.sshk-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--amber-chip);
+  color: var(--amber);
+  flex: 0 0 auto;
+}
+@media (max-width: 520px) {
+  .sshk-row { flex-wrap: wrap; }
+  .sshk-row form { margin-left: 44px; }
+}
+
+/* Clone box protocol switch (shown only when SSH is on; see sshkeys.js). */
+.clone-proto {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border-strong);
+}
+.clone-proto[hidden] { display: none; }
+.clone-proto button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 0 9px;
+  min-height: 34px;
+  cursor: pointer;
+}
+.clone-proto button + button { border-left: 1px solid var(--border); }
+.clone-proto button:hover { color: var(--text); background: var(--raised-2); }
+.clone-proto button[aria-pressed="true"] { color: var(--amber); background: var(--amber-chip); }
+.clone-proto button:focus-visible { outline-offset: -2px; border-radius: 0; }
+.clone:has(.clone-proto:not([hidden])) .clone-label { display: none; }

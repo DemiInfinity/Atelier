@@ -1,0 +1,21 @@
+{{define "content"}}
+<main class="wrap narrow stack-lg">
+  <div>
+    <h1 class="display">New company account</h1>
+    <p class="muted">A separate owner for work repos, e.g. Elyndra Studios. You stay the only person who signs in.</p>
+  </div>
+  {{template "flash" .}}
+  <form method="post" action="/accounts/new" class="card stack">
+    <div class="field">
+      <label for="name">Account name</label>
+      <input id="name" name="name" required maxlength="100" value="{{.Data.Name}}" placeholder="elyndra" autofocus>
+      <span class="hint">Used in URLs: /elyndra/repo-name</span>
+    </div>
+    <div class="field">
+      <label for="display_name">Display name</label>
+      <input id="display_name" name="display_name" maxlength="100" value="{{.Data.DisplayName}}" placeholder="Elyndra Studios">
+    </div>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Create account</button></div>
+  </form>
+</main>
+{{end}}

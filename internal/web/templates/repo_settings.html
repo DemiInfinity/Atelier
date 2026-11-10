@@ -1,0 +1,42 @@
+{{define "content"}}
+{{$v := .Data.V}}
+{{template "repohead" $v}}
+<main class="wrap narrow stack-lg">
+  <h1 class="h-display">Settings</h1>
+  {{template "flash" .}}
+
+  <form method="post" action="{{$v.Base}}/settings" class="card stack">
+    <h2 class="h-sm">General</h2>
+    <div class="field">
+      <label for="description">Description</label>
+      <input id="description" name="description" maxlength="300" value="{{$v.Repo.Description}}" placeholder="A short line about this project">
+    </div>
+    <fieldset class="field">
+      <legend>Visibility</legend>
+      <label class="choice"><input type="radio" name="visibility" value="private" {{if $v.Repo.Private}}checked{{end}}><span><strong>Private</strong><span class="small muted">Only you, with a token, can clone it.</span></span></label>
+      <label class="choice"><input type="radio" name="visibility" value="public" {{if not $v.Repo.Private}}checked{{end}}><span><strong>Public</strong><span class="small muted">Anyone who can reach your server can clone it. Pushing still needs a token.</span></span></label>
+    </fieldset>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Save changes</button></div>
+  </form>
+
+  <section class="card row-between wrap-gap">
+    <div>
+      <h2 class="h-sm">Branch rules</h2>
+      <p class="small muted">Require pull requests, block force pushes, require resolved notes or linear history on branches like <span class="mono">{{$v.Default}}</span>.</p>
+    </div>
+    <a class="btn" href="{{$v.Base}}/settings/branches">Manage branch rules</a>
+  </section>
+
+  <form method="post" action="{{$v.Base}}/delete" class="card card-danger stack">
+    <div>
+      <h2 class="h-sm danger-ink">Danger zone</h2>
+      <p class="small">Deleting <strong>{{$v.Repo.FullName}}</strong> removes the repository and all of its history from this server. This can't be undone.</p>
+    </div>
+    <div class="field">
+      <label for="confirm">Type <span class="mono">{{$v.Repo.FullName}}</span> to confirm</label>
+      <input id="confirm" name="confirm" required autocomplete="off" autocapitalize="off" spellcheck="false" pattern="{{$v.Repo.FullName}}">
+    </div>
+    <div class="row-end"><button class="btn btn-danger" type="submit">Delete this repository</button></div>
+  </form>
+</main>
+{{end}}

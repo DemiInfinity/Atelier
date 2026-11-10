@@ -1,0 +1,71 @@
+{{define "head"}}{{template "pulls-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$f := $d.Form}}
+{{template "repohead" $v}}
+<main class="wrap narrow stack-lg">
+  <div class="stack-sm">
+    <p class="small"><a class="muted-link" href="{{$v.Base}}/settings">← Settings</a></p>
+    <h1 class="h-display">Branch rules</h1>
+    <p class="muted">Protect branches like <span class="mono">{{$v.Default}}</span>. Rules are checked on every push (HTTPS and SSH) and before merging a pull request. Merges made by Atelier always pass the push checks.</p>
+  </div>
+  {{template "flash" .}}
+
+  <section class="list-card" aria-labelledby="rules-title">
+    <h2 class="list-head h-sm" id="rules-title">Rules</h2>
+    {{range $d.Rules}}
+    <div class="list-row pr-rule-row">
+      <div class="grow min0 stack-sm">
+        <p><span class="mono pr-rule-pattern">{{.Pattern}}</span></p>
+        <ul class="pr-rule-pills" aria-label="Requirements">
+          {{if .RequirePR}}<li class="pill pill-amber">Pull request required</li>{{end}}
+          {{if .BlockForcePush}}<li class="pill pill-amber">No force pushes or deletion</li>{{end}}
+          {{if .RequireResolvedNotes}}<li class="pill pill-amber">Notes resolved</li>{{end}}
+          {{if .LinearHistory}}<li class="pill pill-amber">Linear history</li>{{end}}
+          {{if not (or .RequirePR .BlockForcePush .RequireResolvedNotes .LinearHistory)}}<li class="pill">No requirements</li>{{end}}
+        </ul>
+        <p class="small muted">{{if .Matches}}Applies to {{range $i, $b := .Matches}}{{if $i}}, {{end}}<span class="mono">{{$b}}</span>{{end}}{{else}}No branch matches yet.{{end}}</p>
+      </div>
+      <div class="row gap-sm">
+        <a class="btn btn-sm" href="{{$v.Base}}/settings/branches?edit={{.ID}}#rule-form" aria-label="Edit rule {{.Pattern}}">Edit</a>
+        <form method="post" action="{{$v.Base}}/settings/branches/{{.ID}}/delete"><button class="btn btn-sm btn-danger" type="submit" aria-label="Delete rule {{.Pattern}}">Delete</button></form>
+      </div>
+    </div>
+    {{else}}
+    <div class="list-row muted">No rules yet. Every branch accepts direct and force pushes.</div>
+    {{end}}
+  </section>
+
+  <form method="post" action="{{$v.Base}}/settings/branches{{if $d.Editing}}/{{$d.Editing}}{{end}}" class="card stack" id="rule-form">
+    <h2 class="h-sm">{{if $d.Editing}}Edit rule{{else}}Add a rule{{end}}</h2>
+    <div class="field">
+      <label for="pattern">Branch name pattern</label>
+      <input id="pattern" name="pattern" required maxlength="200" value="{{$f.Pattern}}" placeholder="main, release/*" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="pattern-hint">
+      <p class="hint" id="pattern-hint"><span class="mono">*</span> matches anything except <span class="mono">/</span>; <span class="mono">**</span> matches across <span class="mono">/</span> too.</p>
+    </div>
+    <fieldset class="field">
+      <legend>Requirements</legend>
+      <label class="choice"><input type="checkbox" name="require_pr" value="1" {{if $f.RequirePR}}checked{{end}}><span><strong>Require a pull request</strong><span class="small muted">Direct pushes are rejected. Changes land by merging a pull request.</span></span></label>
+      <label class="choice"><input type="checkbox" name="block_force_push" value="1" {{if $f.BlockForcePush}}checked{{end}}><span><strong>Block force pushes</strong><span class="small muted">Pushes that rewrite history, and deleting the branch, are rejected.</span></span></label>
+      <label class="choice"><input type="checkbox" name="require_resolved_notes" value="1" {{if $f.RequireResolvedNotes}}checked{{end}}><span><strong>Require resolved notes</strong><span class="small muted">Every note to self on a pull request must be resolved before it can merge.</span></span></label>
+      <label class="choice"><input type="checkbox" name="linear_history" value="1" {{if $f.LinearHistory}}checked{{end}}><span><strong>Require linear history</strong><span class="small muted">No merge commits: pull requests merge by squashing, and pushed merge commits are rejected.</span></span></label>
+    </fieldset>
+    <div class="row-end">
+      {{if $d.Editing}}<a class="btn btn-ghost" href="{{$v.Base}}/settings/branches">Cancel</a>{{end}}
+      <button class="btn btn-primary" type="submit">{{if $d.Editing}}Save rule{{else}}Add rule{{end}}</button>
+    </div>
+  </form>
+
+  <form method="post" action="{{$v.Base}}/settings/branches/identity" class="card stack">
+    <div>
+      <h2 class="h-sm">Merge commits</h2>
+      <p class="small muted">Atelier commits merges as <span class="text-2">{{$d.Identity.Name}} &lt;{{$d.Identity.Email}}&gt;</span>. This applies to every repository.</p>
+    </div>
+    <div class="field">
+      <label for="merge-email">Committer email</label>
+      <input id="merge-email" name="email" type="email" maxlength="254" value="{{$d.Email}}" placeholder="{{$d.Identity.Email}}" autocomplete="email">
+      <p class="hint">Leave empty to use <span class="mono">&lt;username&gt;@atelier.local</span>.</p>
+    </div>
+    <div class="row-end"><button class="btn" type="submit">Save email</button></div>
+  </form>
+</main>
+{{end}}

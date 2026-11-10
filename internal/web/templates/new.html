@@ -1,0 +1,34 @@
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap narrow stack-lg">
+  <div>
+    <h1 class="display">New repository</h1>
+    <p class="muted">A home for a project. You can push an existing repo to it afterwards.</p>
+  </div>
+  {{template "flash" .}}
+  <form method="post" action="/new" class="card stack">
+    <div class="row wrap-gap">
+      <div class="field grow">
+        <label for="owner">Owner</label>
+        <select id="owner" name="owner">
+          {{range $d.Owners}}<option value="{{.Name}}" {{if eq .Name $d.Owner}}selected{{end}}>{{.Label}} ({{if .IsCompany}}Company{{else}}Personal{{end}})</option>{{end}}
+        </select>
+      </div>
+      <div class="field grow-2">
+        <label for="name">Repository name</label>
+        <input id="name" name="name" required maxlength="100" value="{{$d.Name}}" placeholder="my-project" autofocus>
+      </div>
+    </div>
+    <div class="field">
+      <label for="description">Description <span class="muted">(optional)</span></label>
+      <input id="description" name="description" maxlength="300" value="{{$d.Description}}">
+    </div>
+    <fieldset class="field">
+      <legend>Visibility</legend>
+      <label class="choice"><input type="radio" name="visibility" value="private" {{if $d.Private}}checked{{end}}><span><strong>Private</strong><span class="small muted">Only you, with a token, can clone it.</span></span></label>
+      <label class="choice"><input type="radio" name="visibility" value="public" {{if not $d.Private}}checked{{end}}><span><strong>Public</strong><span class="small muted">Anyone who can reach your server can clone it. Pushing still needs a token.</span></span></label>
+    </fieldset>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Create repository</button></div>
+  </form>
+</main>
+{{end}}

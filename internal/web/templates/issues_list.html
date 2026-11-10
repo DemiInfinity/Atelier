@@ -1,0 +1,95 @@
+{{define "head"}}{{template "issues-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack">
+  <div class="row-between wrap-gap">
+    {{template "issues-subnav" $d}}
+    <a class="btn btn-primary" href="{{$v.Base}}/issues/new">New issue</a>
+  </div>
+
+  <div class="stack-sm">
+    <form class="issues-search" method="get" action="{{$v.Base}}/issues" role="search">
+      <label for="issues-q" class="sr-only">Search issues</label>
+      <input id="issues-q" name="q" type="search" value="{{$d.Q}}" placeholder="is:open label:bug crash" autocomplete="off" spellcheck="false" aria-describedby="issues-q-hint">
+      {{if ne $d.Sort "newest"}}<input type="hidden" name="sort" value="{{$d.Sort}}">{{end}}
+      <button class="btn" type="submit">Search</button>
+    </form>
+    <p id="issues-q-hint" class="hint">Try <span class="mono">is:closed</span>, <span class="mono">label:bug</span>, <span class="mono">milestone:"v1.0"</span>, <span class="mono">no:label</span>, <span class="mono">no:milestone</span> or <span class="mono">author:name</span>.
+      {{if $d.Filtered}}<a class="clear-filters" href="{{$d.ClearURL}}">Clear search, filters and sort</a>{{end}}</p>
+  </div>
+
+  <section class="list-card" aria-labelledby="issues-heading">
+    <h1 id="issues-heading" class="sr-only">Issues</h1>
+    <div class="list-head issues-head">
+      <nav class="issues-states" aria-label="Issue state">
+        <a href="{{$d.OpenURL}}" {{if eq $d.Query.State "open"}}aria-current="page"{{end}}>
+          <svg class="issue-icon is-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+          <span>{{$d.Open}} Open</span></a>
+        <a href="{{$d.ClosedURL}}" {{if eq $d.Query.State "closed"}}aria-current="page"{{end}}>
+          <svg class="issue-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5 L10 17.5 L19 7"/></svg>
+          <span>{{$d.Closed}} Closed</span></a>
+      </nav>
+      <div class="issues-filters">
+        <details class="dropdown dropdown-end">
+          <summary class="btn btn-ghost btn-sm">Labels <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></summary>
+          <div class="dropdown-menu">
+            <p class="dropdown-head">Filter by label</p>
+            <a class="dropdown-item" href="{{$d.NoLabelURL}}" {{if $d.Query.NoLabel}}aria-current="true"{{end}}>Unlabelled</a>
+            {{range $d.Labels}}<a class="dropdown-item" href="{{.URL}}" {{if .Active}}aria-current="true"{{end}}><span class="lbl-dot lbl-{{.Label2.ID}}" aria-hidden="true"></span><span class="ellipsis">{{.Label}}</span></a>{{end}}
+            <a class="dropdown-item muted" href="{{$v.Base}}/labels">Edit labels</a>
+          </div>
+        </details>
+        <details class="dropdown dropdown-end">
+          <summary class="btn btn-ghost btn-sm">Milestones <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></summary>
+          <div class="dropdown-menu">
+            <p class="dropdown-head">Filter by milestone</p>
+            {{range $d.Milestones}}<a class="dropdown-item" href="{{.URL}}" {{if .Active}}aria-current="true"{{end}}><span class="ellipsis">{{.Label}}</span></a>{{end}}
+            <a class="dropdown-item muted" href="{{$v.Base}}/milestones">Manage milestones</a>
+          </div>
+        </details>
+        <details class="dropdown dropdown-end">
+          <summary class="btn btn-ghost btn-sm" aria-label="Sort, currently {{$d.SortLabel}}">Sort: {{$d.SortLabel}} <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></summary>
+          <div class="dropdown-menu">
+            <p class="dropdown-head">Sort by</p>
+            {{range $d.Sorts}}<a class="dropdown-item" href="{{.URL}}" {{if .Active}}aria-current="true"{{end}}>{{.Label}}</a>{{end}}
+          </div>
+        </details>
+      </div>
+    </div>
+    {{range $d.Issues}}
+    <article class="list-row issue-row">
+      {{template "issue-icon" .}}
+      <div class="grow min0 stack-xs">
+        <div class="issue-title-line">
+          <a class="issue-title" href="{{$v.Base}}/issues/{{.Number}}">{{.Title}}</a>
+          {{range .Labels}}{{template "label-pill" .}} {{end}}
+        </div>
+        <p class="small muted">
+          <span class="mono">#{{.Number}}</span>
+          {{if .IsOpen}}opened <time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time>{{else}}{{if eq .StateReason "not_planned"}}closed as not planned{{else}}closed{{end}} <time datetime="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{if .ClosedAt}}{{ago .ClosedAt}}{{else}}{{ago .UpdatedAt}}{{end}}</time>{{end}}
+          by <span class="text-2">{{.AuthorName}}</span>
+          {{if .Milestone}}<span class="issue-milestone"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21 V4 M5 4 H17 L14 8 L17 12 H5"/></svg><span class="sr-only">Milestone:</span> {{.Milestone}}</span>{{end}}
+        </p>
+      </div>
+      {{if .Comments}}<a class="issue-comments small muted-link" href="{{$v.Base}}/issues/{{.Number}}" aria-label="{{.Comments}} comments on #{{.Number}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5 H20 V16 H10 L5 20 V16 H4 Z"/></svg>{{.Comments}}</a>{{end}}
+    </article>
+    {{else}}
+    <div class="empty">
+      <svg class="issue-icon is-open" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+      <h2 class="h-display-sm">{{if $d.Filtered}}No issues match this search{{else}}No open issues{{end}}</h2>
+      <p class="muted">{{if $d.Filtered}}Try a different search, or clear the filters.{{else}}Issues track bugs, ideas and tasks for this repository.{{end}}</p>
+      <a class="btn" href="{{$v.Base}}/issues/new">Open an issue</a>
+    </div>
+    {{end}}
+  </section>
+
+  {{if or (gt $d.Page 1) $d.More}}
+  <nav class="pager" aria-label="Pagination">
+    {{if gt $d.Page 1}}<a class="btn" href="{{$d.PrevURL}}" rel="prev">← Previous</a>{{else}}<span class="btn is-disabled" aria-disabled="true">← Previous</span>{{end}}
+    <span class="btn btn-ghost is-disabled" aria-current="page">Page {{$d.Page}}</span>
+    {{if $d.More}}<a class="btn" href="{{$d.NextURL}}" rel="next">Next →</a>{{else}}<span class="btn is-disabled" aria-disabled="true">Next →</span>{{end}}
+  </nav>
+  {{end}}
+</main>
+{{end}}

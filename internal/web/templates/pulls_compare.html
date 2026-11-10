@@ -1,0 +1,78 @@
+{{define "head"}}{{template "pulls-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg">
+  <div class="stack-sm">
+    <h1 class="h-display">{{if and $d.Cmp (not $d.Problem)}}Open a pull request{{else}}Compare changes{{end}}</h1>
+    <p class="muted">Pick the branch with your changes and the branch to merge them into.</p>
+  </div>
+  {{template "flash" .}}
+
+  {{if not $v.Empty}}
+  <form method="get" action="{{$v.Base}}/compare" class="card pr-compare-bar" data-pr-autosubmit>
+    <svg class="muted" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7 V17 M18 17 V9 c0-2-1-3-3-3 H11"/></svg>
+    <div class="field pr-compare-field">
+      <label for="pr-base">base</label>
+      <select id="pr-base" name="base">{{range $v.Branches}}<option value="{{.}}" {{if eq . $d.Base}}selected{{end}}>{{.}}</option>{{end}}</select>
+    </div>
+    <span class="pr-compare-arrow" aria-hidden="true">←</span>
+    <div class="field pr-compare-field">
+      <label for="pr-head">compare</label>
+      <select id="pr-head" name="head"><option value="" {{if not $d.Head}}selected{{end}}>Choose a branch…</option>{{range $v.Branches}}<option value="{{.}}" {{if eq . $d.Head}}selected{{end}}>{{.}}</option>{{end}}</select>
+    </div>
+    <button class="btn" type="submit">Compare</button>
+    {{if $d.Merge}}{{if $d.Merge.Clean}}<span class="pr-status-pill is-ok">✓ Able to merge</span>{{else}}<span class="pr-status-pill is-bad">Conflicts in {{len $d.Merge.Conflicts}} {{if eq (len $d.Merge.Conflicts) 1}}file{{else}}files{{end}}</span>{{end}}{{end}}
+  </form>
+  {{end}}
+
+  {{if $d.Problem}}
+  <div class="card empty"><p class="text-2">{{$d.Problem}}</p></div>
+  {{else if not $d.Head}}
+  <section class="card stack">
+    <h2 class="h-sm">Recently pushed branches</h2>
+    {{if $d.Recent}}<ul class="pr-recent">
+      {{range $d.Recent}}<li><a class="btn btn-sm" href="{{$v.Base}}/compare?base={{$d.Base}}&amp;head={{.}}"><span class="mono">{{.}}</span></a></li>{{end}}
+    </ul>
+    {{else}}<p class="muted">Push a branch other than <span class="mono">{{$d.Base}}</span> to open a pull request.</p>{{end}}
+  </section>
+  {{else}}
+    {{if $d.Existing}}
+    <div class="card pr-existing row-between wrap-gap">
+      <p>There's already an open pull request for these branches: <a href="{{$v.Base}}/pulls/{{$d.Existing.Number}}"><strong>{{$d.Existing.Title}}</strong> #{{$d.Existing.Number}}</a></p>
+      <a class="btn btn-sm" href="{{$v.Base}}/pulls/{{$d.Existing.Number}}">View pull request</a>
+    </div>
+    {{else}}
+    <form method="post" action="{{$v.Base}}/pulls" class="card stack pr-new-form">
+      <input type="hidden" name="base" value="{{$d.Base}}">
+      <input type="hidden" name="head" value="{{$d.Head}}">
+      <div class="field">
+        <label for="pr-title">Title</label>
+        <input id="pr-title" name="title" required maxlength="256" value="{{$d.Title}}" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="pr-body">Description <span class="muted small">(Markdown)</span></label>
+        <textarea id="pr-body" name="body" rows="8" maxlength="65536" placeholder="What changes, and why?">{{$d.Body}}</textarea>
+      </div>
+      <div class="row-between wrap-gap">
+        <p class="small muted">Merging {{template "pulls-branch" $d.Head}} into {{template "pulls-branch" $d.Base}}</p>
+        <button class="btn btn-primary" type="submit">Create pull request</button>
+      </div>
+    </form>
+    {{end}}
+
+    {{if $d.Cmp}}
+    <section class="stack-sm">
+      <h2 class="h-sm">{{len $d.Cmp.Commits}} {{if eq (len $d.Cmp.Commits) 1}}commit{{else}}commits{{end}}{{if gt $d.Cmp.Ahead (len $d.Cmp.Commits)}} <span class="muted small">(latest {{len $d.Cmp.Commits}} of {{$d.Cmp.Ahead}})</span>{{end}}</h2>
+      <div class="list-card pr-commit-card">{{template "pulls-commits" $d.CommitList}}</div>
+    </section>
+    {{if $d.Cmp.Diff}}
+    <section class="stack-sm">
+      <h2 class="h-sm">{{len $d.Files}} {{if eq (len $d.Files) 1}}file{{else}}files{{end}} changed <span class="small"><span class="pr-plus">+{{$d.Cmp.Diff.Additions}}</span> <span class="pr-minus">−{{$d.Cmp.Diff.Deletions}}</span></span></h2>
+      <div class="stack">{{range $d.Files}}{{template "pulls-file" .}}{{end}}</div>
+    </section>
+    {{end}}
+    {{end}}
+  {{end}}
+</main>
+{{end}}

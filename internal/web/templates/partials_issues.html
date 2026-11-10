@@ -1,0 +1,21 @@
+{{/* Shared pieces for the issues, labels and milestones pages. */}}
+
+{{/* Issue state icon. Pass a store.Issue. */}}
+{{define "issue-icon"}}{{if .IsOpen}}<svg class="issue-icon is-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" role="img" aria-label="Open issue"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>{{else if eq .StateReason "not_planned"}}<svg class="issue-icon is-not-planned" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" role="img" aria-label="Closed as not planned"><circle cx="12" cy="12" r="9"/><path d="M6 18 L18 6"/></svg>{{else}}<svg class="issue-icon is-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Closed as completed"><circle cx="12" cy="12" r="9"/><path d="M8 12.5 L11 15.5 L16.5 9"/></svg>{{end}}{{end}}
+
+{{/* A label pill in the label's own colour (classes come from {{Base}}/labels.css). Pass a store.Label. */}}
+{{define "label-pill"}}<span class="lbl lbl-{{.ID}}" {{if .Description}}title="{{.Description}}"{{end}}>{{.Name}}</span>{{end}}
+
+{{/* Issues / Labels / Milestones switcher. Pass map: V, Active. */}}
+{{define "issues-subnav"}}
+<nav class="segmented" aria-label="Issues sections">
+  <a href="{{.V.Base}}/issues" {{if eq .Active "issues"}}aria-current="page"{{end}}>Issues</a>
+  <a href="{{.V.Base}}/labels" {{if eq .Active "labels"}}aria-current="page"{{end}}>Labels</a>
+  <a href="{{.V.Base}}/milestones" {{if eq .Active "milestones"}}aria-current="page"{{end}}>Milestones</a>
+</nav>
+{{end}}
+
+{{define "issues-head"}}<link rel="stylesheet" href="/static/issues.css"><link rel="stylesheet" href="{{.Data.V.Base}}/labels.css"><script src="/static/issues.js" defer></script>{{end}}
+
+{{/* Marks non-owner authors. Pass the actor kind. */}}
+{{define "actor-chip"}}{{if eq . "agent"}}<span class="pill pill-violet">agent</span>{{else if eq . "bot"}}<span class="pill pill-violet">bot</span>{{else if eq . "token"}}<span class="pill">token</span>{{end}}{{end}}

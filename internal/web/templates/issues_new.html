@@ -1,0 +1,43 @@
+{{define "head"}}{{template "issues-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg">
+  <h1 class="h-display">New issue</h1>
+  {{template "flash" .}}
+  <form method="post" action="{{$v.Base}}/issues/new" class="layout-2 issue-layout">
+    <div class="col-main card stack">
+      <div class="field">
+        <label for="title">Title</label>
+        <input id="title" name="title" required maxlength="256" value="{{$d.Title}}" autofocus>
+      </div>
+      <div class="field">
+        <label for="body">Description</label>
+        <textarea id="body" name="body" rows="12" class="issue-textarea" placeholder="Describe the problem or idea. Markdown works, and #123 links to another issue.">{{$d.Body}}</textarea>
+        <p class="hint">Markdown is supported.</p>
+      </div>
+      <div class="row-end">
+        <a class="btn btn-ghost" href="{{$v.Base}}/issues">Cancel</a>
+        <button class="btn btn-primary" type="submit">Create issue</button>
+      </div>
+    </div>
+    <aside class="col-side stack issue-side" aria-label="Issue details">
+      <fieldset class="side-section">
+        <legend class="side-title">Labels</legend>
+        <div class="pick-list">
+          {{range $d.Labels}}
+          <label class="pick"><input type="checkbox" name="label" value="{{.ID}}" {{if .Checked}}checked{{end}}>{{template "label-pill" .Label}}{{if .Description}}<span class="small muted ellipsis">{{.Description}}</span>{{end}}</label>
+          {{else}}<p class="small muted">No labels yet. <a href="{{$v.Base}}/labels">Create one</a>.</p>{{end}}
+        </div>
+      </fieldset>
+      <div class="side-section field">
+        <label class="side-title" for="milestone">Milestone</label>
+        <select id="milestone" name="milestone">
+          <option value="0">No milestone</option>
+          {{range $d.Milestones}}<option value="{{.ID}}" {{if eq .ID $d.MilestoneID}}selected{{end}}>{{.Title}}</option>{{end}}
+        </select>
+      </div>
+    </aside>
+  </form>
+</main>
+{{end}}

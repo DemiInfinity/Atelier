@@ -1,0 +1,65 @@
+{{define "head"}}{{template "issues-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack">
+  <div class="row-between wrap-gap">
+    {{template "issues-subnav" $d}}
+    <a class="btn btn-primary" href="#new-label">New label</a>
+  </div>
+  {{template "flash" .}}
+
+  <form method="post" action="{{$v.Base}}/labels" class="card stack" id="new-label">
+    <h1 class="h-sm">New label</h1>
+    <div class="label-form">
+      <div class="field">
+        <label for="new-name">Label name</label>
+        <input id="new-name" name="name" required maxlength="50" placeholder="e.g. performance">
+      </div>
+      <div class="field grow-2">
+        <label for="new-desc">Description <span class="muted small">(optional)</span></label>
+        <input id="new-desc" name="description" maxlength="200" placeholder="What is this label for?">
+      </div>
+      <div class="field label-color">
+        <label for="new-color">Colour</label>
+        <input id="new-color" name="color" type="color" value="#{{$d.NewColor}}">
+      </div>
+      <button class="btn btn-primary" type="submit">Create label</button>
+    </div>
+  </form>
+
+  <section class="list-card" aria-labelledby="labels-heading">
+    <h2 class="list-head" id="labels-heading">{{len $d.Labels}} label{{if ne (len $d.Labels) 1}}s{{end}}</h2>
+    {{range $d.Labels}}
+    <div class="list-row label-row">
+      <div class="label-cell">{{template "label-pill" .}}</div>
+      <p class="grow min0 small muted label-desc">{{.Description}}</p>
+      <a class="small muted-link nowrap" href="{{call $d.IssuesFor .Name}}">{{.Issues}} open issue{{if ne .Issues 1}}s{{end}}</a>
+      <details class="inline-edit label-edit">
+        <summary class="btn btn-xs">Edit</summary>
+        <form method="post" action="{{$v.Base}}/labels/{{.ID}}/edit" class="card stack-sm label-edit-form">
+          <div class="field">
+            <label for="name-{{.ID}}">Label name</label>
+            <input id="name-{{.ID}}" name="name" required maxlength="50" value="{{.Name}}">
+          </div>
+          <div class="field">
+            <label for="desc-{{.ID}}">Description</label>
+            <input id="desc-{{.ID}}" name="description" maxlength="200" value="{{.Description}}">
+          </div>
+          <div class="field label-color">
+            <label for="color-{{.ID}}">Colour</label>
+            <input id="color-{{.ID}}" name="color" type="color" value="#{{.Color}}">
+          </div>
+          <div class="row-end"><button class="btn btn-primary btn-sm" type="submit">Save changes</button></div>
+        </form>
+      </details>
+      <form method="post" action="{{$v.Base}}/labels/{{.ID}}/delete" data-confirm="Delete the “{{.Name}}” label? It will be removed from every issue.">
+        <button class="btn btn-xs btn-ghost danger-ink" type="submit" aria-label="Delete label {{.Name}}">Delete</button>
+      </form>
+    </div>
+    {{else}}
+    <div class="empty"><p class="muted">No labels. Create one above to sort issues by type, area or priority.</p></div>
+    {{end}}
+  </section>
+</main>
+{{end}}

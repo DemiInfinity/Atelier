@@ -1,0 +1,54 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$b := $d.Blob}}
+{{template "repohead" $v}}
+<main class="wrap stack">
+  <div class="toolbar">
+    <span class="pill mono">{{if eq (len $v.Ref) 40}}{{short $v.Ref}}{{else}}{{$v.Ref}}{{end}}</span>
+    {{template "crumbs" $v}}
+  </div>
+
+  <div class="list-card">
+    <div class="list-head row-between wrap-gap">
+      {{template "lastcommit" $d.Last}}
+      <a class="btn btn-sm" href="{{$v.Base}}/commits/{{$v.Ref}}/{{$v.Path}}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg>
+        History</a>
+    </div>
+  </div>
+
+  <section class="list-card">
+    <div class="list-head row-between wrap-gap">
+      <div class="row gap-sm">
+        <h1 class="h-sm mono">{{$d.Name}}</h1>
+        <span class="small muted">{{bytes $b.Size}}{{if and (not $b.Binary) (not $b.TooLarge)}} · {{len (lines $b.Data)}} lines{{end}}</span>
+      </div>
+      <div class="row gap-sm">
+        {{if and (isMarkdown $d.Name) (not $b.Binary) (not $b.TooLarge)}}
+        <nav class="segmented" aria-label="View">
+          <a href="?plain=1" {{if not $d.Markdown}}aria-current="page"{{end}}>Code</a>
+          <a href="?" {{if $d.Markdown}}aria-current="page"{{end}}>Preview</a>
+        </nav>
+        {{end}}
+        <a class="btn btn-sm" href="{{$v.Base}}/raw/{{$v.Ref}}/{{$v.Path}}">Raw</a>
+      </div>
+    </div>
+    {{if $b.TooLarge}}
+      <div class="empty"><p><strong>This file is too large to show here.</strong></p><p class="muted"><a href="{{$v.Base}}/raw/{{$v.Ref}}/{{$v.Path}}">View the raw file</a> instead.</p></div>
+    {{else if $b.Binary}}
+      <div class="empty"><p><strong>Binary file not shown.</strong></p><p class="muted"><a href="{{$v.Base}}/raw/{{$v.Ref}}/{{$v.Path}}">Download it</a> ({{bytes $b.Size}}).</p></div>
+    {{else if $d.Markdown}}
+      <div class="markdown">{{markdown $b.Data}}</div>
+    {{else}}
+      <div class="table-scroll">
+        <table class="code">
+          <caption class="sr-only">Contents of {{$d.Name}}</caption>
+          <tbody>
+          {{range lines $b.Data}}<tr id="L{{.N}}"><td class="ln"><a href="#L{{.N}}">{{.N}}</a></td><td class="lc">{{.Text}}</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{end}}
+  </section>
+</main>
+{{end}}

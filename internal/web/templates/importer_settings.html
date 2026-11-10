@@ -1,0 +1,139 @@
+{{define "head"}}<link rel="stylesheet" href="/static/importer.css"><script src="/static/importer.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$f := $d.Form}}
+<main class="wrap">
+  <div class="layout-2">
+    <aside class="col-side">{{template "accountnav" "import"}}</aside>
+    <div class="col-main stack-lg">
+      <div>
+        <h1 class="display">Import</h1>
+        <p class="muted">Bring repositories in from Gitea or Forgejo, GitHub or any git URL, into your personal account or a company account.</p>
+      </div>
+      {{template "flash" .}}
+      {{if $d.Notice}}<div class="flash flash-ok" role="status">{{$d.Notice}}</div>{{end}}
+
+      <section class="card stack" aria-labelledby="im-source">
+        <div class="row-between wrap-gap">
+          <h2 class="h-sm" id="im-source">Source</h2>
+          <nav class="segmented" aria-label="Import source">
+            <a href="/settings/import?source=gitea" {{if eq $f.Source "gitea"}}aria-current="page"{{end}}>Gitea / Forgejo</a>
+            <a href="/settings/import?source=github" {{if eq $f.Source "github"}}aria-current="page"{{end}}>GitHub</a>
+            <a href="/settings/import?source=git" {{if eq $f.Source "git"}}aria-current="page"{{end}}>Git URL</a>
+          </nav>
+        </div>
+
+        {{if eq $f.Source "gitea"}}
+        <form method="post" action="/settings/import/list" class="stack">
+          <input type="hidden" name="source" value="gitea">
+          <div class="field">
+            <label for="im-server">Server address</label>
+            <input id="im-server" name="server" type="url" inputmode="url" required placeholder="https://gitea.example.com" value="{{$f.Server}}" autocomplete="url" spellcheck="false" autocapitalize="off">
+          </div>
+          <div class="field">
+            <label for="im-token">Access token</label>
+            <input id="im-token" name="token" type="password" required autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="im-token-hint">
+            <p class="hint" id="im-token-hint">Create one under <strong>Settings → Applications</strong> with read access to repositories, organizations and your user. It lists your own repositories and every organization's you belong to.</p>
+          </div>
+          <div class="row-end"><button class="btn btn-primary" type="submit">List repositories</button></div>
+        </form>
+        {{else if eq $f.Source "github"}}
+        <form method="post" action="/settings/import/list" class="stack">
+          <input type="hidden" name="source" value="github">
+          <div class="field">
+            <label for="im-token">GitHub token</label>
+            <input id="im-token" name="token" type="password" required autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="im-token-hint">
+            <p class="hint" id="im-token-hint">A classic token with the <code>repo</code> and <code>read:org</code> scopes, or a fine-grained token with read access to contents and metadata. Lists your repositories, collaborations and organizations' repositories.</p>
+          </div>
+          <div class="row-end"><button class="btn btn-tether" type="submit">List repositories</button></div>
+        </form>
+        {{else}}
+        <form method="post" action="/settings/import/url" class="stack">
+          <div class="field">
+            <label for="im-url">Git URL</label>
+            <input id="im-url" name="url" required placeholder="https://example.com/me/project.git" value="{{$f.URL}}" spellcheck="false" autocapitalize="off" autocomplete="off">
+          </div>
+          <div class="row wrap-gap align-start">
+            <div class="field grow">
+              <label for="im-user">Username <span class="muted">(optional)</span></label>
+              <input id="im-user" name="username" value="{{$f.Username}}" autocomplete="off" spellcheck="false" autocapitalize="off">
+            </div>
+            <div class="field grow">
+              <label for="im-tok">Token or password <span class="muted">(optional)</span></label>
+              <input id="im-tok" name="token" type="password" autocomplete="off">
+            </div>
+          </div>
+          <div class="row wrap-gap align-start">
+            <div class="field grow">
+              <label for="im-owner">Owner</label>
+              <select id="im-owner" name="owner">
+                {{range $d.Owners}}<option value="{{.Name}}" {{if eq .Name $f.Owner}}selected{{end}}>{{.Label}}{{if .IsCompany}} (company){{end}}</option>{{end}}
+              </select>
+            </div>
+            <div class="field grow-2">
+              <label for="im-name">Repository name</label>
+              <input id="im-name" name="name" value="{{$f.Name}}" maxlength="100" placeholder="Same as the source" spellcheck="false" autocapitalize="off">
+            </div>
+          </div>
+          <div class="field">
+            <label for="im-desc">Description <span class="muted">(optional)</span></label>
+            <input id="im-desc" name="description" maxlength="300" value="{{$f.Description}}">
+          </div>
+          <fieldset class="field">
+            <legend>Visibility</legend>
+            <label class="choice"><input type="radio" name="visibility" value="private" {{if $f.Private}}checked{{end}}><span><strong>Private</strong><span class="small muted">Only you, with a token, can clone it.</span></span></label>
+            <label class="choice"><input type="radio" name="visibility" value="public" {{if not $f.Private}}checked{{end}}><span><strong>Public</strong><span class="small muted">Anyone who can reach your server can clone it.</span></span></label>
+          </fieldset>
+          <label class="choice"><input type="checkbox" name="mirror" {{if $f.Mirror}}checked{{end}}><span><strong>Keep syncing as a mirror</strong><span class="small muted">Fetch from the source every {{$d.Interval}}. The token is then stored on this server.</span></span></label>
+          <div class="row-end"><button class="btn btn-primary" type="submit">Import</button></div>
+        </form>
+        {{end}}
+        <p class="small muted im-creds">Tokens for one-off imports stay in memory only until the import finishes. For a mirror, the token is stored in Atelier's database so it can fetch later. It is never shown again, and stopping the mirror deletes it.</p>
+      </section>
+
+      <section class="card im-soon stack-sm" aria-labelledby="im-soon">
+        <div class="row gap-sm"><h2 class="h-sm" id="im-soon">Issues, pull requests, releases and wikis</h2><span class="pill pill-violet">Coming soon</span></div>
+        <p class="small muted">Imports bring every branch and tag for now. Issues and pull requests come next, once issues land in Atelier.</p>
+      </section>
+
+      <section class="list-card" aria-labelledby="im-jobs" data-import-jobs>
+        <div class="list-head" id="im-jobs">Recent imports</div>
+        {{range $d.Jobs}}
+        <div class="list-row im-job" data-job-id="{{.ID}}" data-status="{{.Status}}">
+          <div class="grow min0">
+            {{if eq .Status "done"}}<a class="im-repo" href="/{{.FullName}}">{{.FullName}}</a>{{else}}<strong class="im-repo">{{.FullName}}</strong>{{end}}
+            <div class="small muted ellipsis">{{.SourceURL}}</div>
+            <div class="small im-msg {{if eq .Status "failed"}}danger-ink{{else}}muted{{end}}">{{.Message}}</div>
+          </div>
+          {{if .Mirror}}<span class="pill im-mirror-pill">Mirror</span>{{end}}
+          <span class="pill im-status im-{{.Status}}">{{.Status}}</span>
+        </div>
+        {{else}}
+        <div class="list-row muted">Nothing imported yet.</div>
+        {{end}}
+      </section>
+      <p class="sr-only" aria-live="polite" id="im-live"></p>
+
+      <section class="list-card" aria-labelledby="im-mirrors">
+        <div class="list-head" id="im-mirrors">Mirrors</div>
+        {{range $d.Mirrors}}
+        <div class="list-row im-mirror">
+          <div class="grow min0">
+            <a href="/{{.Repo}}"><strong>{{.Repo}}</strong></a>
+            <div class="small muted ellipsis">{{.SourceURL}}</div>
+            <div class="small muted">Every {{.Every}} · {{if .LastSyncAt}}last fetched {{ago .LastSyncAt.UTC}}{{else}}not fetched yet{{end}}{{if .HasSecret}} · token stored{{end}}</div>
+            {{if .LastError}}<div class="small danger-ink break">{{.LastError}}</div>{{end}}
+          </div>
+          <div class="row gap-sm im-actions">
+            <form method="post" action="/settings/import/mirrors/{{.RepoID}}/sync"><button class="btn btn-sm" type="submit">Sync now</button></form>
+            <form method="post" action="/settings/import/mirrors/{{.RepoID}}/stop"><button class="btn btn-sm btn-danger" type="submit" aria-label="Stop mirroring {{.Repo}}">Stop mirroring</button></form>
+          </div>
+        </div>
+        {{else}}
+        <div class="list-row muted">No mirrors. Tick “Keep syncing as a mirror” when importing to keep a repository up to date with its source.</div>
+        {{end}}
+      </section>
+      {{if $d.Mirrors}}<p class="small muted">Mirrors follow their source: branches and tags you push here are overwritten or removed on the next fetch.</p>{{end}}
+    </div>
+  </div>
+</main>
+{{end}}

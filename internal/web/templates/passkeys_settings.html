@@ -1,0 +1,60 @@
+{{define "head"}}<link rel="stylesheet" href="/static/passkeys.css"><script src="/static/passkeys.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "passkeys"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Passkeys</h1>
+      <p class="muted">Sign in with Touch ID, Face ID, Windows Hello, your phone or a security key instead of your password. Your password and GitHub sign-in keep working.</p>
+    </div>
+    {{template "flash" .}}
+    <div class="flash flash-error" role="alert" data-passkey-error hidden></div>
+
+    {{if $d.Available}}
+    <form class="card stack" data-passkey-register>
+      <h2 class="h-sm">Add a passkey</h2>
+      <div class="row wrap-gap pk-align-end">
+        <div class="field grow">
+          <label for="pk-name">Name</label>
+          <input id="pk-name" name="name" maxlength="80" placeholder="MacBook · iCloud Keychain" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" type="submit" disabled data-passkey-submit>Add passkey</button>
+      </div>
+      <p class="hint" data-passkey-hint>Your browser will ask you to confirm with your device. Passkeys are tied to <span class="mono">{{$d.RPID}}</span>.</p>
+      <noscript><p class="hint">Adding a passkey needs JavaScript.</p></noscript>
+    </form>
+    {{else}}
+    <div class="card stack-sm pk-note" role="note">
+      <h2 class="h-sm">Passkeys need HTTPS</h2>
+      <p class="small text-2">Browsers only allow passkeys on secure pages. You're using <span class="mono break">{{$d.Origin}}</span>. Open Atelier at its <span class="mono">https://</span> address (set <span class="mono">ATELIER_PUBLIC_URL</span>), or at <span class="mono">http://localhost</span> on this machine, to add or use passkeys.</p>
+    </div>
+    {{end}}
+
+    <section class="list-card" aria-labelledby="pk-list">
+      <div class="list-head" id="pk-list">Your passkeys</div>
+      {{range $d.Passkeys}}
+      <div class="list-row pk-row">
+        <span class="pk-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="4"/><path d="M3 20 c0-3.5 2.7-6 6-6 1.3 0 2.5.4 3.5 1"/><circle cx="18" cy="15" r="2.5"/><path d="M18 17.5 V22 M18 20 h1.5"/></svg></span>
+        <div class="grow min0">
+          <strong class="break">{{.Name}}</strong>
+          <div class="small muted">Added {{ago .CreatedAt}}{{if .AddedBy}} by {{.AddedBy}}{{end}} · {{if .LastUsedAt}}Last used {{ago .LastUsedAt.UTC}}{{else}}Never used{{end}}</div>
+          <details class="pk-rename">
+            <summary class="small muted-link">Rename</summary>
+            <form method="post" action="/settings/passkeys/rename" class="row gap-sm pk-rename-form">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <label class="sr-only" for="pk-rename-{{.ID}}">New name for {{.Name}}</label>
+              <input id="pk-rename-{{.ID}}" name="name" maxlength="80" required value="{{.Name}}">
+              <button class="btn btn-sm" type="submit">Save</button>
+            </form>
+          </details>
+        </div>
+        <form method="post" action="/settings/passkeys/delete"><input type="hidden" name="id" value="{{.ID}}"><button class="btn btn-danger btn-sm" type="submit" aria-label="Delete passkey {{.Name}}">Delete</button></form>
+      </div>
+      {{else}}
+      <div class="list-row muted">No passkeys yet.</div>
+      {{end}}
+    </section>
+  </div>
+</main>
+{{end}}

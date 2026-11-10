@@ -1,0 +1,109 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap layout-repo">
+  <section class="col-main stack">
+  {{if $v.Empty}}
+    <div class="card stack">
+      <div>
+        <h1 class="h-display">This repository is empty</h1>
+        <p class="muted">Push some commits to get started. Use an <a href="/settings/tokens">access token</a> as the password when git asks.</p>
+      </div>
+      {{template "clone" $v.CloneHTTPS}}
+    </div>
+    <section class="card stack-sm">
+      <h2 class="h-sm">Push an existing project</h2>
+      <pre class="snippet"><code>git remote add origin {{$v.CloneHTTPS}}
+git branch -M {{$v.Default}}
+git push -u origin {{$v.Default}}</code></pre>
+    </section>
+    <section class="card stack-sm">
+      <h2 class="h-sm">Start fresh</h2>
+      <pre class="snippet"><code>echo "# {{$v.Repo.Name}}" &gt;&gt; README.md
+git init
+git add README.md
+git commit -m "First commit"
+git branch -M {{$v.Default}}
+git remote add origin {{$v.CloneHTTPS}}
+git push -u origin {{$v.Default}}</code></pre>
+    </section>
+  {{else}}
+    <div class="toolbar">
+      <details class="dropdown">
+        <summary class="btn btn-sm" aria-label="Switch branch or tag, current: {{$v.Ref}}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7 V17 M18 9 c0 5-12 3-12 8"/></svg>
+          <span class="mono ellipsis">{{if eq (len $v.Ref) 40}}{{short $v.Ref}}{{else}}{{$v.Ref}}{{end}}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg>
+        </summary>
+        <div class="dropdown-menu">
+          <p class="dropdown-head">Branches</p>
+          {{range $v.Branches}}<a class="dropdown-item" href="{{$v.Base}}/tree/{{.}}" {{if eq . $v.Ref}}aria-current="true"{{end}}>{{.}}{{if eq . $v.Default}} <span class="pill">default</span>{{end}}</a>{{end}}
+          {{if $v.Tags}}
+          <p class="dropdown-head">Tags</p>
+          {{range $v.Tags}}<a class="dropdown-item" href="{{$v.Base}}/tree/{{.}}" {{if eq . $v.Ref}}aria-current="true"{{end}}>{{.}}</a>{{end}}
+          {{end}}
+        </div>
+      </details>
+      {{if $v.Path}}{{template "crumbs" $v}}{{end}}
+      <div class="push-right toolbar-clone">{{template "clone" $v.CloneHTTPS}}</div>
+    </div>
+
+    <section class="list-card">
+      <div class="list-head row-between wrap-gap">
+        {{template "lastcommit" $d.Last}}
+        <a class="small muted-link nowrap" href="{{$v.Base}}/commits/{{$v.Ref}}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg>
+          <strong>{{$v.Commits}}</strong> {{if eq $v.Commits 1}}commit{{else}}commits{{end}}</a>
+      </div>
+      <div class="table-scroll">
+        <table class="files">
+          <caption class="sr-only">Files in {{if $v.Path}}{{$v.Path}}{{else}}{{$v.Repo.Name}}{{end}}</caption>
+          <thead class="sr-only"><tr><th scope="col">Name</th><th scope="col">Last commit</th><th scope="col">Updated</th></tr></thead>
+          <tbody>
+          {{range $d.Rows}}
+            <tr>
+              <td class="files-name">
+                {{if .IsDir}}<svg class="icon-dir" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6 a1 1 0 0 1 1-1 H9 L11 7 H20 a1 1 0 0 1 1 1 V18 a1 1 0 0 1-1 1 H4 a1 1 0 0 1-1-1 Z"/></svg>
+                {{else}}<svg class="icon-file" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3 H14 L19 8 V21 H6 Z M14 3 V8 H19"/></svg>{{end}}
+                <a href="{{.URL}}">{{.Name}}</a>
+              </td>
+              <td class="files-msg">{{with .Last}}<a class="muted-link" href="{{$v.Base}}/commit/{{.Hash}}">{{.Subject}}</a>{{end}}</td>
+              <td class="files-when">{{with .Last}}{{ago .When}}{{end}}</td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {{if $d.Readme}}
+    <section class="list-card">
+      <div class="list-head row gap-sm">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5 H10 a2 2 0 0 1 2 2 V20 a2 2 0 0 0-2-2 H4 Z M20 5 H14 a2 2 0 0 0-2 2 V20 a2 2 0 0 1 2-2 H20 Z"/></svg>
+        <h2 class="h-sm">{{$d.ReadmeName}}</h2>
+      </div>
+      {{if isMarkdown $d.ReadmeName}}<div class="markdown">{{markdown $d.Readme}}</div>
+      {{else}}<pre class="plain">{{printf "%s" $d.Readme}}</pre>{{end}}
+    </section>
+    {{end}}
+  {{end}}
+  </section>
+
+  <aside class="col-side stack-lg">
+    <section class="stack-sm">
+      <h2 class="h-sm">About</h2>
+      {{if $v.Repo.Description}}<p>{{$v.Repo.Description}}</p>
+      {{else}}<p class="muted">No description. <a href="{{$v.Base}}/settings">Add one in settings</a>.</p>{{end}}
+      <p class="small muted">{{if $v.Repo.Private}}Private{{else}}Public{{end}} · created {{date $v.Repo.CreatedAt}}</p>
+    </section>
+    <section class="card card-tether stack-sm">
+      <div class="row gap-sm">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20 C 9 18, 7 6, 12 12 S 15 4, 20 4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg>
+        <h2 class="h-display-sm">Tether</h2>
+        <span class="small tether-ink push-right">Coming soon</span>
+      </div>
+      <p class="small tether-muted">Link this repository to a GitHub mirror. Linking arrives with Tether in Phase 4.</p>
+    </section>
+  </aside>
+</main>
+{{end}}

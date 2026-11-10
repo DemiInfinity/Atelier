@@ -1,0 +1,47 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg">
+  {{if $v.Empty}}
+  <div class="card empty">
+    <h1 class="h-display-sm">No commits yet</h1>
+    <p class="muted">Push to this repository and its history will appear here.</p>
+    <a class="btn" href="{{$v.Base}}">Show push instructions</a>
+  </div>
+  {{else}}
+  <div class="row-between wrap-gap">
+    <h1 class="h-display">Commits</h1>
+    <p class="small muted">on <span class="pill mono">{{if eq (len $v.Ref) 40}}{{short $v.Ref}}{{else}}{{$v.Ref}}{{end}}</span>{{if $v.Path}} for <span class="mono">{{$v.Path}}</span>{{end}}</p>
+  </div>
+  {{range $d.Days}}
+  <section class="stack-sm">
+    <h2 class="day-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2 V8 M12 16 V22"/></svg>Commits on {{.Label}}</h2>
+    <ol class="list-card">
+      {{range .Commits}}
+      <li class="list-row commit-row">
+        <div class="grow min0">
+          <a class="commit-subject" href="{{$v.Base}}/commit/{{.Hash}}">{{.Subject}}</a>
+          <div class="small muted"><span class="avatar avatar-sm" aria-hidden="true">{{initial .Author}}</span> <strong class="text-2">{{.Author}}</strong> committed <time datetime="{{.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .When}}">{{ago .When}}</time></div>
+        </div>
+        <div class="row gap-sm">
+          <a class="btn btn-sm mono" href="{{$v.Base}}/commit/{{.Hash}}" aria-label="Commit {{.Short}}">{{.Short}}</a>
+          <a class="btn btn-sm" href="{{$v.Base}}/tree/{{.Hash}}" aria-label="Browse files at {{.Short}}" title="Browse files at this commit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6 L2 12 L8 18 M16 6 L22 12 L16 18"/></svg>
+            <span class="hide-sm">Browse</span></a>
+        </div>
+      </li>
+      {{end}}
+    </ol>
+  </section>
+  {{else}}
+  <div class="card empty"><p>No commits match this path.</p></div>
+  {{end}}
+  {{if or (gt $d.Page 1) $d.More}}
+  <nav class="pager" aria-label="Pagination">
+    {{if gt $d.Page 1}}<a class="btn" href="?page={{$d.Prev}}" rel="prev">← Newer</a>{{else}}<span class="btn is-disabled" aria-disabled="true">← Newer</span>{{end}}
+    {{if $d.More}}<a class="btn" href="?page={{$d.Next}}" rel="next">Older →</a>{{else}}<span class="btn is-disabled" aria-disabled="true">Older →</span>{{end}}
+  </nav>
+  {{end}}
+  {{end}}
+</main>
+{{end}}

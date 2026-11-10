@@ -1,0 +1,91 @@
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-3">
+  <aside class="col-side stack-lg">
+    <section class="stack-sm">
+      <h2 class="eyebrow">Accounts</h2>
+      {{range $d.Owners}}
+      <a href="/?account={{.Name}}" class="account {{if eq .ID $d.Active.ID}}is-active{{end}}" {{if eq .ID $d.Active.ID}}aria-current="true"{{end}}>
+        <span class="account-chip {{if .IsCompany}}is-company{{end}}" aria-hidden="true">{{.Initial}}</span>
+        <span class="account-text"><span>{{.Label}}</span><span class="small muted">{{if .IsCompany}}Company{{else}}Personal{{end}}</span></span>
+      </a>
+      {{end}}
+      <a href="/accounts/new" class="small pad-x">+ New company account</a>
+    </section>
+    <section class="stack-sm">
+      <div class="row-between">
+        <h2 class="h-sm">{{if $d.Active.IsCompany}}{{$d.Active.Label}} repositories{{else}}Your repositories{{end}}</h2>
+        <a href="/new?owner={{$d.Active.Name}}" class="btn btn-primary btn-xs">New</a>
+      </div>
+      {{if $d.Repos}}
+      <ul class="repo-list">
+        {{range $d.Repos}}
+        <li><a href="/{{.FullName}}"><span class="repo-chip" aria-hidden="true">{{initial .Name}}</span><span class="ellipsis">{{.Name}}</span>{{if .Private}}<span class="small muted">private</span>{{end}}</a></li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="small muted">No repositories yet.</p>
+      {{end}}
+    </section>
+  </aside>
+
+  <section class="col-main stack-lg">
+    <div>
+      <h1 class="display">Welcome back to the studio</h1>
+      <p class="muted">Everything you've made, in one place.</p>
+    </div>
+
+    <div class="card stack">
+      <div class="row-between wrap-gap">
+        <h2 class="h-sm">Embers · your last 12 months</h2>
+        <span class="small muted">{{$d.EmberTotal}} commits across all repositories</span>
+      </div>
+      <div class="embers-scroll">
+        <div class="embers" role="img" aria-label="Contribution graph: {{$d.EmberTotal}} commits in the last year">
+          {{range $d.Embers}}<span class="ember l{{.Level}}" title="{{.Title}}"></span>{{end}}
+        </div>
+      </div>
+      <div class="embers-legend small muted" aria-hidden="true"><span>Cool</span><span class="ember l0"></span><span class="ember l1"></span><span class="ember l2"></span><span class="ember l3"></span><span class="ember l4"></span><span>Glowing</span></div>
+    </div>
+
+    <section class="stack">
+      <h2 class="h-sm">Activity</h2>
+      {{if $d.Activity}}
+      <ol class="feed">
+        {{range $d.Activity}}
+        <li class="feed-item">
+          <span class="feed-chip" aria-hidden="true">C</span>
+          <div class="feed-body">
+            <div class="feed-meta"><span class="feed-source">Local</span><span class="small muted">{{ago .Commit.When}}</span></div>
+            <p>{{.Commit.Author}} committed to <a href="/{{.Repo.FullName}}">{{.Repo.FullName}}/{{.Branch}}</a></p>
+            <p class="small muted"><a class="muted-link" href="/{{.Repo.FullName}}/commit/{{.Commit.Hash}}">{{.Commit.Subject}}</a></p>
+          </div>
+        </li>
+        {{end}}
+      </ol>
+      {{else}}
+      <div class="card empty">
+        <p><strong>Nothing here yet.</strong> Create a repository and push to it, and your activity will show up here.</p>
+        <a class="btn btn-primary" href="/new">New repository</a>
+      </div>
+      {{end}}
+    </section>
+  </section>
+
+  <aside class="col-side stack-lg">
+    <section class="card card-tether stack-sm">
+      <div class="row gap-sm">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20 C 9 18, 7 6, 12 12 S 15 4, 20 4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg>
+        <h2 class="h-display-sm">Tether</h2>
+        <span class="small tether-ink push-right">Coming soon</span>
+      </div>
+      <p class="small tether-muted">Your thread to GitHub: stars, people you follow and trending repos, alongside your own work. It's on the roadmap for Phase 4.</p>
+    </section>
+    <section class="card stack-sm">
+      <h2 class="h-sm">Push your first repo</h2>
+      <p class="small muted">Create an access token, then use it as the password when git asks.</p>
+      <a class="small" href="/settings/tokens">Create a token →</a>
+    </section>
+  </aside>
+</main>
+{{end}}

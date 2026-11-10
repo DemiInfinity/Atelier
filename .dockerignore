@@ -1,0 +1,16 @@
+.git
+.gitignore
+.dockerignore
+data/
+bin/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/
+Dockerfile
+deploy/

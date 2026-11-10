@@ -1,0 +1,60 @@
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap narrow stack-lg">
+  <div>
+    <h1 class="display">Access tokens</h1>
+    <p class="muted">Use a token as the password for git over HTTPS. Atelier only stores a hash, so copy it when it's shown.</p>
+  </div>
+  {{template "flash" .}}
+
+  {{if $d.Created}}
+  <section class="card card-ok stack-sm" role="status">
+    <h2 class="h-sm">Your new token</h2>
+    <p class="small">Copy it now. You won't be able to see it again.</p>
+    <div class="clone">
+      <input class="clone-url" id="new-token" value="{{$d.Created}}" readonly aria-label="New access token">
+      <button type="button" class="clone-copy" data-copy="#new-token" aria-label="Copy token"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+    </div>
+    <p class="small muted">Example: <code>git clone {{$d.Base}}/{{$d.User}}/my-project.git</code>, then enter <code>{{$d.User}}</code> as the username and this token as the password.</p>
+  </section>
+  {{end}}
+
+  <form method="post" action="/settings/tokens" class="card stack">
+    <h2 class="h-sm">Generate a token</h2>
+    <div class="row wrap-gap">
+      <div class="field grow-2">
+        <label for="tname">Name</label>
+        <input id="tname" name="name" required maxlength="80" placeholder="Fork · MacBook">
+      </div>
+      <div class="field grow">
+        <label for="access">Access</label>
+        <select id="access" name="access"><option value="write">Read and write (push)</option><option value="read">Read only (clone)</option></select>
+      </div>
+      <div class="field grow">
+        <label for="expires">Expires</label>
+        <select id="expires" name="expires"><option value="90">In 90 days</option><option value="30">In 30 days</option><option value="365">In 1 year</option><option value="never">Never</option></select>
+      </div>
+    </div>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Generate token</button></div>
+  </form>
+
+  <section class="list-card">
+    <div class="list-head">Your tokens</div>
+    {{range $d.Tokens}}
+    <div class="list-row">
+      <div class="grow">
+        <strong>{{.Name}}</strong>
+        <div class="small muted"><span class="mono">{{.Prefix}}…</span> · {{range $i, $s := .Scopes}}{{if $i}}, {{end}}{{$s}}{{end}}</div>
+      </div>
+      <div class="small muted right">
+        {{if .LastUsedAt}}Last used {{ago .LastUsedAt.UTC}}{{else}}Never used{{end}}<br>
+        {{if .ExpiresAt}}Expires {{date .ExpiresAt.UTC}}{{else}}No expiry{{end}}
+      </div>
+      <form method="post" action="/settings/tokens/{{.ID}}/revoke"><button class="btn btn-danger btn-sm" type="submit">Revoke</button></form>
+    </div>
+    {{else}}
+    <div class="list-row muted">No tokens yet.</div>
+    {{end}}
+  </section>
+</main>
+{{end}}

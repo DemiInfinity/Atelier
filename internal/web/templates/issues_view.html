@@ -1,0 +1,177 @@
+{{define "head"}}{{template "issues-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$is := $d.Issue}}{{$u := $d.IssueURL}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg">
+  <header class="issue-header stack-sm">
+    <div class="row-between align-start wrap-gap">
+      <h1 class="h-display issue-heading">{{$is.Title}} <span class="muted issue-number">#{{$is.Number}}</span></h1>
+      <div class="row gap-sm wrap-gap issue-header-actions">
+        <details class="inline-edit">
+          <summary class="btn btn-sm">Edit title</summary>
+          <form method="post" action="{{$u}}/edit" class="inline-edit-form card stack-sm">
+            <label for="edit-title" class="small">Title</label>
+            <input id="edit-title" name="title" required maxlength="256" value="{{$is.Title}}">
+            <div class="row-end"><button class="btn btn-primary btn-sm" type="submit">Save</button></div>
+          </form>
+        </details>
+        <a class="btn btn-primary btn-sm" href="{{$v.Base}}/issues/new">New issue</a>
+      </div>
+    </div>
+    <div class="row gap-sm wrap-gap issue-sub">
+      {{if $is.IsOpen}}<span class="state-badge state-open">{{template "issue-icon" $is}} Open</span>
+      {{else if eq $is.StateReason "not_planned"}}<span class="state-badge state-not-planned">{{template "issue-icon" $is}} Closed as not planned</span>
+      {{else}}<span class="state-badge state-closed">{{template "issue-icon" $is}} Closed</span>{{end}}
+      <p class="muted"><strong class="text-2">{{$is.AuthorName}}</strong> {{template "actor-chip" $is.AuthorKind}} opened this issue <time datetime="{{$is.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $is.CreatedAt}}">{{ago $is.CreatedAt}}</time> · {{$is.Comments}} comment{{if ne $is.Comments 1}}s{{end}}</p>
+    </div>
+  </header>
+  {{template "flash" .}}
+
+  <div class="layout-2 issue-layout">
+    <div class="col-main stack timeline">
+      <article class="tl-comment" id="issue-body">
+        <header class="tl-comment-head">
+          <span class="avatar avatar-sm" aria-hidden="true">{{initial $is.AuthorName}}</span>
+          <strong>{{$is.AuthorName}}</strong> {{template "actor-chip" $is.AuthorKind}}
+          <span class="muted small">opened <time datetime="{{$is.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $is.CreatedAt}}">{{ago $is.CreatedAt}}</time></span>
+          <span class="pill push-right">Author</span>
+        </header>
+        <div class="tl-comment-body">
+          {{if $is.Body}}<div class="markdown">{{$d.BodyHTML}}</div>{{else}}<p class="muted"><em>No description provided.</em></p>{{end}}
+          <details class="inline-edit">
+            <summary class="btn btn-xs btn-ghost">Edit description</summary>
+            <form method="post" action="{{$u}}/edit" class="stack-sm">
+              <label for="edit-body" class="sr-only">Description</label>
+              <textarea id="edit-body" name="body" rows="10" class="issue-textarea">{{$is.Body}}</textarea>
+              <div class="row-end"><button class="btn btn-primary btn-sm" type="submit">Update description</button></div>
+            </form>
+          </details>
+        </div>
+      </article>
+
+      {{range $d.Timeline}}
+      {{if .Comment}}{{$c := .Comment}}
+      <article class="tl-comment" id="comment-{{$c.ID}}">
+        <header class="tl-comment-head">
+          <span class="avatar avatar-sm" aria-hidden="true">{{initial $c.AuthorName}}</span>
+          <strong>{{$c.AuthorName}}</strong> {{template "actor-chip" $c.AuthorKind}}
+          <a class="muted-link small" href="#comment-{{$c.ID}}"><time datetime="{{$c.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $c.CreatedAt}}">{{ago $c.CreatedAt}}</time></a>
+          {{if $c.Edited}}<span class="small muted" title="Edited {{datetime $c.UpdatedAt}}">· edited</span>{{end}}
+          {{if eq $c.AuthorName $is.AuthorName}}<span class="pill push-right">Author</span>{{end}}
+        </header>
+        <div class="tl-comment-body">
+          <div class="markdown">{{$c.HTML}}</div>
+          {{if $c.Own}}
+          <div class="row gap-sm comment-actions">
+            <details class="inline-edit grow">
+              <summary class="btn btn-xs btn-ghost">Edit</summary>
+              <form method="post" action="{{$u}}/comments/{{$c.ID}}/edit" class="stack-sm">
+                <label for="edit-c{{$c.ID}}" class="sr-only">Edit comment</label>
+                <textarea id="edit-c{{$c.ID}}" name="body" rows="6" required class="issue-textarea">{{$c.Body}}</textarea>
+                <div class="row-end"><button class="btn btn-primary btn-sm" type="submit">Update comment</button></div>
+              </form>
+            </details>
+            <form method="post" action="{{$u}}/comments/{{$c.ID}}/delete" data-confirm="Delete this comment? This can't be undone.">
+              <button class="btn btn-xs btn-ghost danger-ink" type="submit">Delete</button>
+            </form>
+          </div>
+          {{end}}
+        </div>
+      </article>
+      {{else}}{{$e := .Event}}
+      <div class="tl-event" id="event-{{$e.ID}}">
+        <span class="tl-event-icon tl-{{$e.Kind}}" aria-hidden="true">
+          {{if eq $e.Kind "closed"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 L10 17.5 L19 7"/></svg>
+          {{else if eq $e.Kind "reopened"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="6"/></svg>
+          {{else if or (eq $e.Kind "labeled") (eq $e.Kind "unlabeled")}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 12 V4 H11 L21 14 L14 21 Z"/><circle cx="7.5" cy="8" r="1.4" fill="currentColor"/></svg>
+          {{else if eq $e.Kind "renamed"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 L8 19 L19 8 L16 5 L5 16 Z"/></svg>
+          {{else}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21 V4 M5 4 H17 L14 8 L17 12 H5"/></svg>{{end}}
+        </span>
+        <p class="small">
+          <strong>{{$e.ActorName}}</strong> {{template "actor-chip" $e.ActorKind}}
+          {{if eq $e.Kind "closed"}}closed this as {{if eq $e.Reason "not_planned"}}not planned{{else}}completed{{end}}
+          {{else if eq $e.Kind "reopened"}}reopened this
+          {{else if eq $e.Kind "labeled"}}added {{if $e.LabelID}}<span class="lbl lbl-{{$e.LabelID}}">{{$e.LabelName}}</span>{{else}}<span class="pill">{{$e.LabelName}}</span>{{end}}
+          {{else if eq $e.Kind "unlabeled"}}removed {{if $e.LabelID}}<span class="lbl lbl-{{$e.LabelID}}">{{$e.LabelName}}</span>{{else}}<span class="pill">{{$e.LabelName}}</span>{{end}}
+          {{else if eq $e.Kind "renamed"}}changed the title <del class="muted">{{$e.OldTitle}}</del> <ins class="tl-ins">{{$e.NewTitle}}</ins>
+          {{else if eq $e.Kind "milestoned"}}added this to the <strong>{{$e.Milestone}}</strong> milestone
+          {{else if eq $e.Kind "demilestoned"}}removed this from the <strong>{{$e.Milestone}}</strong> milestone
+          {{else}}{{$e.Kind}}{{end}}
+          <time class="muted" datetime="{{$e.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $e.CreatedAt}}">{{ago $e.CreatedAt}}</time>
+        </p>
+      </div>
+      {{end}}
+      {{end}}
+
+      <form method="post" action="{{$u}}/comment" class="tl-comment comment-box" id="comment-form">
+        <div class="tl-comment-body stack-sm">
+          <label for="comment-body" class="h-sm">Add a comment</label>
+          <textarea id="comment-body" name="body" rows="6" class="issue-textarea" placeholder="Leave a comment. Markdown works.">{{$d.Draft}}</textarea>
+          <div class="row-end wrap-gap">
+            {{if $is.IsOpen}}
+            <button class="btn" type="submit" name="action" value="close_not_planned" title="Close as not planned: won't fix, can't reproduce, duplicate or stale">Close as not planned</button>
+            <button class="btn" type="submit" name="action" value="close_completed">
+              <svg class="issue-icon is-closed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5 L11 15.5 L16.5 9"/></svg>
+              Close issue</button>
+            {{else}}
+            <button class="btn" type="submit" name="action" value="reopen">Reopen issue</button>
+            {{end}}
+            <button class="btn btn-primary" type="submit" name="action" value="comment">Comment</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <aside class="col-side stack issue-side" aria-label="Issue details">
+      <form method="post" action="{{$u}}/labels" class="side-section">
+        <details class="side-picker">
+          <summary class="side-title row-between">Labels <span class="small muted-link">Edit</span></summary>
+          <fieldset class="pick-list">
+            <legend class="sr-only">Choose labels</legend>
+            {{range $d.Labels}}
+            <label class="pick"><input type="checkbox" name="label" value="{{.ID}}" {{if .Checked}}checked{{end}}>{{template "label-pill" .Label}}</label>
+            {{else}}<p class="small muted">No labels yet.</p>{{end}}
+            <div class="row-between">
+              <a class="small muted-link" href="{{$v.Base}}/labels">Manage labels</a>
+              <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+            </div>
+          </fieldset>
+        </details>
+        <div class="side-value">
+          {{range $is.Labels}}{{template "label-pill" .}} {{else}}<span class="small muted">None yet</span>{{end}}
+        </div>
+      </form>
+
+      <form method="post" action="{{$u}}/milestone" class="side-section">
+        <details class="side-picker">
+          <summary class="side-title row-between">Milestone <span class="small muted-link">Edit</span></summary>
+          <fieldset class="pick-list">
+            <legend class="sr-only">Choose a milestone</legend>
+            <label class="pick"><input type="radio" name="milestone" value="0" {{if eq $is.MilestoneID 0}}checked{{end}}>No milestone</label>
+            {{range $d.Milestones}}
+            <label class="pick"><input type="radio" name="milestone" value="{{.ID}}" {{if eq .ID $is.MilestoneID}}checked{{end}}><span class="ellipsis">{{.Title}}</span>{{if eq .State "closed"}} <span class="pill">closed</span>{{end}}</label>
+            {{end}}
+            <div class="row-between">
+              <a class="small muted-link" href="{{$v.Base}}/milestones">Manage milestones</a>
+              <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+            </div>
+          </fieldset>
+        </details>
+        <div class="side-value">
+          {{with $d.Milestone}}
+          <a class="muted-link" href="{{$v.Base}}/milestones">{{.Title}}</a>
+          <progress class="ms-progress" max="100" value="{{.Percent}}" aria-label="{{.Title}} progress">{{.Percent}}%</progress>
+          {{else}}<span class="small muted">No milestone</span>{{end}}
+        </div>
+      </form>
+
+      <section class="side-section">
+        <h2 class="side-title">Participants</h2>
+        <div class="side-value row gap-sm wrap-gap">
+          {{range $d.Participants}}<span class="avatar avatar-sm" title="{{.}}" aria-label="{{.}}">{{initial .}}</span>{{end}}
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+{{end}}

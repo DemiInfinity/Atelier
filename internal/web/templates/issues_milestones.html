@@ -1,0 +1,55 @@
+{{define "head"}}{{template "issues-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack">
+  <div class="row-between wrap-gap">
+    {{template "issues-subnav" $d}}
+    <a class="btn btn-primary" href="{{$v.Base}}/milestones/new">New milestone</a>
+  </div>
+  {{template "flash" .}}
+
+  <section class="list-card" aria-labelledby="ms-heading">
+    <h1 id="ms-heading" class="sr-only">Milestones</h1>
+    <div class="list-head">
+      <nav class="issues-states" aria-label="Milestone state">
+        <a href="{{$v.Base}}/milestones" {{if eq $d.State "open"}}aria-current="page"{{end}}>{{$d.Open}} Open</a>
+        <a href="{{$v.Base}}/milestones?state=closed" {{if eq $d.State "closed"}}aria-current="page"{{end}}>{{$d.Closed}} Closed</a>
+      </nav>
+    </div>
+    {{range $d.Milestones}}
+    <article class="list-row ms-row">
+      <div class="grow min0 stack-sm">
+        <h2 class="h-display-sm"><a class="ms-title" href="{{.IssuesURL}}">{{.Title}}</a></h2>
+        <p class="small muted">
+          {{if .DueOn}}<span {{if .Overdue}}class="danger-ink"{{end}}>{{if .Overdue}}Past due by{{else}}Due by{{end}} <time datetime="{{.DueOn.Format "2006-01-02"}}">{{.DueOn.Format "2 January 2006"}}</time></span>{{else}}No due date{{end}}
+          {{if .ClosedAt}} · Closed {{ago .ClosedAt}}{{end}}
+          · Updated {{ago .UpdatedAt}}
+        </p>
+        {{if .Description}}<div class="markdown small ms-desc">{{.HTML}}</div>{{end}}
+      </div>
+      <div class="ms-side stack-sm">
+        <progress class="ms-progress" max="100" value="{{.Percent}}" aria-label="{{.Title}}: {{.Percent}}% complete">{{.Percent}}%</progress>
+        <p class="small muted"><strong class="text-2">{{.Percent}}%</strong> complete · <a class="muted-link" href="{{.OpenURL}}">{{.Open}} open</a> · <a class="muted-link" href="{{.ClosedURL}}">{{.Closed}} closed</a></p>
+        <div class="row gap-sm">
+          <a class="btn btn-xs" href="{{$v.Base}}/milestones/{{.ID}}/edit">Edit</a>
+          <form method="post" action="{{$v.Base}}/milestones/{{.ID}}/state">
+            {{if eq .State "open"}}<button class="btn btn-xs" type="submit" name="action" value="close">Close</button>
+            {{else}}<button class="btn btn-xs" type="submit" name="action" value="reopen">Reopen</button>{{end}}
+          </form>
+          <form method="post" action="{{$v.Base}}/milestones/{{.ID}}/delete" data-confirm="Delete the “{{.Title}}” milestone? Its issues stay, without a milestone.">
+            <button class="btn btn-xs btn-ghost danger-ink" type="submit" aria-label="Delete milestone {{.Title}}">Delete</button>
+          </form>
+        </div>
+      </div>
+    </article>
+    {{else}}
+    <div class="empty">
+      <h2 class="h-display-sm">{{if eq $d.State "closed"}}No closed milestones{{else}}No open milestones{{end}}</h2>
+      <p class="muted">Milestones group issues into a release or a goal, with a due date and a progress bar.</p>
+      <a class="btn" href="{{$v.Base}}/milestones/new">Create a milestone</a>
+    </div>
+    {{end}}
+  </section>
+</main>
+{{end}}

@@ -1,0 +1,234 @@
+{{define "head"}}{{template "pulls-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$p := $d.P}}{{$s := $d.Status}}
+{{template "repohead" $v}}
+<main class="wrap stack pr-page">
+  <header class="pr-header stack-sm">
+    <div class="row-between wrap-gap align-start">
+      <h1 class="h-display pr-title">{{$p.Title}} <span class="pr-number">#{{$p.Number}}</span></h1>
+      <div class="row gap-sm">
+        <details class="pr-edit dropdown" {{if $d.Editing}}open{{end}}>
+          <summary class="btn btn-sm">Edit</summary>
+          <form method="post" action="{{$d.URL}}/edit" class="dropdown-menu pr-edit-menu stack-sm">
+            <div class="field"><label for="pr-edit-title">Title</label><input id="pr-edit-title" name="title" required maxlength="256" value="{{$p.Title}}"></div>
+            <div class="field"><label for="pr-edit-body">Description</label><textarea id="pr-edit-body" name="body" rows="8" maxlength="65536">{{$p.Body}}</textarea></div>
+            <div class="row-end"><button class="btn btn-sm btn-primary" type="submit">Save</button></div>
+          </form>
+        </details>
+        <a class="btn btn-sm" href="{{$v.Base}}/compare">New pull request</a>
+      </div>
+    </div>
+    <p class="pr-subtitle">
+      {{template "pulls-state" $p}}
+      <span class="text-2"><strong>{{$p.AuthorName}}</strong>{{template "pulls-actor" $p.AuthorKind}}
+      {{if $p.IsMerged}}merged {{$d.Commits}} {{if eq $d.Commits 1}}commit{{else}}commits{{end}} into{{else}}wants to merge {{$d.Commits}} {{if eq $d.Commits 1}}commit{{else}}commits{{end}} into{{end}}
+      {{template "pulls-branch" $p.Base}} from {{template "pulls-branch" $p.Head}}</span>
+    </p>
+  </header>
+  {{template "flash" .}}
+
+  {{if $p.IsOpen}}
+  <section class="pr-mergebar" aria-labelledby="pr-mergebar-title" id="merge">
+    <div class="pr-mergebar-top">
+      <div class="stack-sm min0">
+        <h2 id="pr-mergebar-title" class="h-sm">{{if $s.CanMerge}}Ready to merge{{else}}Not ready to merge{{end}}</h2>
+        <ul class="pr-pills" aria-label="Merge status">
+          {{range $s.Pills}}<li class="pr-status-pill is-{{.Kind}}" {{if .Title}}title="{{.Title}}"{{end}}>{{if eq .Kind "ok"}}✓ {{else if eq .Kind "bad"}}✕ {{else if eq .Kind "warn"}}! {{end}}{{.Label}}</li>{{end}}
+        </ul>
+      </div>
+      <form method="post" action="{{$d.URL}}/merge" class="pr-merge-form">
+        <input type="hidden" name="expected_head" value="{{$d.HeadSHA}}">
+        <div class="pr-merge-group">
+          <button class="btn btn-primary pr-merge-main" type="submit" name="method" value="{{$s.Primary.Value}}" {{if not $s.CanMerge}}disabled aria-describedby="pr-merge-reason"{{end}}>{{$s.Primary.Label}}</button>
+          <details class="dropdown pr-merge-more">
+            <summary class="btn btn-primary pr-merge-caret" aria-label="Choose how to merge" {{if not $s.CanMerge}}aria-disabled="true"{{end}}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></summary>
+            <div class="dropdown-menu pr-merge-menu">
+              <p class="dropdown-head">Merge method</p>
+              {{range $s.Methods}}
+              <button class="pr-merge-option" type="submit" name="method" value="{{.Value}}" {{if or (not .Allowed) (not $s.CanMerge)}}disabled{{end}}>
+                <strong>{{.Label}}</strong><span class="small muted">{{.Hint}}</span>
+              </button>
+              {{end}}
+            </div>
+          </details>
+        </div>
+        {{if ne $p.Head $v.Default}}<label class="pr-delete-check small"><input type="checkbox" name="delete_branch" value="1" checked> Delete <span class="mono">{{$p.Head}}</span> after merging</label>{{end}}
+      </form>
+    </div>
+    {{if not $s.CanMerge}}<p class="pr-merge-reason small" id="pr-merge-reason">{{$s.Reason}}</p>{{end}}
+    {{if $s.Conflicts}}
+    <details class="pr-conflicts small">
+      <summary>Conflicting files</summary>
+      <ul>{{range $s.Conflicts}}<li class="mono">{{.}}</li>{{end}}</ul>
+      <pre class="snippet"><code>git fetch origin
+git checkout {{$p.Head}}
+git merge origin/{{$p.Base}}
+# fix the conflicts, then
+git commit
+git push</code></pre>
+    </details>
+    {{end}}
+    {{if eq $d.Tab "overview"}}
+    <div class="pr-steps">
+      <h3 class="eyebrow">Next steps</h3>
+      <ol>
+        {{range $s.Steps}}<li class="{{if .Done}}is-done{{end}}"><span class="pr-step-mark" aria-hidden="true">{{if .Done}}✓{{end}}</span>{{.Text}}{{if .Done}}<span class="sr-only"> (done)</span>{{end}}</li>{{end}}
+      </ol>
+    </div>
+    {{end}}
+  </section>
+  {{else if $p.IsMerged}}
+  <section class="pr-mergebar is-merged" id="merge">
+    <div class="pr-mergebar-top">
+      <div class="stack-sm min0">
+        <h2 class="h-sm">Merged</h2>
+        <p class="small text-2">{{$p.MergedBy}} merged {{template "pulls-branch" $p.Head}} into {{template "pulls-branch" $p.Base}}
+          {{if eq $p.MergeMethod "squash"}}as one squashed commit{{else}}with a merge commit{{end}}
+          <a class="mono" href="{{$v.Base}}/commit/{{$p.MergedSHA}}">{{short $p.MergedSHA}}</a>
+          {{if $p.MergedAt}}<time datetime="{{$p.MergedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago $p.MergedAt.UTC}}</time>{{end}}.</p>
+      </div>
+      {{if $d.CanDelete}}<form method="post" action="{{$d.URL}}/delete-branch"><button class="btn btn-sm" type="submit">Delete branch {{$p.Head}}</button></form>{{end}}
+    </div>
+  </section>
+  {{else}}
+  <section class="pr-mergebar is-closed" id="merge">
+    <div class="pr-mergebar-top">
+      <div class="stack-sm min0">
+        <h2 class="h-sm">Closed</h2>
+        <p class="small text-2">This pull request was closed without merging{{if $p.ClosedAt}} <time datetime="{{$p.ClosedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago $p.ClosedAt.UTC}}</time>{{end}}.</p>
+      </div>
+      <div class="row gap-sm">
+        {{if $d.CanDelete}}<form method="post" action="{{$d.URL}}/delete-branch"><button class="btn btn-sm" type="submit">Delete branch {{$p.Head}}</button></form>{{end}}
+        <form method="post" action="{{$d.URL}}/state"><input type="hidden" name="action" value="reopen"><button class="btn btn-sm" type="submit">Reopen</button></form>
+      </div>
+    </div>
+  </section>
+  {{end}}
+
+  <nav class="tabs pr-tabs" aria-label="Pull request views">
+    <a href="{{$d.URL}}" {{if eq $d.Tab "overview"}}aria-current="page"{{end}}>Overview <span class="pr-count">{{$d.Comments}}</span></a>
+    <a href="{{$d.URL}}/files" {{if eq $d.Tab "files"}}aria-current="page"{{end}}>Files changed <span class="pr-count">{{if $d.Cmp}}{{if $d.Cmp.Diff}}{{len $d.Cmp.Diff.Files}}{{else}}0{{end}}{{else}}0{{end}}</span></a>
+    {{if $d.Unresolved}}<a href="{{$d.URL}}/files#pr-notes">Notes <span class="pr-count is-warn">{{$d.Unresolved}}</span></a>{{end}}
+  </nav>
+
+  {{if eq $d.Tab "overview"}}
+  <div class="pr-overview">
+    <div class="pr-timeline stack">
+      <article class="pr-comment">
+        <header class="pr-comment-head small">
+          <span class="avatar avatar-sm" aria-hidden="true">{{initial $p.AuthorName}}</span>
+          <strong>{{$p.AuthorName}}</strong>{{template "pulls-actor" $p.AuthorKind}}
+          <span class="muted">opened this <time datetime="{{$p.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $p.CreatedAt}}">{{ago $p.CreatedAt}}</time></span>
+        </header>
+        {{if $p.Body}}<div class="markdown pr-comment-body">{{$d.BodyHTML}}</div>{{else}}<p class="pr-comment-body muted">No description.</p>{{end}}
+      </article>
+
+      {{range $d.Timeline}}
+      {{if eq .Kind "commits"}}
+      <div class="pr-tl-commits">
+        <p class="small muted pr-tl-label">{{len .Commits.Commits}} {{if eq (len .Commits.Commits) 1}}commit{{else}}commits{{end}}</p>
+        {{template "pulls-commits" .Commits}}
+      </div>
+      {{else if eq .Kind "comment"}}
+      <article class="pr-comment" id="comment-{{.Comment.ID}}">
+        <header class="pr-comment-head small">
+          <span class="avatar avatar-sm" aria-hidden="true">{{initial .Comment.AuthorName}}</span>
+          <strong>{{.Comment.AuthorName}}</strong>{{template "pulls-actor" .Comment.AuthorKind}}
+          <span class="muted">commented <time datetime="{{.Comment.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .Comment.CreatedAt}}">{{ago .Comment.CreatedAt}}</time></span>
+        </header>
+        <div class="markdown pr-comment-body">{{.HTML}}</div>
+      </article>
+      {{else}}
+      <p class="pr-event small text-2">
+        {{if eq .Event.Kind "merged"}}<span class="pr-event-icon is-merged" aria-hidden="true">⑂</span><strong>{{.Event.ActorName}}</strong> merged this into {{template "pulls-branch" $p.Base}} {{if eq .Method "squash"}}by squashing{{else}}with a merge commit{{end}} as <a class="mono" href="{{$v.Base}}/commit/{{.SHA}}">{{short .SHA}}</a>
+        {{else if eq .Event.Kind "closed"}}<span class="pr-event-icon is-closed" aria-hidden="true">✕</span><strong>{{.Event.ActorName}}</strong> closed this
+        {{else if eq .Event.Kind "reopened"}}<span class="pr-event-icon is-open" aria-hidden="true">↺</span><strong>{{.Event.ActorName}}</strong> reopened this
+        {{else if eq .Event.Kind "renamed"}}<span class="pr-event-icon" aria-hidden="true">✎</span><strong>{{.Event.ActorName}}</strong> changed the title from <del>{{.From}}</del> to <ins>{{.To}}</ins>
+        {{else if eq .Event.Kind "branch_deleted"}}<span class="pr-event-icon" aria-hidden="true">⌫</span><strong>{{.Event.ActorName}}</strong> deleted the {{template "pulls-branch" .Event.Data}} branch
+        {{else if eq .Event.Kind "force_pushed"}}<span class="pr-event-icon is-warn" aria-hidden="true">↯</span>{{template "pulls-branch" $p.Head}} was force-pushed from <span class="mono">{{short .Method}}</span> to <span class="mono">{{short .SHA}}</span>
+        {{else}}{{.Event.Kind}}{{end}}
+        <time class="muted" datetime="{{.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .When}}">{{ago .When}}</time>
+      </p>
+      {{end}}
+      {{end}}
+
+      <form method="post" action="{{$d.URL}}/comments" class="pr-comment pr-comment-form stack-sm">
+        <label class="h-sm" for="pr-comment-body">Add a comment</label>
+        <textarea id="pr-comment-body" name="body" rows="5" required maxlength="65536" placeholder="Leave a comment (Markdown)"></textarea>
+        <div class="row-end">
+          <button class="btn btn-primary" type="submit">Comment</button>
+        </div>
+      </form>
+      {{if $p.IsOpen}}
+      <form method="post" action="{{$d.URL}}/state" class="row-end">
+        <input type="hidden" name="action" value="close">
+        <button class="btn btn-sm" type="submit">Close pull request</button>
+      </form>
+      {{end}}
+    </div>
+
+    <aside class="pr-side stack" aria-label="About this pull request">
+      <div class="pr-side-block">
+        <h2 class="eyebrow">Branches</h2>
+        <p class="small">{{template "pulls-branch" $p.Head}} → {{template "pulls-branch" $p.Base}}</p>
+        {{if and $d.Cmp (not $p.IsMerged)}}<p class="small muted">{{$d.Cmp.Ahead}} ahead, {{$d.Cmp.Behind}} behind</p>{{end}}
+      </div>
+      <div class="pr-side-block">
+        <h2 class="eyebrow">Notes to self</h2>
+        {{if $d.Notes}}<p class="small"><a href="{{$d.URL}}/files#pr-notes">{{len $d.Notes}} {{if eq (len $d.Notes) 1}}note{{else}}notes{{end}}</a>, {{$d.Unresolved}} unresolved</p>
+        {{else}}<p class="small muted">None yet. Add one on any line in Files changed.</p>{{end}}
+      </div>
+      <div class="pr-side-block">
+        <h2 class="eyebrow">Branch rules</h2>
+        {{if $d.Protection.Protected}}
+        <ul class="small pr-rule-list">
+          {{if $d.Protection.RequirePR}}<li>Pull request required</li>{{end}}
+          {{if $d.Protection.BlockForcePush}}<li>No force pushes</li>{{end}}
+          {{if $d.Protection.RequireResolvedNotes}}<li>Notes must be resolved</li>{{end}}
+          {{if $d.Protection.LinearHistory}}<li>Linear history</li>{{end}}
+        </ul>
+        {{else}}<p class="small muted">{{template "pulls-branch" $p.Base}} isn't protected.</p>{{end}}
+        <a class="small" href="{{$v.Base}}/settings/branches">Manage branch rules</a>
+      </div>
+      <div class="pr-side-block">
+        <h2 class="eyebrow">Checks</h2>
+        <p class="small muted">None yet. Checks arrive with Actions.</p>
+      </div>
+    </aside>
+  </div>
+
+  {{else}}
+  {{if $d.Files}}
+  <div class="pr-files-layout">
+    <nav class="pr-tree" aria-label="Changed files">
+      <p class="eyebrow">{{len $d.Files}} {{if eq (len $d.Files) 1}}file{{else}}files{{end}} <span class="pr-plus">+{{$d.Cmp.Diff.Additions}}</span> <span class="pr-minus">−{{$d.Cmp.Diff.Deletions}}</span></p>
+      <ul>
+        {{range $d.Tree}}
+        {{if .Dir}}<li class="pr-tree-row is-dir pr-depth-{{.Depth}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6 H10 L12 8 H21 V19 H3 Z"/></svg>{{.Name}}</li>
+        {{else}}<li class="pr-tree-row pr-depth-{{.Depth}}"><a href="#{{.File.Anchor}}"><span class="pr-tree-name">{{.Name}}</span>{{if .File.Open}}<span class="pr-dot" title="Has unresolved notes"><span class="sr-only">(has unresolved notes)</span></span>{{else if .File.Notes}}<span class="pr-dot is-resolved" title="Has notes"><span class="sr-only">(has notes)</span></span>{{end}}<span class="pr-tree-counts small"><span class="pr-plus">+{{.File.Additions}}</span> <span class="pr-minus">−{{.File.Deletions}}</span></span></a></li>{{end}}
+        {{end}}
+      </ul>
+    </nav>
+    <div class="pr-diffs stack">
+      {{if not $p.IsOpen}}<p class="small muted">{{if $p.IsMerged}}Showing the changes as they were merged.{{else}}Showing the changes at the last commit seen.{{end}}</p>{{end}}
+      {{range $d.Files}}{{template "pulls-file" .}}{{end}}
+      <template id="pr-note-template">{{template "pulls-note-form" $d.NoteTpl}}</template>
+    </div>
+    <aside class="pr-notes-panel" id="pr-notes" aria-labelledby="pr-notes-title">
+      <h2 id="pr-notes-title" class="eyebrow">Notes to self <span class="pr-count{{if $d.Unresolved}} is-warn{{end}}">{{$d.Unresolved}}</span></h2>
+      {{range $d.Notes}}
+      <div class="pr-panel-note{{if .Resolved}} is-resolved{{end}}">
+        <p class="small mono pr-panel-where">{{if .Current}}<a href="#{{.Anchor}}">{{.Path}}:{{.Line}}</a>{{else}}{{.Path}}:{{.Line}}{{end}}</p>
+        <article class="pr-note{{if .Resolved}} is-resolved{{end}}" {{if not .Anchor}}id="note-{{.ID}}"{{end}}>{{template "pulls-note-inner" .}}</article>
+      </div>
+      {{else}}
+      <p class="small muted">Press + beside any line to leave yourself a note. Notes stay with the commit they were written on.</p>
+      {{end}}
+    </aside>
+  </div>
+  {{else}}
+  <div class="card empty"><p class="muted">No file changes to show.</p></div>
+  {{end}}
+  {{end}}
+</main>
+{{end}}

@@ -1,0 +1,40 @@
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$c := $d.C}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg">
+  <section class="list-card">
+    <div class="commit-head stack-sm">
+      <div class="row-between wrap-gap align-start">
+        <h1 class="h-display">{{$c.Subject}}</h1>
+        <a class="btn btn-sm" href="{{$v.Base}}/tree/{{$c.Hash}}">Browse files</a>
+      </div>
+      {{if $c.Body}}<pre class="commit-body">{{$c.Body}}</pre>{{end}}
+    </div>
+    <div class="commit-meta">
+      <div class="row gap-sm">
+        <span class="avatar avatar-sm" aria-hidden="true">{{initial $c.Author}}</span>
+        <strong>{{$c.Author}}</strong>
+        <span class="muted">committed <time datetime="{{$c.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $c.When}}">{{ago $c.When}}</time></span>
+      </div>
+      <div class="small muted commit-ids">
+        {{if $c.Parents}}<span>{{if gt (len $c.Parents) 1}}{{len $c.Parents}} parents{{else}}1 parent{{end}}
+          {{range $i, $p := $c.Parents}}{{if $i}} + {{end}}<a class="mono" href="{{$v.Base}}/commit/{{$p}}">{{short $p}}</a>{{end}}</span>
+        {{else}}<span>Root commit</span>{{end}}
+        <span>commit <span class="mono text-2 break">{{$c.Hash}}</span></span>
+      </div>
+    </div>
+  </section>
+
+  {{if $d.Patch}}
+  <section class="list-card">
+    <h2 class="list-head h-sm">Changes</h2>
+    <div class="table-scroll">
+      <pre class="diff"><code>{{range diffLines $d.Patch}}<span class="dl {{.Class}}">{{.Text}}</span>
+{{end}}</code></pre>
+    </div>
+  </section>
+  {{else}}
+  <div class="card empty"><p class="muted">This commit has no file changes.</p></div>
+  {{end}}
+</main>
+{{end}}

@@ -1,0 +1,59 @@
+/* Backups and storage (/settings/backups). Builds on atelier.css tokens. */
+
+.bk-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 14px 20px; margin: 0; }
+.bk-facts > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.bk-facts dt { font-size: 12.5px; color: var(--muted); }
+.bk-facts dd { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+
+.pill.bk-ok { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+.pill.bk-fail { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+.pill.bk-s3 { background: var(--tether-surface); border-color: var(--tether-border); color: var(--tether-2); }
+.bk-warn { color: var(--amber); font-weight: 600; }
+.bk-err { max-width: 360px; overflow-wrap: anywhere; margin-top: 4px; }
+
+.bk-snap .mono { color: var(--text); }
+@media (max-width: 560px) {
+  .bk-snap { flex-wrap: wrap; }
+  .bk-snap .grow { flex-basis: 100%; }
+}
+
+.bk-table th, .bk-table td { padding: 9px 16px; border-top: 1px solid var(--border); text-align: left; vertical-align: top; font-size: 13px; }
+.bk-table thead th { border-top: 0; color: var(--muted); font-weight: 500; font-size: 12.5px; background: var(--raised); }
+
+.bk-usage { display: flex; flex-direction: column; gap: 12px; }
+.bk-usage li { display: flex; flex-direction: column; gap: 6px; }
+.bk-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: 0; }
+.bk-dot.u-repos { background: var(--amber); }
+.bk-dot.u-db { background: var(--violet); }
+.bk-dot.u-backups { background: var(--tether); }
+
+.bk-usage meter {
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--raised-2);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.bk-usage meter::-webkit-meter-bar { background: var(--raised-2); border: 0; border-radius: 999px; height: 8px; }
+.bk-usage meter::-webkit-meter-optimum-value { border-radius: 999px; }
+.bk-usage meter.u-repos::-webkit-meter-optimum-value { background: var(--amber); }
+.bk-usage meter.u-db::-webkit-meter-optimum-value { background: var(--violet); }
+.bk-usage meter.u-backups::-webkit-meter-optimum-value { background: var(--tether); }
+.bk-usage meter.u-repos::-moz-meter-bar { background: var(--amber); border-radius: 999px; }
+.bk-usage meter.u-db::-moz-meter-bar { background: var(--violet); border-radius: 999px; }
+.bk-usage meter.u-backups::-moz-meter-bar { background: var(--tether); border-radius: 999px; }
+
+.bk-cmd {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.bk-cmd code { white-space: pre; }

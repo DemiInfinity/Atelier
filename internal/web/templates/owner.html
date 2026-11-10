@@ -1,0 +1,29 @@
+{{define "content"}}
+{{$o := .Data.Owner}}
+<main class="wrap layout-2">
+  <aside class="col-side stack">
+    <div class="profile-avatar {{if $o.IsCompany}}is-company{{end}}" aria-hidden="true">{{$o.Initial}}</div>
+    <div>
+      <h1 class="h-display">{{$o.Label}}</h1>
+      <p class="muted">{{$o.Name}} · {{if $o.IsCompany}}Company account{{else}}Personal account{{end}}</p>
+    </div>
+    <a class="btn" href="/new?owner={{$o.Name}}">New repository</a>
+  </aside>
+  <section class="col-main stack">
+    <h2 class="h-sm">Repositories</h2>
+    {{if .Data.Repos}}
+    <div class="grid-2">
+      {{range .Data.Repos}}
+      <a class="repo-card" href="/{{.FullName}}">
+        <span class="repo-card-name">{{.Name}}</span>
+        <span class="small muted">{{if .Description}}{{.Description}}{{else}}No description{{end}}</span>
+        <span class="small muted">{{if .Private}}Private{{else}}Public{{end}} · updated {{ago .UpdatedAt}}</span>
+      </a>
+      {{end}}
+    </div>
+    {{else}}
+    <div class="card empty"><p>No repositories yet.</p></div>
+    {{end}}
+  </section>
+</main>
+{{end}}

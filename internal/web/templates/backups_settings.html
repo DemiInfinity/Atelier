@@ -1,0 +1,151 @@
+{{define "head"}}<link rel="stylesheet" href="/static/backups.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap">
+  <div class="layout-2">
+    <aside class="col-side">{{template "accountnav" "backups"}}</aside>
+    <div class="col-main stack-lg">
+      <div>
+        <h1 class="display">Backups and storage</h1>
+        <p class="muted">Atelier snapshots the database and every repository each day. Each snapshot is one <span class="mono">.tar.gz</span> you can download, copy anywhere and restore from.</p>
+      </div>
+      {{template "flash" .}}
+      {{if $d.Started}}<div class="flash flash-ok" role="status">Backup started. It runs in the background; refresh this page to see it finish.</div>{{end}}
+
+      <section class="card stack" aria-labelledby="bk-status">
+        <div class="row-between wrap-gap">
+          <h2 class="h-sm" id="bk-status">Status</h2>
+          {{if $d.Running}}
+          <span class="pill pill-amber">Running since {{datetime $d.Since}}</span>
+          {{end}}
+        </div>
+        <dl class="bk-facts">
+          <div>
+            <dt>Last backup</dt>
+            <dd>
+              {{with $d.Last}}
+                {{if .OK}}<span class="pill bk-ok">Succeeded</span>{{else}}<span class="pill bk-fail">Failed</span>{{end}}
+                <time datetime="{{.StartedAt.Format "2006-01-02T15:04:05Z07:00"}}">{{ago .StartedAt}}</time>
+                {{if .Size}}<span class="muted">· {{bytes .Size}} · {{.DurationText}}</span>{{end}}
+              {{else}}<span class="muted">No backups yet</span>{{end}}
+            </dd>
+          </div>
+          <div>
+            <dt>Next backup</dt>
+            <dd>{{if $d.Scheduled}}{{datetime $d.Next}} <span class="muted">(daily at {{$d.Clock}}, server time)</span>{{else}}<span class="muted">Schedule off. Set <code>ATELIER_BACKUP_TIME</code> to e.g. <code>03:00</code>.</span>{{end}}</dd>
+          </div>
+          <div>
+            <dt>Retention</dt>
+            <dd>{{$d.Keep}}</dd>
+          </div>
+        </dl>
+        {{with $d.Last}}{{if not .OK}}<p class="small danger-ink break">{{.Error}}</p>{{end}}{{end}}
+        <form method="post" action="/settings/backups/run" class="row-end">
+          {{if $d.Running}}
+          <a class="btn" href="/settings/backups">Refresh</a>
+          <button class="btn btn-primary" type="submit" disabled aria-disabled="true">Backing up…</button>
+          {{else}}
+          <button class="btn btn-primary" type="submit">Back up now</button>
+          {{end}}
+        </form>
+      </section>
+
+      <section class="list-card" aria-labelledby="bk-dest">
+        <div class="list-head" id="bk-dest">Destinations</div>
+        <div class="list-row">
+          <span class="pill pill-amber">Local</span>
+          <div class="grow">
+            <div class="mono small break">{{$d.Dir}}</div>
+            <div class="small muted">Set with <code>ATELIER_BACKUP_DIR</code>. Mount a separate volume or disk here so a failed data disk doesn't take the backups with it.{{if $d.SameDisk}} <strong class="bk-warn">This is on the same disk as your data.</strong>{{end}}</div>
+          </div>
+        </div>
+        <div class="list-row">
+          <span class="pill bk-s3">S3</span>
+          <div class="grow">
+            {{if $d.S3}}
+            <div class="mono small break">{{$d.S3Where}}</div>
+            <div class="small muted">Keys come from <code>ATELIER_BACKUP_S3_ACCESS_KEY</code> and <code>ATELIER_BACKUP_S3_SECRET_KEY</code> and are never shown here.</div>
+            {{if $d.S3Error}}<div class="small danger-ink break">{{$d.S3Error}}</div>{{end}}
+            {{else}}
+            <div class="small muted">Not configured. Set <code>ATELIER_BACKUP_S3_ENDPOINT</code>, <code>_BUCKET</code>, <code>_ACCESS_KEY</code> and <code>_SECRET_KEY</code> (optionally <code>_PREFIX</code> and <code>_REGION</code>) to also upload every snapshot to S3, R2, B2 or MinIO.</div>
+            {{end}}
+          </div>
+        </div>
+      </section>
+
+      <section class="list-card" aria-labelledby="bk-snaps">
+        <div class="list-head" id="bk-snaps">Snapshots</div>
+        {{range $d.Snapshots}}
+        <div class="list-row bk-snap">
+          <div class="grow min0">
+            <div class="mono small ellipsis">{{.Name}}</div>
+            <div class="small muted">{{datetime .Time}} · {{bytes .Size}}</div>
+          </div>
+          <div class="row gap-sm">
+            {{if .Local}}<span class="pill pill-amber">Local</span>{{end}}
+            {{if .Remote}}<span class="pill bk-s3">S3</span>{{end}}
+          </div>
+          {{if .Local}}<a class="btn btn-sm" href="/settings/backups/download/{{.Name}}" download aria-label="Download {{.Name}}">Download</a>{{end}}
+        </div>
+        {{else}}
+        <div class="list-row muted">No snapshots yet. The first one is taken {{if $d.Scheduled}}at {{$d.Clock}}{{else}}when you click Back up now{{end}}.</div>
+        {{end}}
+      </section>
+
+      <section class="list-card" aria-labelledby="bk-history">
+        <div class="list-head" id="bk-history">History</div>
+        <div class="table-scroll">
+          <table class="bk-table">
+            <thead><tr><th scope="col">Started</th><th scope="col">Result</th><th scope="col">Size</th><th scope="col">Took</th><th scope="col">Destinations</th><th scope="col">By</th></tr></thead>
+            <tbody>
+            {{range $d.Runs}}
+            <tr>
+              <td class="nowrap">{{datetime .StartedAt}}</td>
+              <td>{{if .OK}}<span class="pill bk-ok">OK</span>{{else}}<span class="pill bk-fail" title="{{.Error}}">Failed</span><div class="small danger-ink bk-err">{{.Error}}</div>{{end}}</td>
+              <td class="nowrap">{{if .Size}}{{bytes .Size}}{{else}}—{{end}}</td>
+              <td class="nowrap">{{.DurationText}}</td>
+              <td>{{if .Destinations}}{{.Destinations}}{{else}}—{{end}}</td>
+              <td class="small muted">{{if eq .Trigger "schedule"}}Schedule{{else}}{{.ActorName}}{{end}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="6" class="muted">Nothing yet.</td></tr>
+            {{end}}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card stack" aria-labelledby="bk-storage">
+        <h2 class="h-sm" id="bk-storage">Storage</h2>
+        <ul class="bk-usage">
+          {{range $d.UsageRows}}
+          <li>
+            <div class="row-between"><span><span class="bk-dot {{.Class}}" aria-hidden="true"></span>{{.Label}}</span><span class="mono small">{{bytes .Size}}</span></div>
+            <meter class="{{.Class}}" min="0" max="{{$d.Total}}" value="{{.Size}}" aria-label="{{.Label}}: {{bytes .Size}}">{{bytes .Size}}</meter>
+          </li>
+          {{end}}
+        </ul>
+        <p class="small muted">
+          {{if ge $d.Free 0}}{{bytes $d.Free}} free on the data disk.{{else}}Free space unknown.{{end}}
+          {{if not $d.SameDisk}}{{if ge $d.FreeBackup 0}} {{bytes $d.FreeBackup}} free on the backup disk.{{end}}{{end}}
+        </p>
+      </section>
+
+      <section class="card stack" aria-labelledby="bk-restore">
+        <h2 class="h-sm" id="bk-restore">Restoring</h2>
+        <p class="small">Restore runs from the server's shell with the <code>atelier restore</code> command. Nothing is deleted: whatever it replaces is moved aside to <span class="mono">pre-restore-&lt;time&gt;</span>.</p>
+        <div class="stack-sm">
+          <p class="small"><strong>One repository</strong> (Atelier can keep running):</p>
+          <pre class="bk-cmd"><code>docker exec -it atelier atelier restore /backups/atelier-…tar.gz --repo owner/name</code></pre>
+          <p class="small"><strong>Everything</strong> (database and all repositories). Stop Atelier first; restore refuses while the server is running unless you pass <code>--force</code>:</p>
+          <pre class="bk-cmd"><code>docker stop atelier
+docker run --rm -v atelier-data:/data -v atelier-backups:/backups atelier:latest \
+  restore /backups/atelier-…tar.gz
+docker start atelier</code></pre>
+          <p class="small muted">Portainer prefixes volume names with the stack name; <code>docker volume ls</code> shows the real ones. To restore on a new server, copy a snapshot there, run the same command, then start Atelier. <code>atelier backup</code> takes a snapshot from the shell, which is handy before upgrades.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+{{end}}

@@ -1,0 +1,61 @@
+{{define "head"}}<link rel="stylesheet" href="/static/importer.css"><script src="/static/importer.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap">
+  <div class="layout-2">
+    <aside class="col-side">{{template "accountnav" "import"}}</aside>
+    <div class="col-main stack-lg">
+      <div>
+        <p class="small"><a href="/settings/import?source={{$d.Source}}" class="muted-link">← Import</a></p>
+        <h1 class="display">Choose repositories</h1>
+        <p class="muted">{{len $d.Rows}} repositories visible to <strong>{{$d.Login}}</strong> on <span class="mono">{{$d.SourceLabel}}</span>. Visibility and descriptions carry over.</p>
+      </div>
+      {{template "flash" .}}
+
+      <form method="post" action="/settings/import/pick/{{$d.SID}}" class="stack-lg" data-import-pick>
+        <section class="card stack">
+          <div class="row wrap-gap align-start">
+            <div class="field grow">
+              <label for="ip-owner">Import into</label>
+              <select id="ip-owner" name="owner">
+                {{range $d.Owners}}<option value="{{.Name}}" {{if eq .Name $d.Owner}}selected{{end}}>{{.Label}}{{if .IsCompany}} (company){{end}}</option>{{end}}
+              </select>
+            </div>
+            <div class="field grow-2">
+              <label for="ip-filter">Filter</label>
+              <input id="ip-filter" type="search" placeholder="Type to filter by name" autocomplete="off" data-pick-filter>
+            </div>
+          </div>
+          <label class="choice"><input type="checkbox" name="mirror" {{if $d.Mirror}}checked{{end}}><span><strong>Keep syncing as mirrors</strong><span class="small muted">Fetch from the source every {{$d.Interval}}. The token is then stored on this server (never shown again). Without this, Atelier forgets the token once the imports finish.</span></span></label>
+        </section>
+
+        <section class="list-card" aria-labelledby="ip-list">
+          <div class="list-head row-between">
+            <span id="ip-list">Repositories</span>
+            <label class="small im-all"><input type="checkbox" data-pick-all> Select all shown</label>
+          </div>
+          {{range $d.Rows}}
+          <div class="list-row ip-row" data-name="{{.FullName}}">
+            <input type="checkbox" name="repo" value="{{.Index}}" id="ip-{{.Index}}" {{if .Checked}}checked{{end}}>
+            <label for="ip-{{.Index}}" class="grow min0 ip-label">
+              <span class="ip-name">{{.FullName}}</span>
+              {{if .Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
+              {{if .Fork}}<span class="pill">Fork</span>{{end}}
+              {{if .Archived}}<span class="pill">Archived</span>{{end}}
+              {{if .Description}}<span class="small muted ip-desc">{{.Description}}</span>{{end}}
+            </label>
+            <div class="field ip-target">
+              <label for="ip-name-{{.Index}}" class="sr-only">Name in Atelier for {{.FullName}}</label>
+              <input id="ip-name-{{.Index}}" name="name_{{.Index}}" value="{{.Target}}" maxlength="100" spellcheck="false" autocapitalize="off">
+            </div>
+          </div>
+          {{else}}
+          <div class="list-row muted">This token can't see any repositories.</div>
+          {{end}}
+        </section>
+        <div class="row-end"><a class="btn" href="/settings/import">Cancel</a><button class="btn btn-primary" type="submit">Import selected</button></div>
+      </form>
+    </div>
+  </div>
+</main>
+{{end}}

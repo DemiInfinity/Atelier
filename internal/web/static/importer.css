@@ -1,0 +1,43 @@
+/* Import (/settings/import). Builds on atelier.css tokens. */
+
+.im-creds { border-top: 1px solid var(--border); padding-top: 12px; }
+.im-soon { border-style: dashed; }
+
+.im-repo { font-weight: 600; color: var(--text); }
+a.im-repo { color: var(--amber); }
+.im-msg:empty { display: none; }
+
+.pill.im-status { text-transform: capitalize; }
+.pill.im-queued { color: var(--muted); }
+.pill.im-running { background: var(--amber-chip); border-color: #5a4320; color: var(--amber); }
+.pill.im-done { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+.pill.im-failed { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+.pill.im-mirror-pill { background: var(--tether-surface); border-color: var(--tether-border); color: var(--tether-2); }
+.im-running::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: im-pulse 1.2s ease-in-out infinite;
+}
+@keyframes im-pulse { 50% { opacity: .3; } }
+
+.im-actions { flex-wrap: wrap; justify-content: flex-end; }
+.im-all { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; color: var(--text-2); cursor: pointer; }
+
+.ip-row { align-items: center; }
+.ip-row[hidden] { display: none; }
+.ip-label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; cursor: pointer; }
+.ip-name { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.ip-desc { flex-basis: 100%; overflow-wrap: anywhere; }
+.ip-target { flex: 0 1 220px; }
+.ip-target input { font-family: var(--font-mono); font-size: 13px; }
+
+@media (max-width: 640px) {
+  .ip-row, .im-mirror, .im-job { flex-wrap: wrap; }
+  .ip-target { flex: 1 1 100%; padding-left: 28px; }
+  .im-actions { flex-basis: 100%; justify-content: flex-start; }
+}

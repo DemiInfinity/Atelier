@@ -1,0 +1,91 @@
+# Atelier stack for Portainer (Stacks → Add stack → Web editor, or point it at
+# this repository). nginx on the host terminates TLS and proxies to Atelier;
+# see deploy/nginx/atelier.conf.
+
+services:
+  atelier:
+    # Option A: use an image you've already built or pulled on this host
+    #   (e.g. `docker build -t atelier:latest .` or `make docker`).
+    image: atelier:latest
+    # Option B: let Portainer build it from this repository instead.
+    #   Comment out `image:` above (or keep it to tag the result) and uncomment:
+    # build:
+    #   context: ../..
+    #   dockerfile: Dockerfile
+    container_name: atelier
+    restart: unless-stopped
+
+    environment:
+      # The address people and git clients use, exactly as typed in the browser.
+      # Used for clone URLs, secure cookies and the GitHub OAuth callback.
+      ATELIER_PUBLIC_URL: https://git.example.com
+      # nginx sets X-Forwarded-Proto/Host/For; trust them. Only enable this when
+      # Atelier is reachable solely through your proxy (see `ports` below).
+      ATELIER_TRUST_PROXY: "true"
+      # Optional: "Continue with GitHub" sign-in, locked to one GitHub account.
+      # Create an OAuth app at https://github.com/settings/developers with
+      #   Homepage URL:               https://git.example.com
+      #   Authorization callback URL: https://git.example.com/auth/github/callback
+      # All three must be set or the button stays hidden.
+      GITHUB_CLIENT_ID: ""
+      GITHUB_CLIENT_SECRET: ""      # better: set it in Portainer's environment variables, not here
+      ATELIER_GITHUB_LOGIN: ""      # your GitHub username; nobody else can sign in
+      # Git over SSH. Atelier listens on 2222 inside the container; Gitea already
+      # owns host port 2222, so the host side is 2223 (see `ports`). Clone URLs
+      # use this port: ssh://git@<your-domain>:2223/<owner>/<repo>.git
+      # Add your public keys in Settings → SSH keys. Set ATELIER_SSH_LISTEN to ""
+      # to turn SSH off. Nginx Proxy Manager doesn't proxy SSH; the port must be
+      # reachable directly (open 2223 in your firewall / router if needed).
+      ATELIER_SSH_PUBLIC_PORT: "2223"
+      # Backups (Settings → Backups and storage). Snapshots go to the separate
+      # atelier-backups volume below; point it at another disk if you can.
+      ATELIER_BACKUP_DIR: /backups
+      ATELIER_BACKUP_TIME: "03:00"          # daily, server local time (set TZ); "off" disables
+      # ATELIER_BACKUP_KEEP_DAILY: "14"
+      # ATELIER_BACKUP_KEEP_WEEKLY: "8"
+      # ATELIER_BACKUP_KEEP_MONTHLY: "6"
+      # Optional S3-compatible copy (AWS, R2, B2, MinIO). Put the keys in
+      # Portainer's environment variables rather than here.
+      # ATELIER_BACKUP_S3_ENDPOINT: https://s3.eu-west-2.amazonaws.com
+      # ATELIER_BACKUP_S3_BUCKET: my-atelier-backups
+      # ATELIER_BACKUP_S3_PREFIX: atelier
+      # ATELIER_BACKUP_S3_REGION: eu-west-2
+      # ATELIER_BACKUP_S3_ACCESS_KEY: ""
+      # ATELIER_BACKUP_S3_SECRET_KEY: ""
+      # Import mirrors fetch from their source this often (minutes).
+      # ATELIER_MIRROR_INTERVAL: "30"
+      # Usually leave these at the image defaults:
+      # ATELIER_LISTEN: ":3000"
+      # ATELIER_SSH_LISTEN: ":2222"
+      # ATELIER_DATA: "/data"
+      # TZ: "Europe/London"
+
+    volumes:
+      # SQLite database, all bare repositories and the SSH host key. Back this volume up.
+      - atelier-data:/data
+      # Backup snapshots, kept apart from the data. Better still, use a host
+      # path on another disk, e.g. - /mnt/backup/atelier:/backups (owned by uid 1000).
+      - atelier-backups:/backups
+
+    # Host port 3010 (3000 and 2222 are taken by Gitea on the homelab server).
+    # Nginx Proxy Manager forwards atelier.<your-domain> to http://<server-ip>:3010.
+    ports:
+      - "3010:3000"
+      # git over SSH (host 2222 is Gitea's)
+      - "2223:2222"
+    # Tidier alternative: drop `ports:`, join Nginx Proxy Manager's Docker network,
+    # and forward to http://atelier:3000 instead.
+    # networks:
+    #   - proxy
+
+    labels:
+      # The image is built locally, so Watchtower has no registry to update it from.
+      com.centurylinklabs.watchtower.enable: "false"
+
+volumes:
+  atelier-data:
+  atelier-backups:
+
+# networks:
+#   proxy:
+#     external: true   # create once with: docker network create proxy

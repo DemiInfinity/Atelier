@@ -1,0 +1,47 @@
+{{define "head"}}{{template "pulls-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack">
+  <div class="row-between wrap-gap">
+    <h1 class="h-display">Pull requests</h1>
+    <div class="row gap-sm">
+      <a class="btn btn-sm" href="{{$v.Base}}/settings/branches">Branch rules</a>
+      <a class="btn btn-primary" href="{{$v.Base}}/compare">New pull request</a>
+    </div>
+  </div>
+
+  <section class="list-card">
+    <div class="list-head pr-list-head">
+      <nav class="pr-states" aria-label="Pull request state">
+        <a href="{{$v.Base}}/pulls" {{if eq $d.State "open"}}aria-current="page"{{end}}><svg class="pr-icon is-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7 V17 M18 17 V9 c0-2-1-3-3-3 H11"/></svg>{{index $d.Counts "open"}} Open</a>
+        <a href="{{$v.Base}}/pulls?state=merged" {{if eq $d.State "merged"}}aria-current="page"{{end}}><svg class="pr-icon is-merged" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7 V17 M6 7 c0 4 6 5 10 5"/></svg>{{index $d.Counts "merged"}} Merged</a>
+        <a href="{{$v.Base}}/pulls?state=closed" {{if eq $d.State "closed"}}aria-current="page"{{end}}><svg class="pr-icon is-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7 V17 M15 4 L21 10 M21 4 L15 10"/></svg>{{index $d.Counts "closed"}} Closed</a>
+      </nav>
+    </div>
+    {{range $d.Pulls}}
+    <article class="list-row pr-row">
+      {{template "pulls-icon" .}}
+      <div class="grow min0 stack-sm pr-row-main">
+        <a class="pr-row-title" href="{{$v.Base}}/pulls/{{.Number}}">{{.Title}}</a>
+        <p class="small muted">
+          <span class="mono">#{{.Number}}</span>
+          {{if .IsMerged}}merged <time datetime="{{.MergedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago .MergedAt.UTC}}</time>
+          {{else if .IsClosed}}closed <time datetime="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago .UpdatedAt}}</time>
+          {{else}}opened <time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time>{{end}}
+          by <span class="text-2">{{.AuthorName}}</span>{{template "pulls-actor" .AuthorKind}}
+        </p>
+      </div>
+      <p class="pr-row-branches small"><span class="sr-only">Merging </span>{{template "pulls-branch" .Head}} <span aria-hidden="true">→</span><span class="sr-only"> into </span> {{template "pulls-branch" .Base}}</p>
+    </article>
+    {{else}}
+    <div class="empty">
+      <svg class="pr-icon is-open" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7 V17 M18 17 V9 c0-2-1-3-3-3 H11"/></svg>
+      <h2 class="h-display-sm">{{if eq $d.State "merged"}}Nothing merged yet{{else if eq $d.State "closed"}}No closed pull requests{{else}}No open pull requests{{end}}</h2>
+      <p class="muted">Pull requests are where you look over a branch, leave notes to self and merge it.</p>
+      <a class="btn" href="{{$v.Base}}/compare">Compare branches</a>
+    </div>
+    {{end}}
+  </section>
+</main>
+{{end}}
