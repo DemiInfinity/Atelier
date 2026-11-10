@@ -1,0 +1,12 @@
+{{/* Actions partials. */}}
+
+{{define "actions-head"}}<link rel="stylesheet" href="/static/actions.css"><script src="/static/actions.js" defer></script>{{end}}
+
+{{/* A status mark. Pass a status: success, failure, cancelled, skipped, queued, pending, waiting, running. The look comes from CSS so actions.js can update it by swapping the class. */}}
+{{define "actions-status"}}<span class="act-st is-{{.}}" data-st aria-hidden="true"></span><span class="sr-only" data-st-text>{{template "actions-status-word" .}}</span>{{end}}
+
+{{define "actions-status-word"}}{{if eq . "success"}}Succeeded{{else if eq . "failure"}}Failed{{else if eq . "cancelled"}}Cancelled{{else if eq . "skipped"}}Skipped{{else if eq . "running"}}Running{{else if eq . "waiting"}}Waiting for approval{{else if eq . "pending"}}Waiting{{else}}Queued{{end}}{{end}}
+
+{{define "actions-event"}}{{if eq . "push"}}push{{else if eq . "pull_request"}}pull request{{else if eq . "workflow_dispatch"}}manual{{else if eq . "schedule"}}schedule{{else if eq . "release"}}release{{else}}{{.}}{{end}}{{end}}
+
+{{define "actions-gear"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5 L15.5 12 L10 15.5 Z"/></svg>{{end}}

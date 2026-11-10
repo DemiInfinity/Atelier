@@ -1,0 +1,65 @@
+{{define "head"}}{{template "releases-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg rel-page">
+  <div class="rel-toolbar">
+    <h1 class="h-display">Releases</h1>
+    <span class="pill">{{$d.Tags}} {{if eq $d.Tags 1}}tag{{else}}tags{{end}}</span>
+    {{if $d.CanWrite}}<a class="btn btn-primary push-right" href="{{$v.Base}}/releases/new">Draft a new release</a>{{end}}
+  </div>
+
+  {{if $d.Featured}}
+  <section class="rel-feature" aria-label="Latest release">
+    {{template "releases-meta" $d.Featured}}
+    {{template "releases-card" $d.Featured}}
+  </section>
+  {{else if not $d.Drafts}}
+  <section class="card empty">
+    <span class="rel-empty-icon">{{template "releases-tag-icon"}}</span>
+    <h2 class="h-display-sm">No releases yet</h2>
+    <p class="muted">Releases package a tag with notes and downloadable files, like runner binaries built by Actions.</p>
+    {{if $d.CanWrite}}<a class="btn btn-primary" href="{{$v.Base}}/releases/new">Draft a new release</a>{{end}}
+  </section>
+  {{end}}
+
+  {{if or $d.Earlier $d.Drafts}}
+  <section class="stack-sm" aria-labelledby="rel-earlier">
+    <h2 class="rel-section-title" id="rel-earlier">{{if $d.Earlier}}Earlier{{else}}Drafts{{end}}</h2>
+    {{range $d.Earlier}}
+    <div class="rel-row">
+      <span class="mono rel-row-tag">{{.Tag}}</span>
+      <a class="rel-row-title" href="{{.URL}}">{{.Name}}</a>
+      {{if .Prerelease}}<span class="pill pill-amber">Pre-release</span>{{end}}
+      {{with .Excerpt}}<span class="small muted rel-row-excerpt">{{.}}</span>{{end}}
+      <span class="small muted push-right nowrap">{{ago .When}} · {{len .Assets}} {{if eq (len .Assets) 1}}asset{{else}}assets{{end}}</span>
+    </div>
+    {{end}}
+    {{range $d.Drafts}}
+    <div class="rel-row is-draft">
+      <span class="mono rel-row-tag muted">{{.Tag}}</span>
+      <span class="text-2">Draft{{if .Title}} · {{.Title}}{{end}}</span>
+      <span class="pill pill-amber">Draft</span>
+      <a class="push-right small" href="{{.EditURL}}">Continue editing<span class="sr-only"> {{.Tag}}</span></a>
+    </div>
+    {{end}}
+  </section>
+  {{end}}
+
+  <details class="card rel-api">
+    <summary><span class="h-sm">Publish releases from Actions or scripts</span></summary>
+    <div class="stack-sm rel-api-body">
+      <p class="small">Use an <a href="/settings/tokens">access token</a> with write access, or the job token Actions gives each workflow job. Files stream straight to disk; each can be up to {{$d.API.Limit}}.</p>
+      <p class="small"><strong>1. Create a draft</strong> (the tag is made from the target when you publish):</p>
+      <pre class="snippet"><code>{{$d.API.Create}}</code></pre>
+      <p class="small"><strong>2. Upload build artefacts</strong> to the release id from step 1:</p>
+      <pre class="snippet"><code>{{$d.API.Upload}}</code></pre>
+      <p class="small"><strong>3. Publish</strong> (runs <code>on: release</code> workflows):</p>
+      <pre class="snippet"><code>{{$d.API.Publish}}</code></pre>
+      <p class="small"><strong>Read and download:</strong></p>
+      <pre class="snippet"><code>{{$d.API.List}}
+{{$d.API.Download}}</code></pre>
+    </div>
+  </details>
+</main>
+{{end}}

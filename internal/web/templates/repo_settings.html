@@ -27,6 +27,14 @@
     <a class="btn" href="{{$v.Base}}/settings/branches">Manage branch rules</a>
   </section>
 
+  <section class="card row-between wrap-gap">
+    <div>
+      <h2 class="h-sm">Secrets and variables</h2>
+      <p class="small muted">Encrypted secrets, variables and environments (such as <span class="mono">production</span>) for Actions.</p>
+    </div>
+    <a class="btn" href="{{$v.Base}}/settings/secrets">Secrets and variables</a>
+  </section>
+
   <form method="post" action="{{$v.Base}}/delete" class="card card-danger stack">
     <div>
       <h2 class="h-sm danger-ink">Danger zone</h2>

@@ -1,0 +1,38 @@
+{{define "head"}}<link rel="stylesheet" href="/static/packages.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2 pk">
+  <aside class="col-side">{{template "accountnav" "packages"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Packages</h1>
+      <p class="muted">Registry settings. Browse what's published under <a href="/packages">Packages</a>.</p>
+    </div>
+    {{template "flash" .}}
+    {{if $d.GC}}<div class="flash flash-ok" role="status">Clean-up done: {{$d.GC}}.</div>{{end}}
+
+    <form method="post" action="/settings/packages" class="card stack" aria-labelledby="pk-up-h">
+      <div class="row-between wrap-gap">
+        <h2 class="h-sm" id="pk-up-h"><span class="pk-chip pk-chip-npm">npm</span> Cache the public registry</h2>
+        {{if $d.Upstream}}<span class="pill pill-amber">On</span>{{else}}<span class="pill">Off</span>{{end}}
+      </div>
+      <p class="small text-2">When on, packages that aren't in one of your scopes are fetched from the upstream registry and kept here, so <code>registry={{$d.Registry}}</code> serves everything and installs keep working offline. Package lists are refreshed every 10 minutes; tarballs are kept for good after their checksum is verified. Your own scopes are never looked up upstream.</p>
+      <label class="choice"><input type="checkbox" name="upstream" value="on" {{if $d.Upstream}}checked{{end}}> <span>Proxy and cache the upstream registry</span></label>
+      <div class="field">
+        <label for="pk-up-url">Upstream registry</label>
+        <input id="pk-up-url" name="upstream_url" type="url" value="{{$d.UpstreamURL}}" spellcheck="false" autocomplete="off">
+      </div>
+      <p class="small muted">Cached: {{$d.CachedPackages}} package lists, {{$d.CachedFiles}} tarballs ({{bytes $d.CachedSize}}).</p>
+      <div class="row-end"><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+
+    <form method="post" action="/settings/packages" class="card stack-sm" aria-labelledby="pk-store-h">
+      <h2 class="h-sm" id="pk-store-h">Storage</h2>
+      <input type="hidden" name="action" value="gc">
+      <p class="small text-2">Package files use {{bytes $d.DiskUsage}} under <code>packages/</code> in the data directory. Files no version uses any more are removed weekly; you can run it now.</p>
+      <p class="small muted">Limits: {{bytes $d.MaxBlob}} per container layer or file, {{bytes $d.MaxNpm}} per npm publish. Set <code>ATELIER_PACKAGES_MAX_BYTES</code> to change them.</p>
+      <div class="row-end"><button class="btn btn-sm" type="submit">Clean up now</button></div>
+    </form>
+  </div>
+</main>
+{{end}}

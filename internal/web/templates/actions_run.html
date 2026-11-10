@@ -1,0 +1,125 @@
+{{define "head"}}{{template "actions-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$r := $d.Run}}
+{{template "repohead" $v}}
+<main class="wrap stack act-page act-run" {{if $d.Live}}data-act-stream="{{$d.URL}}/logs/stream" data-act-after="{{$d.LastLogID}}"{{end}}>
+  <p class="small"><a class="muted-link" href="{{$v.Base}}/actions?workflow={{$r.WorkflowPath}}">← {{$r.WorkflowName}}</a></p>
+  <header class="row-between wrap-gap align-start">
+    <div class="row align-start min0 act-run-head">
+      <span data-act-run-status>{{template "actions-status" $r.Outcome}}</span>
+      <div class="stack-sm min0">
+        <h1 class="h-display">{{if $r.Title}}{{$r.Title}}{{else}}{{$r.WorkflowName}}{{end}} <span class="muted act-num">#{{$r.RunNumber}}</span></h1>
+        <p class="small muted">
+          <span class="text-2">{{$r.WorkflowName}}</span> · {{template "actions-event" $r.Event}}{{if $r.PullNumber}} <a href="{{$v.Base}}/pulls/{{$r.PullNumber}}">#{{$r.PullNumber}}</a>{{end}}
+          by <span class="text-2">{{$r.ActorName}}</span>
+          {{if $r.Branch}}on <span class="pr-branch mono act-branch">{{$r.Branch}}</span>{{end}}
+          at <a class="mono" href="{{$v.Base}}/commit/{{$r.SHA}}">{{short $r.SHA}}</a>
+          · <time datetime="{{$r.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $r.CreatedAt}}">{{ago $r.CreatedAt}}</time>
+          {{if $d.Duration}}· <span data-act-run-duration>{{$d.Duration}}</span>{{end}}
+          {{if gt $r.Attempt 1}}· attempt {{$r.Attempt}}{{end}}
+        </p>
+      </div>
+    </div>
+    {{if $d.CanWrite}}
+    <div class="row gap-sm wrap-gap">
+      {{if $d.CanCancel}}<form method="post" action="{{$d.URL}}/cancel"><button class="btn btn-sm btn-danger" type="submit">Cancel run</button></form>{{end}}
+      {{if $d.CanRerun}}
+      {{if $d.HasFailed}}<form method="post" action="{{$d.URL}}/rerun"><input type="hidden" name="mode" value="failed"><button class="btn btn-sm" type="submit">Re-run failed jobs</button></form>{{end}}
+      <form method="post" action="{{$d.URL}}/rerun"><input type="hidden" name="mode" value="all"><button class="btn btn-sm" type="submit">Re-run all jobs</button></form>
+      {{end}}
+    </div>
+    {{end}}
+  </header>
+  {{template "flash" .}}
+
+  {{if $r.Errors}}
+  <section class="card card-danger stack-sm" role="alert">
+    <h2 class="h-sm danger-ink">This run couldn't start</h2>
+    <ul class="act-list small">{{range $r.Errors}}<li>{{.}}</li>{{end}}</ul>
+  </section>
+  {{end}}
+
+  {{if $d.Waiting}}
+  <section class="card act-banner is-wait row-between wrap-gap" role="status">
+    <p><strong>{{$d.Waiting}} {{if eq $d.Waiting 1}}job is{{else}}jobs are{{end}} waiting for approval.</strong> <span class="small muted">Look at the reason on each job below before approving.</span></p>
+    {{if $d.CanWrite}}<form method="post" action="{{$d.URL}}/approve"><button class="btn btn-primary btn-sm" type="submit">Approve and run</button></form>{{end}}
+  </section>
+  {{end}}
+
+  {{if $d.Unpinned}}
+  <section class="card act-banner is-lock stack-sm" role="status">
+    <p><strong>{{len $d.Unpinned}} {{if eq (len $d.Unpinned) 1}}action was{{else}}actions were{{end}} resolved without a lockfile</strong> — commit this lockfile so every run uses the same code.</p>
+    <p class="small muted">{{range $i, $u := $d.Unpinned}}{{if $i}}, {{end}}<span class="mono">{{$u}}</span>{{end}}</p>
+    <p><a class="btn btn-sm" href="{{$d.URL}}/lockfile" download="actions.lock">Download actions.lock</a> <span class="small muted">Save it as <span class="mono">.atelier/actions.lock</span>.</span></p>
+  </section>
+  {{end}}
+
+  {{if $r.Warnings}}
+  <details class="card act-banner is-warn">
+    <summary><strong>{{len $r.Warnings}} {{if eq (len $r.Warnings) 1}}warning{{else}}warnings{{end}}</strong> <span class="small muted">Parts of the workflow Atelier doesn't support were ignored.</span></summary>
+    <ul class="act-list small">{{range $r.Warnings}}<li>{{.}}</li>{{end}}</ul>
+  </details>
+  {{end}}
+
+  {{if $d.Stages}}
+  <section class="act-graph-wrap" aria-labelledby="act-graph-title">
+    <h2 class="eyebrow" id="act-graph-title">Jobs</h2>
+    <ol class="act-graph">
+      {{range $i, $stage := $d.Stages}}
+      <li class="act-stage">
+        {{if $i}}<span class="act-arrow" aria-hidden="true">→</span>{{end}}
+        <ul class="act-stage-jobs">
+          {{range $stage}}
+          <li><a class="act-node" href="#job-{{.ID}}" data-act-node="{{.ID}}">{{template "actions-status" .Status}}<span class="ellipsis">{{.Name}}</span><span class="small muted act-node-time" data-act-job-duration="{{.ID}}">{{.Duration}}</span></a>
+          {{if .NeedNames}}<span class="sr-only">needs {{range $j, $n := .NeedNames}}{{if $j}}, {{end}}{{$n}}{{end}}</span>{{end}}</li>
+          {{end}}
+        </ul>
+      </li>
+      {{end}}
+    </ol>
+  </section>
+  {{end}}
+
+  {{range $d.Jobs}}{{$job := .}}
+  <details class="list-card act-job" id="job-{{.ID}}" data-act-job="{{.ID}}" {{if .Open}}open{{end}}>
+    <summary class="list-head act-job-head">
+      <span data-act-job-status="{{.ID}}">{{template "actions-status" .Status}}</span>
+      <span class="act-job-name min0">{{.Name}}</span>
+      <span class="small muted act-job-meta">{{if .RunnerName}}on {{.RunnerName}} · {{end}}<span data-act-job-duration="{{.ID}}">{{.Duration}}</span></span>
+    </summary>
+    <div class="act-job-body">
+      <p class="small muted act-job-info">
+        {{if .RunsOn}}runs-on <span class="mono">{{range $i, $l := .RunsOn}}{{if $i}}, {{end}}{{$l}}{{end}}</span>{{end}}
+        {{if .Environment}}· environment <span class="mono">{{.Environment}}</span>{{end}}
+        {{if .NeedNames}}· needs {{range $i, $n := .NeedNames}}{{if $i}}, {{end}}<span class="mono">{{$n}}</span>{{end}}{{end}}
+        {{if .Steps}}· <a href="{{.LogsURL}}">Raw log</a> · <a href="{{.LogsURL}}?download=1">Download</a>{{end}}
+      </p>
+      {{if .Hint}}<p class="small act-hint">{{.Hint}}</p>{{end}}
+      {{range .Summaries}}<section class="act-summary markdown" aria-label="Job summary">{{.}}</section>{{end}}
+      {{if .Error}}<p class="small act-error" role="alert">{{.Error}}</p>{{end}}
+      {{if eq .Status "waiting"}}
+      <div class="act-approve row-between wrap-gap">
+        <p class="small">{{.Approval}}</p>
+        {{if $d.CanWrite}}<form method="post" action="{{$d.URL}}/approve"><input type="hidden" name="job" value="{{.ID}}"><button class="btn btn-sm btn-primary" type="submit">Approve {{.Name}}</button></form>{{end}}
+      </div>
+      {{end}}
+      {{if or .Setup .Steps}}
+      <details class="act-step" data-act-step="{{.ID}}:-1">
+        <summary>{{template "actions-status" "success"}}<span class="act-step-name">Set up job</span></summary>
+        <ol class="act-log" data-act-log="{{.ID}}:-1">{{range .Setup}}<li class="is-{{.Stream}}">{{.Text}}</li>{{end}}</ol>
+      </details>
+      {{end}}
+      {{range .Steps}}
+      <details class="act-step" data-act-step="{{$job.ID}}:{{.Index}}" {{if .Open}}open{{end}}>
+        <summary><span data-act-step-status="{{$job.ID}}:{{.Index}}">{{template "actions-status" .Status}}</span><span class="act-step-name min0">{{.Name}}</span><span class="small muted act-step-time" data-act-step-duration="{{$job.ID}}:{{.Index}}">{{.Duration}}</span></summary>
+        {{if .Hidden}}<p class="small muted act-hidden">{{.Hidden}} earlier lines aren't shown. <a href="{{$job.LogsURL}}">Open the raw log</a>.</p>{{end}}
+        <ol class="act-log" data-act-log="{{$job.ID}}:{{.Index}}">{{range .Lines}}<li class="is-{{.Stream}}">{{.Text}}</li>{{end}}</ol>
+      </details>
+      {{end}}
+    </div>
+  </details>
+  {{end}}
+
+  {{if $d.Live}}<p class="small muted act-live" data-act-live>This run is in progress. Logs update live; <a href="{{$d.URL}}">reload</a> if they stop.</p>{{end}}
+</main>
+{{end}}

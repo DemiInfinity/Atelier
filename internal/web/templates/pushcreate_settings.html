@@ -1,0 +1,26 @@
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "repositories"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Repositories</h1>
+      <p class="muted">How new repositories get made.</p>
+    </div>
+    {{template "flash" .}}
+    <form method="post" action="/settings/repositories" class="card stack">
+      <h2 class="h-sm">Push to create</h2>
+      <label class="choice"><input type="checkbox" name="push_to_create" value="on" {{if $d.Enabled}}checked{{end}}>
+        <span><strong>Create a repository when I push to one that doesn't exist</strong>
+        <span class="small muted">It's created private, under the account in the address. Only you can do this (with your SSH key or an access token that can write). Clones never create anything.</span></span></label>
+      <div class="stack-sm">
+        <span class="small muted">Then, from any project folder:</span>
+        <pre class="code-block">git remote add atelier {{$d.SSHBase}}/{{$d.Me}}/my-project.git
+git push -u atelier main</pre>
+        <span class="small muted">Or over HTTPS: <code>{{$d.Base}}/{{$d.Me}}/my-project.git</code></span>
+      </div>
+      <div class="row-end"><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+  </div>
+</main>
+{{end}}

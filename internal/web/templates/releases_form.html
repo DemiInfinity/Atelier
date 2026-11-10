@@ -1,0 +1,87 @@
+{{define "head"}}{{template "releases-head" .}}{{end}}
+{{define "content"}}
+{{$f := .Data}}{{$v := $f.V}}
+{{template "repohead" $v}}
+<main class="wrap narrow stack-lg rel-page">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="{{$f.ListURL}}">Releases</a> <span class="slash">/</span> <a href="{{$f.Action}}" aria-current="page">{{if $f.Edit}}Edit {{$f.In.Tag}}{{else}}New release{{end}}</a></nav>
+  <h1 class="h-display">{{if $f.Edit}}Edit release{{else}}Draft a new release{{end}}</h1>
+  {{template "flash" .}}
+
+  <form method="post" action="{{$f.Action}}" enctype="multipart/form-data" class="card stack" data-rel-form data-notes-url="{{$v.Base}}/releases/notes">
+    <div class="grid-2">
+      <div class="field">
+        <label for="rel-tag">Tag</label>
+        <input id="rel-tag" name="tag" required maxlength="200" value="{{$f.In.Tag}}" list="rel-tags" placeholder="v1.0.0" autocomplete="off" autocapitalize="off" spellcheck="false" class="mono">
+        <datalist id="rel-tags">{{range $v.Tags}}<option value="{{.}}">{{end}}</datalist>
+        <p class="hint small muted">An existing tag, or a new one made when you publish.</p>
+      </div>
+      <div class="field">
+        <label for="rel-target">Target</label>
+        <select id="rel-target" name="target">
+          {{range $v.Branches}}<option value="{{.}}" {{if eq . $f.In.Target}}selected{{end}}>{{.}}</option>{{end}}
+          {{if not $v.Branches}}<option value="{{$f.In.Target}}">{{$f.In.Target}}</option>{{end}}
+        </select>
+        <p class="hint small muted">Branch the new tag points at. Ignored if the tag exists.</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="rel-title">Title</label>
+      <input id="rel-title" name="title" maxlength="200" value="{{$f.In.Title}}" placeholder="Atelier 1.0 — First light">
+    </div>
+
+    <div class="field">
+      <div class="row-between wrap-gap">
+        <label for="rel-body">Release notes</label>
+        <button type="button" class="btn btn-sm" data-rel-notes hidden>Generate notes</button>
+      </div>
+      <textarea id="rel-body" name="body" rows="14" class="mono" placeholder="What changed? Markdown works here.">{{$f.In.Body}}</textarea>
+      <p class="hint small muted" data-rel-notes-status aria-live="polite">Generate notes drafts a list from pull requests merged and commits made since the previous release.</p>
+    </div>
+
+    <label class="choice"><input type="checkbox" name="prerelease" value="1" {{if $f.In.Prerelease}}checked{{end}}><span><strong>Pre-release</strong><span class="small muted">Not ready for everyone. It won't be marked as Latest.</span></span></label>
+
+    <div class="field">
+      <label for="rel-files">Attach files</label>
+      <input id="rel-files" name="assets" type="file" multiple>
+      <p class="hint small muted">Binaries, archives or checksums, up to {{$f.Limit}} each. Uploads stream straight to disk.</p>
+    </div>
+
+    <div class="row-end wrap-gap">
+      {{if $f.Published}}
+      <button class="btn btn-primary" type="submit" name="action" value="update">Update release</button>
+      {{else}}
+      <button class="btn" type="submit" name="action" value="draft">Save draft</button>
+      <button class="btn btn-primary" type="submit" name="action" value="publish">Publish release</button>
+      {{end}}
+    </div>
+  </form>
+
+  {{if $f.Edit}}
+  <section class="card stack-sm" aria-labelledby="rel-files-h">
+    <h2 class="h-sm" id="rel-files-h">Files</h2>
+    {{if $f.Assets}}
+    <ul class="rel-asset-list">
+      {{range $f.Assets}}
+      <li class="rel-asset">
+        <a class="rel-asset-name mono" href="{{.URL}}">{{.Name}}</a>
+        <span class="small muted">{{bytes .Size}} · {{.Downloads}} {{if eq .Downloads 1}}download{{else}}downloads{{end}}</span>
+        <form method="post" action="{{$v.Base}}/releases/assets/{{.ID}}/delete" class="push-right">
+          <button class="btn btn-xs btn-danger" type="submit">Delete<span class="sr-only"> {{.Name}}</span></button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}<p class="small muted">No files attached yet.</p>{{end}}
+  </section>
+
+  <form method="post" action="{{$v.Base}}/releases/delete/{{$f.ID}}" class="card card-danger row-between wrap-gap">
+    <div>
+      <h2 class="h-sm danger-ink">Delete this release</h2>
+      <p class="small">Removes the release and its files. The tag <span class="mono">{{$f.In.Tag}}</span> stays.</p>
+    </div>
+    <button class="btn btn-danger" type="submit" data-rel-confirm="Delete this release and its files?">Delete release</button>
+  </form>
+  {{end}}
+</main>
+{{end}}

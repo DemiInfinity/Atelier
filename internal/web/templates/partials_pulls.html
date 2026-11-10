@@ -94,3 +94,14 @@
   </li>{{end}}
 </ol>
 {{end}}
+
+{{/* Checks on the head commit (Actions jobs). Pass an actChecks. */}}
+{{define "pulls-checks"}}
+<link rel="stylesheet" href="/static/actions_checks.css">
+{{if .Checks}}
+<ul class="pr-checks small">
+  {{range .Checks}}<li class="pr-check is-{{.Status}}"><span class="pr-check-mark" aria-hidden="true">{{if eq .Status "success"}}✓{{else if eq .Status "failure"}}✕{{else if eq .Status "skipped"}}–{{else}}●{{end}}</span><a href="{{.URL}}" class="min0"><span class="pr-check-name">{{.Name}}</span> <span class="muted">{{.Workflow}}</span></a>{{if .Required}} <span class="pill">Required</span>{{end}}<span class="sr-only"> ({{.Detail}})</span></li>{{end}}
+</ul>
+{{else}}<p class="small muted">No workflow ran on this commit.</p>{{end}}
+{{range .MissingRequired}}<p class="small pr-check-missing">● {{.}} <span class="muted">(required, not run yet)</span></p>{{end}}
+{{end}}

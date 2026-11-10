@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>dev.atelier.runner</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/alice/bin/atelier-runner</string>
+		<string>run</string>
+		<string>--config</string>
+		<string>/Users/alice/Library/Application Support/Atelier/runner.json</string>
+		<string>--label</string>
+		<string>100% &#34;fast&#34; $HOME\x</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/alice/Atelier Work</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>ATELIER_NOTE</key>
+		<string>a&amp;b &lt;c&gt; &#34;d&#34; 50% $X</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>ExitTimeOut</key>
+	<integer>60</integer>
+	<key>StandardOutPath</key>
+	<string>/Users/alice/Library/Logs/atelier-runner.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/alice/Library/Logs/atelier-runner.err.log</string>
+</dict>
+</plist>

@@ -518,6 +518,10 @@ func (a *App) repoDelete(w http.ResponseWriter, r *http.Request) {
 var tokenScopes = map[string][]string{
 	"read":  {"repo:read"},
 	"write": {"repo:read", "repo:write"},
+	// Package registries (npm, containers, Go proxy, generic files).
+	"packages-read":  {"packages:read"},
+	"packages-write": {"packages:read", "packages:write"},
+	"write-packages": {"repo:read", "repo:write", "packages:read", "packages:write"},
 }
 
 var tokenExpiry = map[string]time.Duration{

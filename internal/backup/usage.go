@@ -14,6 +14,8 @@ type Usage struct {
 	FreeData    int64 // free space where the data lives; -1 if unknown
 	FreeBackups int64 // free space where the backups live; -1 if unknown
 	SameDisk    bool  // backups share a filesystem with the data
+	LFS         int64 // Git LFS objects (<data>/lfs)
+	Releases    int64 // release assets (<data>/releases)
 }
 
 // DiskUsage measures the repositories, database (with WAL) and backups.
@@ -22,6 +24,8 @@ func DiskUsage(repoRoot, dbPath, backupDir string) Usage {
 		Repos:   dirSize(repoRoot),
 		Backups: dirSize(backupDir),
 	}
+	u.LFS = DataDirUsage(filepath.Dir(dbPath), "lfs")
+	u.Releases = DataDirUsage(filepath.Dir(dbPath), "releases")
 	for _, p := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
 		if st, err := os.Stat(p); err == nil {
 			u.Database += st.Size()

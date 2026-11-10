@@ -1,0 +1,141 @@
+{{define "head"}}<link rel="stylesheet" href="/static/packages.css"><script src="/static/packages.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$p := $d.P}}
+<main class="wrap stack-lg pk">
+  <nav class="crumbs small" aria-label="Breadcrumb"><a href="/packages">Packages</a> <span class="slash">/</span> <a href="/packages/{{$d.Scope}}">{{$d.Owner.Label}}</a> <span class="slash">/</span> <span>{{$d.Display}}</span></nav>
+  <div class="row-between wrap-gap align-start">
+    <div class="stack-sm min0">
+      <div class="row wrap-gap">
+        <span class="pk-chip pk-chip-{{$p.Type}}">{{$d.TypeLabel}}</span>
+        <h1 class="h-display pk-title mono break">{{$d.Display}}</h1>
+        {{if $p.Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
+      </div>
+      {{if $p.Description}}<p class="text-2">{{$p.Description}}</p>{{end}}
+    </div>
+  </div>
+  {{template "flash" .}}
+
+  <div class="layout-2">
+    <div class="col-main stack-lg">
+      <section class="card stack" aria-labelledby="pk-install-h">
+        <h2 class="h-sm" id="pk-install-h">{{if eq $p.Type "container"}}Pull{{else if eq $p.Type "generic"}}Download{{else}}Install{{end}}</h2>
+        {{if eq $p.Type "npm"}}
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-install">npm install {{$d.Display}}{{if $d.Latest}}@{{$d.Latest}}{{end}}</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-install" aria-label="Copy install command">{{template "pk-copy-icon"}}</button>
+        </div>
+        <p class="small muted">Needs these lines in <code>.npmrc</code> (with a token that has Packages access):</p>
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-npmrc1">@{{$d.Scope}}:registry={{$d.Registry}}
+//{{$d.Host}}/npm/:_authToken=${ATELIER_TOKEN}</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-npmrc1" aria-label="Copy .npmrc lines">{{template "pk-copy-icon"}}</button>
+        </div>
+        {{else if eq $p.Type "container"}}
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-install">docker pull {{$d.Host}}/{{$d.Display}}:{{$d.Latest}}</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-install" aria-label="Copy pull command">{{template "pk-copy-icon"}}</button>
+        </div>
+        <p class="small muted">In a Portainer stack or <code>compose.yml</code>:</p>
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-compose">    image: {{$d.Host}}/{{$d.Display}}:{{$d.Latest}}</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-compose" aria-label="Copy compose image line">{{template "pk-copy-icon"}}</button>
+        </div>
+        {{if not $d.HTTPS}}<p class="small pk-warn">Docker needs HTTPS for registries. Put Atelier behind nginx with TLS, or list <code>{{$d.Host}}</code> under <code>insecure-registries</code> in Docker's <code>daemon.json</code>.</p>
+        {{else}}<p class="small muted">{{if $p.Private}}Private image: run <code>docker login {{$d.Host}}</code> with an access token as the password, or add the registry in Portainer under Registries.{{else}}Public image: no login needed to pull.{{end}}</p>{{end}}
+        {{else if eq $p.Type "generic"}}
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-install">curl -fLO -H "Authorization: Bearer $ATELIER_TOKEN" \
+  {{$d.BaseURL}}/api/v1/packages/{{$d.Scope}}/generic/{{$p.Name}}/{{$d.Latest}}/&lt;file&gt;</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-install" aria-label="Copy download command">{{template "pk-copy-icon"}}</button>
+        </div>
+        {{end}}
+      </section>
+
+      <section class="list-card" aria-labelledby="pk-versions-h">
+        <h2 class="list-head" id="pk-versions-h">{{len $d.Versions}} {{if eq (len $d.Versions) 1}}version{{else}}versions{{end}}</h2>
+        {{range $d.Versions}}
+        <div class="list-row pk-version align-start">
+          <div class="grow stack-sm min0">
+            <p class="row wrap-gap gap-sm">
+              <strong class="mono break" title="{{.Version}}">{{.Label}}</strong>
+              {{range .Tags}}<span class="pill pk-tag">{{.}}</span>{{end}}
+              {{if .Deprecated}}<span class="pill pk-deprecated" title="{{.Deprecated}}">Deprecated</span>{{end}}
+            </p>
+            {{if .Platforms}}<p class="small muted">{{range $i, $pl := .Platforms}}{{if $i}}, {{end}}<span class="mono">{{$pl}}</span>{{end}}</p>{{end}}
+            <p class="small muted">
+              {{if .Size}}{{bytes .Size}} · {{end}}{{.Downloads}} downloads · published {{ago .CreatedAt}}{{if .ActorName}} by {{.ActorName}}{{end}}
+            </p>
+            {{if .Pull}}<p class="small mono muted break">{{.Pull}}</p>{{end}}
+            {{if .Files}}
+            <ul class="pk-files small">
+              {{$base := .FileBase}}
+              {{range .Files}}<li><a href="{{$base}}{{.Name}}" class="mono break">{{.Name}}</a> <span class="muted">{{bytes .Size}} · {{.Downloads}} downloads</span></li>{{end}}
+            </ul>
+            {{end}}
+          </div>
+          {{if $d.CanAdmin}}
+          <form method="post" action="{{$d.URL}}" class="pk-delete-version">
+            <input type="hidden" name="action" value="delete-version">
+            <input type="hidden" name="version" value="{{.Version}}">
+            <button type="submit" class="btn btn-danger btn-sm" data-pk-confirm="Delete {{.Label}}? Anything that installs it will break." aria-label="Delete version {{.Label}}">Delete</button>
+          </form>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="list-row muted">No versions.</div>
+        {{end}}
+      </section>
+    </div>
+
+    <aside class="col-side stack">
+      <section class="card stack-sm pk-facts" aria-labelledby="pk-about-h">
+        <h2 class="h-sm" id="pk-about-h">About</h2>
+        <dl class="pk-dl small">
+          <div><dt>Owner</dt><dd><a href="/{{$d.Owner.Name}}">{{$d.Owner.Label}}</a></dd></div>
+          <div><dt>Repository</dt><dd>{{if $p.Repo}}<a href="/{{$p.Repo}}" class="mono">{{$p.Repo}}</a>{{else}}<span class="muted">Not linked</span>{{end}}</dd></div>
+          <div><dt>Size</dt><dd>{{bytes $p.Size}}</dd></div>
+          <div><dt>Downloads</dt><dd>{{$p.Downloads}}</dd></div>
+          <div><dt>Created</dt><dd>{{date $p.CreatedAt}}{{if $p.CreatedBy}} by {{$p.CreatedBy}}{{end}}</dd></div>
+          <div><dt>Updated</dt><dd>{{ago $p.UpdatedAt}}</dd></div>
+        </dl>
+      </section>
+
+      {{if $d.CanAdmin}}
+      <form method="post" action="{{$d.URL}}" class="card stack pk-settings" aria-labelledby="pk-settings-h">
+        <h2 class="h-sm" id="pk-settings-h">Settings</h2>
+        <input type="hidden" name="action" value="settings">
+        <fieldset class="field">
+          <legend>Visibility</legend>
+          <label class="choice"><input type="radio" name="visibility" value="private" {{if $p.Private}}checked{{end}}> <span><strong>Private</strong><br><span class="small muted">Needs a token with Packages access.</span></span></label>
+          <label class="choice"><input type="radio" name="visibility" value="public" {{if not $p.Private}}checked{{end}}> <span><strong>Public</strong><br><span class="small muted">Anyone can install it.</span></span></label>
+        </fieldset>
+        <div class="field">
+          <label for="pk-repo">Linked repository</label>
+          <select id="pk-repo" name="repo">
+            <option value="">None</option>
+            {{range $d.Repos}}<option value="{{.Name}}" {{if eq $p.RepoID .ID}}selected{{end}}>{{.FullName}}</option>{{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="pk-desc">Description</label>
+          <input id="pk-desc" name="description" maxlength="300" value="{{$p.Description}}">
+        </div>
+        <div class="row-end"><button class="btn btn-primary btn-sm" type="submit">Save</button></div>
+      </form>
+
+      <form method="post" action="{{$d.URL}}" class="card card-danger stack-sm" aria-labelledby="pk-danger-h">
+        <h2 class="h-sm danger-ink" id="pk-danger-h">Delete package</h2>
+        <input type="hidden" name="action" value="delete-package">
+        <p class="small">Removes every version. Files are cleaned up by the next storage clean-up.</p>
+        <div class="field">
+          <label for="pk-confirm" class="small">Type <span class="mono">{{$p.Name}}</span> to confirm</label>
+          <input id="pk-confirm" name="confirm" autocomplete="off" spellcheck="false" required>
+        </div>
+        <div class="row-end"><button class="btn btn-danger btn-sm" type="submit">Delete package</button></div>
+      </form>
+      {{end}}
+    </aside>
+  </div>
+</main>
+{{end}}
+{{define "pk-copy-icon"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg>{{end}}

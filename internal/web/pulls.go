@@ -379,6 +379,7 @@ type pullPageData struct {
 	Cmp        *gitrepo.Comparison
 	Status     pullMergeStatus
 	Protection store.Protection
+	Checks     actChecks // Actions jobs on the head commit (actions_checks.go)
 	Timeline   []pullTimelineItem
 	Comments   int
 	Notes      []*pullNoteView
@@ -474,6 +475,7 @@ func (a *App) buildPull(r *http.Request, v *repoView, g *gitrepo.Repo, p store.P
 	if d.Protection, err = a.db.ProtectionFor(ctx, v.Repo.ID, p.Base); err != nil {
 		return nil, err
 	}
+	d.Checks = a.pullChecks(ctx, v.Repo, d.HeadSHA, d.Protection)
 
 	// Notes.
 	notes, err := a.db.PullNotes(ctx, p.ID)
@@ -647,8 +649,8 @@ func pullStatus(ctx context.Context, g *gitrepo.Repo, d *pullPageData) pullMerge
 		}
 	}
 
-	// Checks arrive with Actions.
-	s.Pills = append(s.Pills, pullStatusPill{Label: "Checks: none yet", Kind: "info", Title: "Checks appear here once Actions arrive"})
+	// Checks from Actions; failing or missing required checks block the merge.
+	d.Checks.addToStatus(&s, block)
 
 	s.Methods = []pullMergeMethod{
 		{Value: "squash", Label: "Squash and merge", Hint: "Combine every commit into one commit on " + d.P.Base, Allowed: true},

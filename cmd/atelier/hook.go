@@ -24,13 +24,17 @@ import (
 func init() { commands["hook"] = runHook }
 
 func runHook(args []string) error {
-	if len(args) == 0 || args[0] != "pre-receive" {
-		return errors.New("usage: atelier hook pre-receive <owner> <repo>")
-	}
+	const usage = "usage: atelier hook pre-receive|post-receive <owner> <repo>"
 	if len(args) != 3 {
-		return errors.New("usage: atelier hook pre-receive <owner> <repo>")
+		return errors.New(usage)
 	}
-	return preReceive(args[1], args[2], os.Stdin, os.Stderr)
+	switch args[0] {
+	case "pre-receive":
+		return preReceive(args[1], args[2], os.Stdin, os.Stderr)
+	case "post-receive":
+		return postReceive(args[1], args[2], os.Getenv("REMOTE_USER"), os.Stdin, os.Stderr)
+	}
+	return errors.New(usage)
 }
 
 // refUpdate is one line of pre-receive input.

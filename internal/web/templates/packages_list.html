@@ -1,0 +1,123 @@
+{{define "head"}}<link rel="stylesheet" href="/static/packages.css"><script src="/static/packages.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2 pk">
+  <aside class="col-side stack">
+    <nav class="side-nav pk-types" aria-label="Package type">
+      {{range $d.Types}}
+      <a href="{{.URL}}" {{if .Active}}aria-current="page"{{end}}>
+        <span class="pk-type-label">{{if .Key}}<span class="pk-dot pk-dot-{{.Key}}" aria-hidden="true"></span>{{end}}{{.Label}}</span>
+        <span class="pk-count" aria-label="{{.Count}} packages">{{.Count}}</span>
+      </a>
+      {{end}}
+    </nav>
+    {{if gt (len $d.Owners) 1}}
+    <nav class="side-nav pk-owners" aria-label="Account">
+      <p class="eyebrow pk-side-head">Accounts</p>
+      <a href="/packages{{if $d.Type}}?type={{$d.Type}}{{end}}" {{if not $d.Owner}}aria-current="page"{{end}}>Everyone</a>
+      {{range $d.Owners}}
+      <a href="/packages/{{.Name}}{{if $d.Type}}?type={{$d.Type}}{{end}}" {{if $d.Owner}}{{if eq $d.Owner.ID .ID}}aria-current="page"{{end}}{{end}}>{{.Label}}</a>
+      {{end}}
+    </nav>
+    {{end}}
+  </aside>
+
+  <div class="col-main stack-lg">
+    <div class="row-between wrap-gap align-start">
+      <div class="stack-sm">
+        <h1 class="display">{{if $d.Owner}}{{$d.Owner.Label}}'s packages{{else}}Packages{{end}}</h1>
+        <p class="muted">npm packages, container images, Go modules and files, served from this Atelier.</p>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="/settings/packages">Registry settings</a>
+    </div>
+
+    <form method="get" action="{{$d.Base}}" class="pk-search" role="search">
+      {{if $d.Type}}<input type="hidden" name="type" value="{{$d.Type}}">{{end}}
+      <label for="pk-q" class="sr-only">Search packages</label>
+      <input id="pk-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search packages…" autocomplete="off">
+      <button class="btn btn-sm" type="submit">Search</button>
+    </form>
+
+    <section class="list-card" aria-labelledby="pk-list-h">
+      <h2 class="list-head" id="pk-list-h">{{len $d.Rows}} {{if eq (len $d.Rows) 1}}package{{else}}packages{{end}}</h2>
+      {{range $d.Rows}}
+      <div class="list-row pk-row">
+        <span class="pk-chip pk-chip-{{.Type}}">{{.TypeLabel}}</span>
+        <div class="grow stack-sm pk-row-main">
+          <p class="pk-row-title"><a href="{{.URL}}" class="mono break">{{.Display}}</a>
+            {{if .Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
+            {{if eq .OwnerKind "company"}}<span class="pill pill-violet">{{.Owner}}</span>{{end}}
+          </p>
+          {{if .Description}}<p class="small text-2 pk-desc">{{.Description}}</p>{{end}}
+          <p class="small muted pk-meta">
+            {{if .Version}}<span class="mono">{{.Version}}</span>{{end}}
+            {{if .Repo}}<span aria-hidden="true">·</span> <a class="muted-link" href="/{{.Repo}}">{{.Repo}}</a>{{end}}
+            <span aria-hidden="true">·</span> {{.Downloads}} downloads
+            {{if .Size}}<span aria-hidden="true">·</span> {{bytes .Size}}{{end}}
+            <span aria-hidden="true">·</span> updated {{ago .Updated}}
+          </p>
+        </div>
+      </div>
+      {{else}}
+      <div class="list-row muted pk-empty">
+        {{if or $d.Q $d.Type}}Nothing matches. <a href="{{$d.Base}}">Show everything</a>.{{else}}No packages yet. Publish one with the snippets below.{{end}}
+      </div>
+      {{end}}
+    </section>
+
+    <div class="grid-2 pk-cards">
+      <section class="card stack pk-npm" aria-labelledby="pk-npm-h">
+        <div class="row-between wrap-gap">
+          <h2 class="h-sm" id="pk-npm-h"><span class="pk-chip pk-chip-npm">npm</span> Your npm registry</h2>
+          {{if $d.Upstream}}<span class="pill pill-amber">npmjs cache on</span>{{else}}<a class="small" href="/settings/packages">Cache npmjs</a>{{end}}
+        </div>
+        <fieldset class="field">
+          <legend class="small">Scopes in <code>.npmrc</code></legend>
+          <div class="row wrap-gap pk-scopes">
+            {{range $d.Owners}}
+            <label class="pk-toggle"><input type="checkbox" data-pk-scope="{{.Name}}" checked> <span class="mono">@{{.Name}}</span></label>
+            {{end}}
+            {{if $d.Upstream}}<label class="pk-toggle"><input type="checkbox" data-pk-all> <span>Everything else (npmjs)</span></label>{{end}}
+          </div>
+        </fieldset>
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-npmrc" data-pk-registry="{{$d.Registry}}" data-pk-host="{{$d.RegistryHost}}">{{range $d.Owners}}@{{.Name}}:registry={{$d.Registry}}
+{{end}}//{{$d.RegistryHost}}/npm/:_authToken=${ATELIER_TOKEN}</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-npmrc" aria-label="Copy .npmrc">{{template "pk-copy-icon"}}</button>
+        </div>
+        <p class="small muted">Create a token with <strong>Packages</strong> access under <a href="/settings/tokens">Access tokens</a> and export it as <code>ATELIER_TOKEN</code>. Then <code>npm publish</code> any package named <code>@scope/name</code>.</p>
+      </section>
+
+      <section class="card stack pk-other" aria-labelledby="pk-other-h">
+        <h2 class="h-sm" id="pk-other-h">Other registries</h2>
+        <div class="stack-sm">
+          <p class="small"><span class="pk-chip pk-chip-container">Container</span> Log in with any username and a token as the password:</p>
+          <div class="pk-snippet-wrap">
+            <pre class="snippet pk-snippet" id="pk-docker">docker login {{$d.RegistryHost}}
+docker push {{$d.RegistryHost}}/{{(index $d.Owners 0).Name}}/app:latest</pre>
+            <button type="button" class="clone-copy pk-copy" data-copy="#pk-docker" aria-label="Copy docker commands">{{template "pk-copy-icon"}}</button>
+          </div>
+          {{if not $d.HTTPS}}<p class="small pk-warn">Docker only talks to registries over HTTPS. Serve Atelier through nginx with TLS, or add <code>"{{$d.RegistryHost}}"</code> to <code>insecure-registries</code> in Docker's <code>daemon.json</code>.</p>{{else}}<p class="small muted">In Portainer, add <code>{{$d.RegistryHost}}</code> under Registries → Custom registry with the same token.</p>{{end}}
+        </div>
+        <div class="stack-sm">
+          <p class="small"><span class="pk-chip pk-chip-go">Go</span> Modules come from tagged repositories:</p>
+          <div class="pk-snippet-wrap">
+            <pre class="snippet pk-snippet" id="pk-go">export GOPROXY={{$d.BaseURL}}/go,https://proxy.golang.org,direct
+export GONOSUMDB={{$d.RegistryHost}}</pre>
+            <button type="button" class="clone-copy pk-copy" data-copy="#pk-go" aria-label="Copy Go settings">{{template "pk-copy-icon"}}</button>
+          </div>
+        </div>
+        <div class="stack-sm">
+          <p class="small"><span class="pk-chip pk-chip-generic">Generic</span> Any file, by name and version:</p>
+          <div class="pk-snippet-wrap">
+            <pre class="snippet pk-snippet" id="pk-generic">curl -T app.tar.gz -H "Authorization: Bearer $ATELIER_TOKEN" \
+  {{$d.BaseURL}}/api/v1/packages/{{(index $d.Owners 0).Name}}/generic/app/1.0.0/app.tar.gz</pre>
+            <button type="button" class="clone-copy pk-copy" data-copy="#pk-generic" aria-label="Copy upload command">{{template "pk-copy-icon"}}</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+{{end}}
+{{define "pk-copy-icon"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg>{{end}}

@@ -24,6 +24,7 @@ func pullsRulesRoutes(a *App, m *http.ServeMux) {
 type branchRuleRow struct {
 	store.BranchRule
 	Matches []string // existing branches it protects
+	Checks  []string // required checks (actions_checks.go)
 }
 
 func (a *App) renderBranchRules(w http.ResponseWriter, r *http.Request, form store.BranchRule, errMsg, notice string, code int) {
@@ -38,8 +39,18 @@ func (a *App) renderBranchRules(w http.ResponseWriter, r *http.Request, form sto
 		return
 	}
 	rows := make([]branchRuleRow, len(rules))
+	var ruleIDs []int64
+	for _, rl := range rules {
+		ruleIDs = append(ruleIDs, rl.ID)
+	}
+	checks, err := a.db.BranchRuleChecks(ctx, ruleIDs)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	for i, rl := range rules {
 		rows[i].BranchRule = rl
+		rows[i].Checks = checks[rl.ID]
 		for _, b := range v.Branches {
 			if store.MatchBranch(rl.Pattern, b) {
 				rows[i].Matches = append(rows[i].Matches, b)
@@ -60,13 +71,19 @@ func (a *App) renderBranchRules(w http.ResponseWriter, r *http.Request, form sto
 			form.Pattern = ""
 		}
 	}
+	// Required checks in the form: what was posted, or the rule being edited.
+	formChecks := strings.Join(parseCheckNames(r.FormValue("required_checks")), ", ")
+	if r.Method == http.MethodGet && editing != 0 {
+		formChecks = strings.Join(checks[editing], ", ")
+	}
 	email, _ := a.db.Setting(ctx, settingPullsCommitterEmail)
 	ident := a.pullIdentity(ctx)
 	if code != http.StatusOK {
 		w.WriteHeader(code)
 	}
 	a.render(w, r, "pulls_rules", page{Title: "Branch rules · " + v.Repo.FullName(), Nav: "repos", Error: errMsg, Notice: notice,
-		Data: map[string]any{"V": v, "Rules": rows, "Form": form, "Editing": editing, "Email": email, "Identity": ident}})
+		Data: map[string]any{"V": v, "Rules": rows, "Form": form, "Editing": editing, "Email": email, "Identity": ident,
+			"Checks": formChecks}})
 }
 
 func (a *App) branchRulesPage(w http.ResponseWriter, r *http.Request) {
@@ -97,11 +114,16 @@ func (a *App) branchRuleCreate(w http.ResponseWriter, r *http.Request) {
 		a.renderBranchRules(w, r, rl, branchPatternHelp, "", http.StatusUnprocessableEntity)
 		return
 	}
-	if _, err := a.db.CreateBranchRule(r.Context(), rl); err != nil {
+	created, err := a.db.CreateBranchRule(r.Context(), rl)
+	if err != nil {
 		if errors.Is(err, store.ErrBranchRuleExists) {
 			a.renderBranchRules(w, r, rl, "There's already a rule for "+rl.Pattern+".", "", http.StatusConflict)
 			return
 		}
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.db.SetBranchRuleChecks(r.Context(), created.ID, parseCheckNames(r.FormValue("required_checks"))); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -129,6 +151,10 @@ func (a *App) branchRuleUpdate(w http.ResponseWriter, r *http.Request) {
 		a.renderBranchRules(w, r, rl, "There's already a rule for "+rl.Pattern+".", "", http.StatusConflict)
 		return
 	case err != nil:
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.db.SetBranchRuleChecks(r.Context(), rl.ID, parseCheckNames(r.FormValue("required_checks"))); err != nil {
 		a.fail(w, r, err)
 		return
 	}

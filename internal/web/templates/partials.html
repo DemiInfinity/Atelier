@@ -6,6 +6,7 @@
   <nav class="topnav" aria-label="Primary">
     <a href="/" {{if eq .Nav "home"}}aria-current="page"{{end}}>Home</a>
     <a href="/{{.Me.Name}}" {{if eq .Nav "repos"}}aria-current="page"{{end}}>Repositories</a>
+    <a href="/packages" {{if eq .Nav "packages"}}aria-current="page"{{end}}>Packages</a>
     <a href="/settings/tokens" {{if eq .Nav "tokens"}}aria-current="page"{{end}}>Settings</a>
   </nav>
   <div class="topbar-end">
@@ -35,8 +36,8 @@
       <a href="{{.Base}}" {{if eq .Tab "code"}}aria-current="page"{{end}}>Code</a>
       <a href="{{.Base}}/issues" {{if eq .Tab "issues"}}aria-current="page"{{end}}>Issues</a>
       <a href="{{.Base}}/pulls" {{if eq .Tab "pulls"}}aria-current="page"{{end}}>Pull requests</a>
-      <span class="tab-soon" title="Coming in Phase 3">Actions</span>
-      <span class="tab-soon" title="Coming in Phase 3">Releases</span>
+      <a href="{{.Base}}/actions" {{if eq .Tab "actions"}}aria-current="page"{{end}}>Actions</a>
+      <a href="{{.Base}}/releases" {{if eq .Tab "releases"}}aria-current="page"{{end}}>Releases{{with .ReleaseCount}} <span class="pill">{{.}}</span>{{end}}</a>
       <a href="{{.Base}}/commits/{{.Default}}" {{if eq .Tab "commits"}}aria-current="page"{{end}}>Commits</a>
       <a href="{{.Base}}/settings" {{if eq .Tab "settings"}}aria-current="page"{{end}}>Settings</a>
     </nav>
@@ -44,15 +45,19 @@
 </div>
 {{end}}
 
-{{/* Account settings side menu. Pass the active key: tokens, keys, passkeys, backups, import. */}}
+{{/* Account settings side menu. Pass the active key: tokens, keys, passkeys, secrets, backups, import. */}}
 {{define "accountnav"}}
 <nav class="side-nav" aria-label="Account settings">
   <a href="/settings/profile" {{if eq . "profile"}}aria-current="page"{{end}}>Profile</a>
+  <a href="/settings/repositories" {{if eq . "repositories"}}aria-current="page"{{end}}>Repositories</a>
   <a href="/settings/tokens" {{if eq . "tokens"}}aria-current="page"{{end}}>Access tokens</a>
   <a href="/settings/keys" {{if eq . "keys"}}aria-current="page"{{end}}>SSH keys</a>
   <a href="/settings/passkeys" {{if eq . "passkeys"}}aria-current="page"{{end}}>Passkeys</a>
+  <a href="/settings/secrets" {{if eq . "secrets"}}aria-current="page"{{end}}>Secrets and variables</a>
+  <a href="/settings/runners" {{if eq . "runners"}}aria-current="page"{{end}}>Runners</a>
   <a href="/settings/backups" {{if eq . "backups"}}aria-current="page"{{end}}>Backups and storage</a>
   <a href="/settings/import" {{if eq . "import"}}aria-current="page"{{end}}>Import</a>
+  <a href="/settings/packages" {{if eq . "packages"}}aria-current="page"{{end}}>Packages</a>
 </nav>
 {{end}}
 

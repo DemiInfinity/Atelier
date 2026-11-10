@@ -1,0 +1,24 @@
+{{define "head"}}{{template "releases-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg rel-page">
+  <nav class="crumbs" aria-label="Breadcrumb"><a href="{{$v.Base}}/releases">Releases</a> <span class="slash">/</span> <a href="{{if $d.R}}{{$d.R.URL}}{{else}}#{{end}}" aria-current="page">{{$d.Tag}}</a></nav>
+  {{if .Notice}}<div class="flash flash-ok" role="status">Release saved.</div>{{end}}
+  {{if $d.TagOnly}}
+  <section class="card stack-sm">
+    <div class="row gap-sm">{{template "releases-tag-icon"}}<h1 class="h-display-sm mono">{{$d.Tag}}</h1></div>
+    <p class="muted">This tag points at <a class="mono" href="{{$v.Base}}/commit/{{$d.Commit}}">{{short $d.Commit}}</a> but has no release yet.</p>
+    <div class="row gap-sm wrap-gap">
+      <a class="btn" href="{{$v.Base}}/tree/{{$d.Tag}}">Browse files</a>
+      {{if $d.CanWrite}}<a class="btn btn-primary" href="{{$d.NewURL}}">Create a release from this tag</a>{{end}}
+    </div>
+  </section>
+  {{else}}
+  <section class="rel-feature">
+    {{template "releases-meta" $d.R}}
+    {{template "releases-card" $d.R}}
+  </section>
+  {{end}}
+</main>
+{{end}}

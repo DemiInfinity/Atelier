@@ -178,6 +178,30 @@ docker start atelier
 
 **Settings → Import** brings repositories in from Gitea/Forgejo (server URL and token: your own and your organizations' repositories), GitHub (token) or any git URL (optional username and token), into your personal account or a company account. Pick the repositories and their names; they import in the background, with visibility and descriptions carried over. Tick **Keep syncing as a mirror** to fetch from the source every `ATELIER_MIRROR_INTERVAL` minutes (default 30). Only mirrors store their token (in the database, never shown again); one-off imports forget it when they finish. Issues and pull requests aren't imported yet.
 
+### Runners
+
+`atelier-runner` is a single static binary that runs Actions jobs on a device. It only connects out to your server, so laptops need no open ports. It needs `git`; Docker only for `container:` jobs and docker actions, and Node.js only for JavaScript actions.
+
+```sh
+make runner          # bin/atelier-runner for this machine
+make runner-all      # macOS, Linux and Windows builds (arm64 and amd64) in bin/
+```
+
+1. Create a registration token under **Settings → Runners**, then register the device once:
+
+   ```sh
+   atelier-runner register --url https://git.example.com --token <token> \
+     --name MacBook --labels mac --capabilities jobs,docker,discovery
+   ```
+
+   Labels always include `self-hosted`, the OS (`macos`, `linux`, `windows`) and the CPU (`x64`, `arm64`). Capabilities: `jobs` (default), `docker` (allow `container:` jobs, `docker://` steps and docker actions), `discovery` (report git repos found under `~/Projects`, or `%USERPROFILE%\source` and `~\Projects` on Windows, every 10 minutes, with credentials stripped from remote URLs; change the folders with `--discovery-paths`). The config, including the runner token, is saved with mode 0600 to `<user config dir>/atelier-runner/config.json` (`--config` overrides it).
+2. Try it in the foreground with `atelier-runner run` (`--parallel N` runs several jobs at once; `--grace 5m` lets a running job finish on Ctrl-C/SIGTERM before it is cancelled).
+3. Install it as a service: `atelier-runner install` (a LaunchAgent on macOS, a systemd user unit on Linux, or `--system` for a system unit, a Windows service from an Administrator prompt). `--dry-run` prints the file and commands without changing anything. `atelier-runner status` shows the config and service state; `atelier-runner uninstall` removes it.
+
+Jobs run in a fresh workspace that is deleted afterwards. `run:` steps use bash (falling back to sh) on macOS/Linux and pwsh, then powershell, then cmd on Windows, unless `shell:` says otherwise (`bash`, `sh`, `pwsh`, `powershell`, `cmd`, `python`). The usual `GITHUB_*` variables (plus `ATELIER_*` equivalents), `GITHUB_OUTPUT`/`GITHUB_ENV`/`GITHUB_PATH`/`GITHUB_STEP_SUMMARY` and workflow commands such as `::add-mask::` work like on GitHub, so existing workflows run unchanged. `actions/checkout` is built in. Other actions are downloaded from GitHub at the exact commit in `.atelier/actions.lock`, checked against that commit and cached. Secrets, the job token and anything passed to `::add-mask::` show as `***` in logs.
+
+On the Portainer host you can run the runner as a container instead: `make runner-docker` builds `atelier-runner:latest`. Register with `docker run --rm -it -v atelier-runner:/runner atelier-runner register --config /runner/config.json --work-dir /srv/atelier-runner/work …`, then run it with `-v atelier-runner:/runner -v /srv/atelier-runner/work:/srv/atelier-runner/work -v /var/run/docker.sock:/var/run/docker.sock`. The work dir must have the same path inside and outside the container, because Docker resolves job bind mounts on the host.
+
 ## Deploying behind nginx
 
 See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important parts are:
@@ -202,8 +226,8 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 |---|---|---|
 | 1 | Push/clone over HTTPS and SSH (behind nginx), code browser, commits and diffs, passkey + GitHub sign-in, keys and tokens, backups, import from Gitea/GitHub | Done |
 | 2 | Issues, pull requests (new overview + Files changed), branch rules, notifications, company accounts and profiles | Done |
-| 3 | Actions (runners per device, YAML + agentic workflows, lockfile), secrets, releases, packages (npm, containers, Go, Swift), LFS | Planned |
-| 4 | MCP server, Tether (search, feed, mirroring), apps and bots (bridge + native + webhooks), security scanning | Planned |
+| 3 | Actions (runners per device, YAML workflows, lockfile, checks), secrets, releases, packages (npm, containers, Go), LFS, push to create | Done |
+| 4 | MCP server, agentic workflows, Tether (search, feed, mirroring), apps and bots (bridge + native + webhooks), security scanning | Next |
 | 5 | Projects, Pages, web editor and device workspaces, snippets, ⌘K, mobile app, insights | Planned |
 | Later | Atelier Connect: separate studios following, starring and sending pull requests to each other (ActivityPub / ForgeFed). Addons: Duo, Team, Company | Ideas |
 
@@ -224,6 +248,16 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 - Notifications inbox with a bell and unread count; you're never notified about your own actions
 - Profiles for you and company accounts: profile README, pinned repositories, Embers
 - Importing issues, pull requests, labels and milestones from Gitea/Forgejo and GitHub, keeping the original numbers (the token needs read access to issues and pull requests)
+
+**Phase 3: done**
+- Actions: GitHub Actions–style YAML workflows in `.atelier/workflows/` (or `.github/workflows/`), triggered by push, pull request, schedule, manual run or release; matrix, needs, environments, live logs, re-run, cancel, approvals
+- `atelier-runner` for macOS, Linux and Windows: runs jobs on your own devices, installs as a service, masks secrets, cleans up after each job
+- Lockfile pinning every action to a commit (`.atelier/actions.lock`), and checks in the pull request status bar that branch rules can require
+- Encrypted secrets and variables per repository and account, and environments with approvals and runner restrictions (key: `ATELIER_SECRET_KEY`, kept out of backups — keep your own copy)
+- Releases with notes, assets and an upload API; Git LFS with file locking
+- Package registries: npm (with optional public-npm cache), containers (OCI, needs HTTPS for Docker), Go module proxy, generic files
+- Push to create: pushing to a repository that doesn't exist creates it (private); Settings → Repositories turns it off
+- Agentic (plain-English) workflows moved to Phase 4, alongside the MCP server they need
 
 **Built to grow:** sessions, tokens, SSH keys and passkeys belong to a person, and one permission check covers the web, HTTPS and SSH, so the Duo / Team / Company addons can plug in later.
 

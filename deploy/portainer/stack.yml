@@ -54,6 +54,11 @@ services:
       # ATELIER_BACKUP_S3_SECRET_KEY: ""
       # Import mirrors fetch from their source this often (minutes).
       # ATELIER_MIRROR_INTERVAL: "30"
+      # Key that encrypts Actions secrets. Keep a copy in your password manager:
+      # it is NOT in Atelier's backups, and without it secrets can't be read.
+      # Put ATELIER_SECRET_KEY=<base64 32 bytes> in a .env file next to this
+      # stack (mode 600), or in Portainer's environment variables.
+      ATELIER_SECRET_KEY: ${ATELIER_SECRET_KEY:-}
       # Usually leave these at the image defaults:
       # ATELIER_LISTEN: ":3000"
       # ATELIER_SSH_LISTEN: ":2222"

@@ -266,9 +266,9 @@ var notifFilters = []notifFilter{
 	{Key: "pulls", Label: "Pull requests", Subjects: []string{"pull"}, Class: "nf-pull"},
 	{Key: "agents", Label: "Agents & bots", Actors: []string{ActorToken, "bot", "agent"}, Class: "nf-agent"},
 	{Key: "system", Label: "System", Subjects: []string{"backup", "import"}, Class: "nf-system"},
-	{Key: "actions", Label: "Actions", Subjects: []string{"action"}, Soon: "Actions notifications arrive with Phase 3.", Class: "nf-action"},
-	{Key: "runners", Label: "Runners", Subjects: []string{"runner"}, Soon: "Runner notifications arrive with Phase 3.", Class: "nf-runner"},
-	{Key: "releases", Label: "Releases", Subjects: []string{"release"}, Soon: "Release notifications arrive with Phase 3.", Class: "nf-release"},
+	{Key: "actions", Label: "Actions", Subjects: []string{"run", "job"}, Class: "nf-action"},
+	{Key: "runners", Label: "Runners", Subjects: []string{"runner"}, Class: "nf-runner"},
+	{Key: "releases", Label: "Releases", Subjects: []string{"release"}, Class: "nf-release"},
 	{Key: "tether", Label: "Tether", Subjects: []string{"tether"}, Soon: "Tether notifications arrive with Phase 4.", Class: "nf-tether"},
 }
 

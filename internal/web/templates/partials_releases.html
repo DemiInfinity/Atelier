@@ -1,0 +1,66 @@
+{{/* Shared pieces for the release pages. Names start with "releases-". */}}
+
+{{define "releases-head"}}<link rel="stylesheet" href="/static/releases.css"><script src="/static/releases.js" defer></script>{{end}}
+
+{{define "releases-tag-icon"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 12 V4 a1 1 0 0 1 1-1 H12 L21 12 L12 21 Z"/><circle cx="8" cy="8" r="1.5"/></svg>{{end}}
+
+{{/* Meta column beside a release: tag, date, commit, who built it. Pass a releaseView. */}}
+{{define "releases-meta"}}
+<div class="rel-meta">
+  <a class="rel-meta-tag mono" href="{{.URL}}">{{template "releases-tag-icon"}}<span>{{.Tag}}</span></a>
+  {{if .PublishedAt}}<time class="small muted" datetime="{{.PublishedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .When}}">{{ago .When}}</time>
+  {{else}}<span class="small muted">Draft, started {{ago .CreatedAt}}</span>{{end}}
+  {{if .CommitURL}}<a class="small mono muted-link" href="{{.CommitURL}}" aria-label="Commit {{.Short}}">{{.Short}}</a>{{else}}<span class="small muted">Tag made on publish from <span class="mono">{{.Target}}</span></span>{{end}}
+  {{if .BuiltBy}}<span class="small muted rel-built">Built by Actions on {{.BuiltBy}}</span>
+  {{else}}<span class="small muted">By {{.AuthorName}}</span>{{end}}
+</div>
+{{end}}
+
+{{/* A full release card. Pass a releaseView. */}}
+{{define "releases-card"}}
+{{$r := .}}
+<article class="rel-card" aria-labelledby="rel-title-{{$r.ID}}">
+  <div class="rel-card-body stack">
+    <div class="rel-title-row">
+      <h2 class="rel-title" id="rel-title-{{$r.ID}}"><a href="{{$r.URL}}">{{$r.Name}}</a></h2>
+      {{if $r.IsLatest}}<span class="pill rel-latest">Latest</span>{{end}}
+      {{if $r.Prerelease}}<span class="pill pill-amber">Pre-release</span>{{end}}
+      {{if $r.Draft}}<span class="pill pill-amber">Draft</span>{{end}}
+      {{if $r.CanEdit}}<a class="btn btn-sm push-right" href="{{$r.EditURL}}">Edit<span class="sr-only"> {{$r.Tag}}</span></a>{{end}}
+    </div>
+    {{if $r.Body}}<div class="markdown rel-notes">{{$r.BodyHTML}}</div>
+    {{else}}<p class="muted small">No release notes.</p>{{end}}
+  </div>
+
+  <div class="rel-assets stack-sm">
+    <h3 class="h-sm">Assets <span class="muted">· {{len $r.Assets}}{{if $r.TagExists}}{{if $r.TarURL}} + source{{end}}{{end}}</span></h3>
+    <ul class="rel-asset-list">
+      {{range $r.Assets}}
+      <li class="rel-asset">
+        <span class="rel-asset-icon is-{{.Kind}}" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">{{if eq .Kind "archive"}}<path d="M21 8 L12 3 L3 8 L12 13 Z M3 8 V16 L12 21 V13 M21 8 V16 L12 21"/>{{else}}<path d="M6 3 h8 l4 4 v14 H6 Z M14 3 v4 h4"/>{{end}}</svg></span>
+        <a class="rel-asset-name mono" href="{{.URL}}" download>{{.Name}}</a>
+        <span class="rel-asset-meta small muted"><span>{{.Label}}</span> · <span>{{bytes .Size}}</span> · <span title="sha256:{{.SHA256}}" class="mono">{{short .SHA256}}</span> · <span>{{.Downloads}} {{if eq .Downloads 1}}download{{else}}downloads{{end}}</span></span>
+      </li>
+      {{end}}
+      {{if $r.TarURL}}
+      <li class="rel-asset">
+        <span class="rel-asset-icon is-source" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3 h8 l4 4 v14 H6 Z M14 3 v4 h4"/></svg></span>
+        <a class="rel-asset-name" href="{{$r.ZipURL}}">Source code (zip)</a>
+      </li>
+      <li class="rel-asset">
+        <span class="rel-asset-icon is-source" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 3 h8 l4 4 v14 H6 Z M14 3 v4 h4"/></svg></span>
+        <a class="rel-asset-name" href="{{$r.TarURL}}">Source code (tar.gz)</a>
+      </li>
+      {{end}}
+      {{if and (not $r.Assets) (not $r.TarURL)}}<li class="rel-asset muted small">No files yet.</li>{{end}}
+    </ul>
+    {{if $r.PortainerImage}}
+    <div class="rel-portainer stack-sm">
+      <p class="rel-portainer-title">Update your Portainer stack</p>
+      <pre class="rel-portainer-code"><code id="rel-image-{{$r.ID}}">image: {{$r.PortainerImage}}</code></pre>
+      <p class="small muted">Once Actions publishes this tag's image to Atelier's container registry, point the stack at it and redeploy.</p>
+    </div>
+    {{end}}
+  </div>
+</article>
+{{end}}

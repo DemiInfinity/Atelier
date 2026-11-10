@@ -1,0 +1,11 @@
+/* Checks list on pull requests (partials_pulls.html "pulls-checks"). */
+.pr-checks { display: flex; flex-direction: column; gap: 4px; }
+.pr-check { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pr-check a { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.pr-check a:hover { color: var(--amber); }
+.pr-check-name { color: var(--text); }
+.pr-check-mark { width: 14px; text-align: center; flex: 0 0 auto; color: var(--muted); }
+.pr-check.is-success .pr-check-mark { color: var(--ok); }
+.pr-check.is-failure .pr-check-mark { color: var(--danger); }
+.pr-check.is-pending .pr-check-mark { color: var(--amber); }
+.pr-check-missing { color: var(--amber); }

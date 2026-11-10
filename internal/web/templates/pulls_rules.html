@@ -21,7 +21,8 @@
           {{if .BlockForcePush}}<li class="pill pill-amber">No force pushes or deletion</li>{{end}}
           {{if .RequireResolvedNotes}}<li class="pill pill-amber">Notes resolved</li>{{end}}
           {{if .LinearHistory}}<li class="pill pill-amber">Linear history</li>{{end}}
-          {{if not (or .RequirePR .BlockForcePush .RequireResolvedNotes .LinearHistory)}}<li class="pill">No requirements</li>{{end}}
+          {{range .Checks}}<li class="pill pill-violet">Check: {{.}}</li>{{end}}
+          {{if not (or .RequirePR .BlockForcePush .RequireResolvedNotes .LinearHistory .Checks)}}<li class="pill">No requirements</li>{{end}}
         </ul>
         <p class="small muted">{{if .Matches}}Applies to {{range $i, $b := .Matches}}{{if $i}}, {{end}}<span class="mono">{{$b}}</span>{{end}}{{else}}No branch matches yet.{{end}}</p>
       </div>
@@ -49,6 +50,11 @@
       <label class="choice"><input type="checkbox" name="require_resolved_notes" value="1" {{if $f.RequireResolvedNotes}}checked{{end}}><span><strong>Require resolved notes</strong><span class="small muted">Every note to self on a pull request must be resolved before it can merge.</span></span></label>
       <label class="choice"><input type="checkbox" name="linear_history" value="1" {{if $f.LinearHistory}}checked{{end}}><span><strong>Require linear history</strong><span class="small muted">No merge commits: pull requests merge by squashing, and pushed merge commits are rejected.</span></span></label>
     </fieldset>
+    <div class="field">
+      <label for="required-checks">Required checks</label>
+      <input id="required-checks" name="required_checks" maxlength="4000" value="{{$d.Checks}}" placeholder="test, CI / lint" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="checks-hint">
+      <p class="hint" id="checks-hint">Comma-separated Actions job names (or <span class="mono">Workflow / job</span>). A pull request can't merge until each one has passed on its latest commit.</p>
+    </div>
     <div class="row-end">
       {{if $d.Editing}}<a class="btn btn-ghost" href="{{$v.Base}}/settings/branches">Cancel</a>{{end}}
       <button class="btn btn-primary" type="submit">{{if $d.Editing}}Save rule{{else}}Add rule{{end}}</button>

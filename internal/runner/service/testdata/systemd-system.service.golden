@@ -1,0 +1,18 @@
+[Unit]
+Description=Runs Atelier Actions jobs on this device
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/atelier-runner run --config /etc/atelier/runner.json --label "100%% \"fast\" $$HOME\\x"
+User=atelier
+Environment="ATELIER_NOTE=a&b <c> \"d\" 50%% $X"
+Environment="PATH=/opt/homebrew/bin:/usr/bin:/bin"
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

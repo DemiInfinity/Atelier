@@ -177,7 +177,7 @@ func TestNotificationsPageFiltersAndDone(t *testing.T) {
 	check("?filter=pulls", []string{"Bot pull"}, []string{"Agent issue", "Backup failed"})
 	check("?filter=agents", []string{"Agent issue", "Bot pull"}, []string{"Backup failed"})
 	check("?filter=system", []string{"Backup failed"}, []string{"Agent issue", "Bot pull"})
-	check("?filter=actions", []string{"arrive with Phase 3"}, []string{"Agent issue", "All caught up"})
+	check("?filter=actions", nil, []string{"Agent issue", "arrive with Phase 3"})
 	check("?filter=tether", []string{"arrive with Phase 4"}, nil)
 	check(fmt.Sprintf("?repo=%d", f.repo.ID), []string{"Agent issue", "Bot pull"}, []string{"Backup failed"})
 

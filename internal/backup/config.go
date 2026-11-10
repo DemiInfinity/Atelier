@@ -15,7 +15,7 @@ func PlanFromConfig(cfg config.Config, db *store.Store, gitBin string) Plan {
 		dir = filepath.Join(cfg.DataDir, "backups")
 	}
 	return Plan{
-		Options: Options{DB: db.DB(), RepoRoot: cfg.RepoRoot(), Git: gitBin, Dir: dir},
+		Options: Options{DB: db.DB(), RepoRoot: cfg.RepoRoot(), Git: gitBin, Dir: dir, DataDir: cfg.DataDir},
 		S3:      S3FromConfig(cfg),
 		Keep:    Retention{Daily: cfg.BackupKeepDaily, Weekly: cfg.BackupKeepWeekly, Monthly: cfg.BackupKeepMonthly},
 	}

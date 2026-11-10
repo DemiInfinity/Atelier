@@ -1,0 +1,18 @@
+[Unit]
+Description=Runs Atelier Actions jobs on this device
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/alice/.local/bin/atelier-runner run --config "/home/alice/.config/atelier/runner config.json" --label "100%% \"fast\" $$HOME\\x"
+WorkingDirectory=/home/alice/atelier work
+Environment="ATELIER_NOTE=a&b <c> \"d\" 50%% $X"
+Environment="PATH=/opt/homebrew/bin:/usr/bin:/bin"
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

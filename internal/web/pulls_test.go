@@ -108,7 +108,7 @@ func TestPullRequestFlow(t *testing.T) {
 
 	body = expectStatus(t, do(t, a, "GET", "/zoe/demo/pulls/1", nil, ck), 200, "GET pull")
 	mustContain(t, body, "overview", "Add a greeting", "<strong>hi</strong>", "Ready to merge", "No conflicts",
-		"Checks: none yet", "Squash and merge", "Create a merge commit", "Next steps", "Add Hello", `name="expected_head" value="`+head+`"`)
+		"No checks", "Squash and merge", "Create a merge commit", "Next steps", "Add Hello", `name="expected_head" value="`+head+`"`)
 
 	// Files changed, with the no-JS note form on a line.
 	body = expectStatus(t, do(t, a, "GET", "/zoe/demo/pulls/1/files?path=app/main.go&side=new&line=5", nil, ck), 200, "GET files")

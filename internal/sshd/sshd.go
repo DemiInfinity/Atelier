@@ -42,6 +42,10 @@ type Server struct {
 	// shared permission check. When nil, every stored key has full access.
 	Allow func(ctx context.Context, keyID int64, repo store.Repo, write bool) bool
 
+	// Create makes a missing repository when someone pushes to it (push to
+	// create). It returns an error when that isn't allowed. Nil disables it.
+	Create func(ctx context.Context, keyID int64, owner, name string) (store.Repo, error)
+
 	mu    sync.Mutex
 	conns map[net.Conn]struct{}
 	wg    sync.WaitGroup
@@ -275,6 +279,13 @@ func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtoco
 		return 128
 	}
 	repo, err := s.db.RepoByName(ctx, cmd.Owner, cmd.Repo)
+	if err != nil && cmd.Service == ReceivePack && s.Create != nil {
+		// Push to create: a push to a missing repository creates it (private).
+		if created, cerr := s.Create(ctx, keyID, cmd.Owner, cmd.Repo); cerr == nil {
+			repo, err = created, nil
+			fmt.Fprintf(stderr, "atelier: created private repository %s\n", repo.FullName())
+		}
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "atelier: repository '%s/%s' not found\n", cmd.Owner, cmd.Repo)
 		return 128

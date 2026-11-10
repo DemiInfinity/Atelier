@@ -1,0 +1,79 @@
+{{define "head"}}{{template "actions-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "runners"}}</aside>
+  <div class="col-main stack-lg act-runners">
+    <div>
+      <h1 class="display">Runners</h1>
+      <p class="muted">Each device that runs <span class="mono">atelier-runner</span> takes Actions jobs whose <span class="mono">runs-on</span> labels it has. Runners only connect out to Atelier, so they need no open ports.</p>
+    </div>
+    {{template "flash" .}}
+
+    {{if $d.Command}}
+    <section class="card card-ok stack-sm" role="status">
+      <h2 class="h-sm">Register a runner</h2>
+      <p class="small">Run this on the device within the hour. The token works once.</p>
+      <div class="clone">
+        <input class="clone-url mono" id="act-reg-cmd" value="{{$d.Command}}" readonly aria-label="Registration command">
+        <button type="button" class="clone-copy" data-copy="#act-reg-cmd" aria-label="Copy registration command"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+      </div>
+      <p class="small muted">Expires {{datetime $d.Expires}}. Add <span class="mono">--labels mac,docker</span> to route jobs by label.</p>
+    </section>
+    {{else}}
+    <form method="post" action="/settings/runners/token" class="card row-between wrap-gap">
+      <div class="stack-sm min0">
+        <h2 class="h-sm">Add a runner</h2>
+        <p class="small muted">Generates a one-time command for <span class="mono">atelier-runner register</span>.</p>
+      </div>
+      <button class="btn btn-primary" type="submit">Generate registration command</button>
+    </form>
+    {{end}}
+
+    <section class="list-card" aria-labelledby="act-rn-title">
+      <h2 class="list-head h-sm" id="act-rn-title">Your runners</h2>
+      {{range $d.Runners}}
+      <article class="list-row act-rn">
+        <span class="act-dot {{if not .Enabled}}is-off{{else if and .Online .Busy}}is-busy{{else if .Online}}is-on{{else}}is-off{{end}}" aria-hidden="true"></span>
+        <div class="grow min0 stack-sm">
+          <p><strong>{{.Name}}</strong>
+            <span class="small {{if and .Online .Enabled}}act-online{{else}}muted{{end}}">{{if not .Enabled}}Disabled{{else if and .Online .Busy}}Running a job{{else if .Online}}Online{{else}}Offline · seen {{.SeenAgo}}{{end}}</span></p>
+          <p class="small muted">{{if .OS}}{{.OS}}/{{.Arch}}{{end}}{{if .Version}} · atelier-runner {{.Version}}{{end}}{{if .LastJob}} · last job <a href="{{.LastJobURL}}">{{.LastJob}}</a>{{end}}</p>
+          <ul class="act-labels" aria-label="Labels">
+            {{range .Labels}}<li class="pill">{{.}}</li>{{end}}
+            {{range .AutoLabels}}<li class="pill act-auto" title="Added automatically">{{.}}</li>{{end}}
+            {{range .Capabilities}}<li class="pill pill-violet" title="Capability">{{.}}</li>{{end}}
+          </ul>
+        </div>
+        <div class="row gap-sm wrap-gap act-rn-actions">
+          <details class="dropdown">
+            <summary class="btn btn-sm">Rename</summary>
+            <form method="post" action="/settings/runners/{{.ID}}/rename" class="dropdown-menu stack-sm act-rename">
+              <label for="act-rn-name-{{.ID}}" class="small">New name</label>
+              <input id="act-rn-name-{{.ID}}" name="name" value="{{.Name}}" maxlength="80" required>
+              <div class="row-end"><button class="btn btn-sm btn-primary" type="submit">Save</button></div>
+            </form>
+          </details>
+          <form method="post" action="/settings/runners/{{.ID}}/enabled"><input type="hidden" name="enabled" value="{{if .Enabled}}0{{else}}1{{end}}"><button class="btn btn-sm" type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button></form>
+          <form method="post" action="/settings/runners/{{.ID}}/delete"><button class="btn btn-sm btn-danger" type="submit" aria-label="Delete runner {{.Name}}">Delete</button></form>
+        </div>
+      </article>
+      {{else}}
+      <div class="list-row muted">No runners yet.</div>
+      {{end}}
+    </section>
+
+    <form method="post" action="/settings/runners/retention" class="card stack-sm">
+      <h2 class="h-sm">Job logs</h2>
+      <div class="row wrap-gap">
+        <div class="field">
+          <label for="act-days">Keep logs for (days)</label>
+          <input id="act-days" name="days" inputmode="numeric" value="{{$d.LogDays}}" maxlength="4" aria-describedby="act-days-hint">
+        </div>
+      </div>
+      <p class="hint" id="act-days-hint">0 keeps them forever. Each job's log is capped at 64 MB.</p>
+      <div class="row-end"><button class="btn" type="submit">Save</button></div>
+    </form>
+  </div>
+</main>
+{{end}}

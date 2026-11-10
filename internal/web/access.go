@@ -110,3 +110,31 @@ func (a *App) forbidden(w http.ResponseWriter, r *http.Request) {
 		"Heading": "You can't do that here", "Message": "Your account doesn't have permission for this action.",
 	}})
 }
+
+// A TokenResolver turns a credential presented over git-over-HTTPS (Basic auth
+// password) into an Actor, e.g. a short-lived Actions job token. Return
+// ok=false if the credential isn't yours. Resolvers run before ordinary access
+// tokens are checked. Register from a feature's init().
+type TokenResolver func(ctx context.Context, a *App, plain string) (who Actor, ok bool)
+
+var tokenResolvers []TokenResolver
+
+func registerTokenResolver(f TokenResolver) { tokenResolvers = append(tokenResolvers, f) }
+
+// resolveCredential checks the registered resolvers, then access tokens.
+func (a *App) resolveCredential(ctx context.Context, plain string) (Actor, bool) {
+	for _, f := range tokenResolvers {
+		if who, ok := f(ctx, a, plain); ok {
+			return who, true
+		}
+	}
+	tok, err := a.db.CheckToken(ctx, plain)
+	if err != nil {
+		return Actor{}, false
+	}
+	person, err := a.db.TokenPerson(ctx, tok.ID)
+	if err != nil {
+		return Actor{}, false
+	}
+	return Actor{Kind: ActorToken, Name: tok.Name, PersonID: person, Scopes: tok.Scopes}, true
+}

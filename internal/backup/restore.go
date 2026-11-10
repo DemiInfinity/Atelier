@@ -206,12 +206,24 @@ func RestoreAll(ctx context.Context, o RestoreOptions) (Manifest, error) {
 	if err := moveAside(o.RepoRoot, "repos"); err != nil {
 		return m, err
 	}
+	for _, d := range dataDirsIn(m) {
+		if err := moveAside(filepath.Join(o.DataDir, d), d); err != nil {
+			return m, err
+		}
+	}
 	if moved {
 		o.Log("moved the current data to %s", aside)
 	}
 
 	if err := os.Rename(filepath.Join(work, "atelier.db"), o.DBPath); err != nil {
 		return m, fmt.Errorf("place database: %w", err)
+	}
+	for _, d := range dataDirsIn(m) {
+		if src := filepath.Join(work, d); fileExists(src) {
+			if err := os.Rename(src, filepath.Join(o.DataDir, d)); err != nil {
+				return m, fmt.Errorf("place %s: %w", d, err)
+			}
+		}
 	}
 	if err := os.MkdirAll(o.RepoRoot, 0o755); err != nil {
 		return m, err

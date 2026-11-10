@@ -5,6 +5,7 @@
 //	manifest.json                 version, time, files and repos with sizes and sha256
 //	atelier.db                    a consistent SQLite copy made with VACUUM INTO
 //	repos/<owner>/<name>.bundle   every bare repository as `git bundle create --all`
+//	releases/…, lfs/…             release assets and Git LFS objects (see datadirs.go)
 //
 // Bundles are self-consistent even while pushes are happening, which a plain
 // copy of a bare repository is not.
@@ -70,6 +71,7 @@ type Options struct {
 	Git      string  // git binary; "git" when empty
 	Dir      string  // output directory
 	Now      time.Time
+	DataDir  string // holds the data directories (releases/, lfs/…); default: parent of RepoRoot
 }
 
 // Snapshot is a finished archive, local or remote.
@@ -153,14 +155,20 @@ func Create(ctx context.Context, opts Options) (Result, error) {
 		m.Repos = append(m.Repos, entry)
 	}
 
-	// 3. Archive: manifest first so readers can check everything that follows.
+	// 3. Data directories (release assets, LFS objects), read in place.
+	extra, err := collectDataDirs(opts.dataRoot(), &m)
+	if err != nil {
+		return Result{}, fmt.Errorf("data directories: %w", err)
+	}
+
+	// 4. Archive: manifest first so readers can check everything that follows.
 	name := namePrefix + opts.Now.Format(nameTime) + nameSuffix
 	for i := 2; fileExists(filepath.Join(opts.Dir, name)); i++ {
 		name = fmt.Sprintf("%s%s-%d%s", namePrefix, opts.Now.Format(nameTime), i, nameSuffix)
 	}
 	final := filepath.Join(opts.Dir, name)
 	partial := final + ".partial"
-	sum, size, err := writeArchive(partial, work, m)
+	sum, size, err := writeArchive(partial, work, m, extra)
 	if err != nil {
 		os.Remove(partial)
 		return Result{}, err
@@ -172,7 +180,9 @@ func Create(ctx context.Context, opts Options) (Result, error) {
 	return Result{Snapshot: Snapshot{Name: name, Path: final, Size: size, Time: opts.Now}, SHA256: sum, Manifest: m}, nil
 }
 
-func writeArchive(path, work string, m Manifest) (string, int64, error) {
+// writeArchive writes the archive. Files are read from work, or from extra
+// (archive path → file on disk) for files read in place.
+func writeArchive(path, work string, m Manifest, extra map[string]string) (string, int64, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 	if err != nil {
 		return "", 0, err
@@ -203,7 +213,11 @@ func writeArchive(path, work string, m Manifest) (string, int64, error) {
 		}
 	}
 	for _, p := range paths {
-		if err := addFile(tw, filepath.Join(work, filepath.FromSlash(p)), p, m.Created); err != nil {
+		src := filepath.Join(work, filepath.FromSlash(p))
+		if e, ok := extra[p]; ok {
+			src = e
+		}
+		if err := addFile(tw, src, p, m.Created); err != nil {
 			return "", 0, err
 		}
 	}

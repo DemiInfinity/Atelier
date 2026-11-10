@@ -1,0 +1,9 @@
+Service name:  atelier-runner
+Display name:  Atelier Runner
+Description:   Runs Atelier Actions jobs on this device
+Start type:    Automatic (Delayed Start)
+Account:       LocalSystem
+Binary path:   "C:\Program Files\Atelier\atelier-runner.exe" run --config "C:\ProgramData\Atelier Runner\config.json"
+Recovery:      restart after 5s on failures 1-3 (also on non-zero exit); reset failure count after 86400s (1 day)
+Environment:   (HKLM\SYSTEM\CurrentControlSet\Services\atelier-runner\Environment)
+  PATH=C:\Windows\system32;C:\Program Files\Git\cmd

@@ -35,7 +35,8 @@ const (
 var reserved = map[string]bool{
 	"setup": true, "signin": true, "signout": true, "auth": true, "new": true, "accounts": true,
 	"settings": true, "static": true, "api": true, "explore": true, "notifications": true,
-	"search": true, "mcp": true, "npm": true, "healthz": true,
+	"search": true, "mcp": true, "npm": true, "healthz": true, "v2": true, "go": true,
+	"packages": true, "runners": true, "actions": true, "lfs": true,
 }
 
 type App struct {
@@ -99,12 +100,28 @@ func (a *App) routes() {
 	m.HandleFunc("POST /{owner}/{repo}/delete", a.authed(a.repoDelete))
 }
 
+// pathHandlers get a first look at every request, before git and the UI
+// router, for URLs the mux can't express (e.g. Git LFS under
+// /{owner}/{repo}.git/info/lfs/). A handler returns true if it answered.
+// Register from a feature's init() with registerPathHandler.
+var pathHandlers []func(a *App, w http.ResponseWriter, r *http.Request) bool
+
+func registerPathHandler(h func(a *App, w http.ResponseWriter, r *http.Request) bool) {
+	pathHandlers = append(pathHandlers, h)
+}
+
 // ServeHTTP adds security headers, sends git traffic to the git handler and
 // everything else to the UI router.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "same-origin")
+
+	for _, ph := range pathHandlers {
+		if ph(a, w, r) {
+			return
+		}
+	}
 
 	if owner, repo, rest, ok := gitrepo.IsGitPath(r.URL.Path); ok {
 		a.serveGit(w, r, owner, repo, rest)
@@ -275,8 +292,16 @@ func (a *App) serveGit(w http.ResponseWriter, r *http.Request, owner, name, rest
 	ctx := r.Context()
 	repo, err := a.db.RepoByName(ctx, owner, name)
 	if err != nil {
-		http.Error(w, "repository not found", http.StatusNotFound)
-		return
+		// Push to create: only for pushes, never for clones or fetches.
+		if !errors.Is(err, store.ErrNotFound) || !gitrepo.IsWrite(r, rest) {
+			http.Error(w, "repository not found", http.StatusNotFound)
+			return
+		}
+		created, ok := a.gitPushCreate(w, r, owner, name)
+		if !ok {
+			return
+		}
+		repo = created
 	}
 	write := gitrepo.IsWrite(r, rest)
 	need := PermRead
@@ -290,14 +315,15 @@ func (a *App) serveGit(w http.ResponseWriter, r *http.Request, owner, name, rest
 			http.Error(w, "too many attempts, try again in a minute", http.StatusTooManyRequests)
 			return
 		}
-		tok, ok := a.basicToken(r)
-		if ok {
-			person, err := a.db.TokenPerson(ctx, tok.ID)
-			if err == nil {
-				who = Actor{Kind: ActorToken, Name: tok.Name, PersonID: person, Scopes: tok.Scopes}
+		if u, p, ok := r.BasicAuth(); ok {
+			for _, cand := range []string{p, u} { // some clients put the token in the username
+				if w, ok := a.resolveCredential(ctx, cand); ok {
+					who = w
+					break
+				}
 			}
 		}
-		if who.Kind != ActorToken || !a.can(ctx, who, repo, need) {
+		if who.Kind == ActorAnonymous || !a.can(ctx, who, repo, need) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Atelier", charset="UTF-8"`)
 			http.Error(w, "authentication required: use an Atelier access token as the password", http.StatusUnauthorized)
 			return

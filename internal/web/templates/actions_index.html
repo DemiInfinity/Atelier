@@ -1,0 +1,168 @@
+{{define "head"}}{{template "actions-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap layout-2 act-page">
+  <aside class="col-side stack act-side" aria-label="Workflows">
+    <details class="dropdown act-new">
+      <summary class="btn btn-primary">New workflow</summary>
+      <div class="dropdown-menu act-new-menu stack-sm">
+        <p class="small">Commit a YAML file to <span class="mono">.atelier/workflows/</span>. For example <span class="mono">ci.yml</span>:</p>
+        <pre class="snippet act-starter" id="act-starter">name: CI
+on:
+  push:
+    branches: [{{$v.Default}}]
+  pull_request:
+jobs:
+  test:
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test</pre>
+        <button type="button" class="btn btn-sm" data-copy="#act-starter">Copy</button>
+        <p class="small muted">Markdown workflows that run an agent arrive in Phase 4.</p>
+      </div>
+    </details>
+
+    <nav class="act-wf-list" aria-label="Workflows">
+      <a href="{{$v.Base}}/actions" class="act-wf {{if not $d.Workflow}}is-active{{end}}" {{if not $d.Workflow}}aria-current="page"{{end}}>All workflows</a>
+      {{range $d.Workflows}}
+      <a href="{{.URL}}" class="act-wf {{if .Active}}is-active{{end}}" {{if .Active}}aria-current="page"{{end}}>
+        <span class="act-wf-name ellipsis">{{.Name}}</span>
+        {{if .Agentic}}<span class="act-chip is-agent">Agent</span>{{else}}<span class="act-chip">YAML</span>{{end}}
+        {{if .Errors}}<span class="act-chip is-bad" title="This workflow has errors">!</span>{{end}}
+      </a>
+      {{else}}
+      <p class="small muted act-wf-none">No workflows on {{$v.Default}} yet.</p>
+      {{end}}
+    </nav>
+
+    <section class="card act-card stack-sm" aria-labelledby="act-runners-title">
+      <div class="row-between"><h2 class="eyebrow" id="act-runners-title">Runners</h2><a class="small" href="/settings/runners">Manage</a></div>
+      {{range $d.Runners}}
+      <p class="act-runner small"><span class="act-dot {{if not .Enabled}}is-off{{else if .Busy}}is-busy{{else if .Online}}is-on{{else}}is-off{{end}}" aria-hidden="true"></span><span class="ellipsis">{{.Name}}</span> <span class="muted">{{.OS}}</span><span class="sr-only"> ({{if not .Enabled}}disabled{{else if .Busy}}running a job{{else if .Online}}online{{else}}offline{{end}})</span></p>
+      {{else}}
+      <p class="small muted">No runners yet. Jobs wait until a device runs <span class="mono">atelier-runner</span>.</p>
+      {{end}}
+    </section>
+
+    <section class="card act-card stack-sm" aria-labelledby="act-lock-title">
+      <h2 class="eyebrow" id="act-lock-title">Lockfile</h2>
+      {{if $d.Lockfile}}
+        {{if $d.LockErr}}<p class="small danger-ink">{{$d.LockErr}}</p>
+        {{else}}<p class="small"><span class="mono">.atelier/actions.lock</span> pins {{$d.LockCount}} {{if eq $d.LockCount 1}}action{{else}}actions{{end}} to exact commits.</p>{{end}}
+      {{else}}
+      <p class="small muted">No <span class="mono">.atelier/actions.lock</span> on {{$v.Default}}. Actions are pinned when each run starts; a run offers the lockfile to commit.</p>
+      {{end}}
+      {{if $d.CanAdmin}}
+      <form method="post" action="{{$v.Base}}/actions/lockfile" class="act-lock-form">
+        <input type="hidden" name="require" value="{{if $d.RequireLock}}0{{else}}1{{end}}">
+        <p class="small">{{if $d.RequireLock}}<strong>Required.</strong> Runs with unpinned actions fail.{{else}}Not required.{{end}}</p>
+        <button class="btn btn-sm" type="submit">{{if $d.RequireLock}}Stop requiring it{{else}}Require lockfile{{end}}</button>
+      </form>
+      {{else if $d.RequireLock}}<p class="small"><strong>Required</strong> for this repository.</p>{{end}}
+    </section>
+  </aside>
+
+  <div class="col-main stack">
+    <div class="row-between wrap-gap align-start">
+      <div class="stack-sm min0">
+        <h1 class="h-display">{{if $d.Selected}}{{$d.Selected.Name}}{{else}}All workflows{{end}}</h1>
+        {{if $d.Selected}}<p class="small muted"><span class="mono">{{$d.Selected.Path}}</span>{{if $d.Selected.Events}} · runs on {{range $i, $e := $d.Selected.Events}}{{if $i}}, {{end}}{{template "actions-event" $e}}{{end}}{{end}}</p>{{end}}
+      </div>
+      {{if and $d.Selected $d.Selected.Dispatch $d.CanWrite}}
+      <details class="dropdown act-dispatch" {{if .Error}}open{{end}}>
+        <summary class="btn">Run workflow <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></summary>
+        <form method="post" action="{{$v.Base}}/actions/dispatch" class="dropdown-menu act-dispatch-menu stack-sm">
+          <input type="hidden" name="workflow" value="{{$d.Selected.Path}}">
+          <div class="field">
+            <label for="act-ref">Branch</label>
+            <select id="act-ref" name="ref">{{range $d.Branches}}<option value="{{.}}" {{if eq . $v.Default}}selected{{end}}>{{.}}</option>{{end}}</select>
+          </div>
+          {{range $d.Selected.Dispatch.Inputs}}
+          <div class="field">
+            {{if eq .Type "boolean"}}
+            <label class="choice"><input type="checkbox" name="input.{{.Name}}" value="true" {{if eq .Default "true"}}checked{{end}}><span><strong>{{.Name}}</strong>{{if .Description}}<span class="small muted">{{.Description}}</span>{{end}}</span></label>
+            {{else}}
+            <label for="act-in-{{.Name}}">{{.Name}}{{if .Required}} <span class="muted">(required)</span>{{end}}</label>
+            {{if eq .Type "choice"}}
+            <select id="act-in-{{.Name}}" name="input.{{.Name}}">{{$def := .Default}}{{range .Options}}<option value="{{.}}" {{if eq . $def}}selected{{end}}>{{.}}</option>{{end}}</select>
+            {{else}}
+            <input id="act-in-{{.Name}}" name="input.{{.Name}}" value="{{.Default}}" {{if .Required}}required{{end}} {{if eq .Type "number"}}inputmode="decimal"{{end}} maxlength="4096" autocomplete="off">
+            {{end}}
+            {{if .Description}}<p class="hint">{{.Description}}</p>{{end}}
+            {{end}}
+          </div>
+          {{end}}
+          <div class="row-end"><button class="btn btn-primary btn-sm" type="submit">Run workflow</button></div>
+        </form>
+      </details>
+      {{end}}
+    </div>
+    {{template "flash" .}}
+
+    {{if $d.Selected}}{{if $d.Selected.Agentic}}
+    <section class="card act-agent stack-sm">
+      <p><span class="act-chip is-agent">Agent</span> <strong>Agentic workflows arrive in Phase 4.</strong></p>
+      <p class="small muted">This Markdown workflow will compile to a locked YAML workflow that runs an AI engine with only the MCP tools you allow. Until then it doesn't run.</p>
+    </section>
+    {{end}}
+    <details class="list-card act-source">
+      <summary class="list-head row-between"><span>Workflow file</span><a class="small" href="{{$d.SourceURL}}">View on {{$v.Default}}</a></summary>
+      <div class="table-scroll">
+        <table class="code"><caption class="sr-only">{{$d.Selected.Path}}</caption><tbody>
+        {{range $d.Source}}<tr><td class="ln">{{.N}}</td><td class="lc">{{.Text}}</td></tr>
+        {{end}}
+        </tbody></table>
+      </div>
+    </details>
+    {{end}}
+
+    <form method="get" action="{{$v.Base}}/actions" class="act-filters" aria-label="Filter runs">
+      {{if $d.Workflow}}<input type="hidden" name="workflow" value="{{$d.Workflow}}">{{end}}
+      <label class="sr-only" for="act-f-status">Status</label>
+      <select id="act-f-status" name="status">
+        <option value="">Any status</option>
+        {{range $d.Statuses}}<option value="{{.}}" {{if eq . $d.Status}}selected{{end}}>{{if eq . "in_progress"}}In progress{{else}}{{template "actions-status-word" .}}{{end}}</option>{{end}}
+      </select>
+      <label class="sr-only" for="act-f-branch">Branch</label>
+      <select id="act-f-branch" name="branch">
+        <option value="">Any branch</option>
+        {{range $d.RunBranches}}<option value="{{.}}" {{if eq . $d.Branch}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <button class="btn btn-sm" type="submit">Filter</button>
+      {{if $d.Filtered}}<a class="small" href="{{$v.Base}}/actions{{if $d.Workflow}}?workflow={{$d.Workflow}}{{end}}">Clear</a>{{end}}
+    </form>
+
+    <section class="list-card" aria-labelledby="act-runs-title">
+      <h2 class="list-head h-sm" id="act-runs-title">Recent runs</h2>
+      {{range $d.Runs}}
+      <article class="list-row act-run-row">
+        {{template "actions-status" .Outcome}}
+        <div class="grow min0 stack-sm">
+          <a class="act-run-title" href="{{.URL}}">{{if .Title}}{{.Title}}{{else}}{{.WorkflowName}}{{end}}</a>
+          <p class="small muted"><span class="text-2">{{.WorkflowName}}</span> #{{.RunNumber}} · {{template "actions-event" .Event}}{{if .PullNumber}} #{{.PullNumber}}{{end}} by {{.ActorName}}
+            {{if .Errors}}· <span class="danger-ink">workflow error</span>{{end}}</p>
+        </div>
+        <div class="act-run-meta small">
+          {{if .Branch}}<span class="pr-branch mono act-branch">{{.Branch}}</span>{{end}}
+          <span class="muted"><time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time></span>
+        </div>
+      </article>
+      {{else}}
+      <div class="empty">
+        {{template "actions-gear"}}
+        <h2 class="h-display-sm">{{if $d.Filtered}}No runs match{{else}}No runs yet{{end}}</h2>
+        <p class="muted">{{if $d.Workflows}}Runs appear when a push, pull request, schedule or manual run starts a workflow.{{else}}Add a workflow under <span class="mono">.atelier/workflows/</span> to get started.{{end}}</p>
+      </div>
+      {{end}}
+    </section>
+    {{if or $d.More (gt $d.Page 1)}}
+    <nav class="pager row gap-sm" aria-label="Pages">
+      {{if gt $d.Page 1}}<a class="btn btn-sm" href="?workflow={{$d.Workflow}}&amp;status={{$d.Status}}&amp;branch={{$d.Branch}}&amp;page={{$d.Prev}}">Newer</a>{{end}}
+      {{if $d.More}}<a class="btn btn-sm" href="?workflow={{$d.Workflow}}&amp;status={{$d.Status}}&amp;branch={{$d.Branch}}&amp;page={{$d.Next}}">Older</a>{{end}}
+    </nav>
+    {{end}}
+  </div>
+</main>
+{{end}}

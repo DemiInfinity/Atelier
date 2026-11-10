@@ -40,6 +40,7 @@ func init() {
 				return
 			}
 			srv.Allow = a.sshAllow
+			srv.Create = a.sshPushCreate
 			log.Printf("ssh: git over SSH listening on %s (clone port %d, host key %s)",
 				a.cfg.SSHListen, a.cfg.SSHPort(), ssh.FingerprintSHA256(srv.HostKey()))
 			if err := srv.ListenAndServe(ctx, a.cfg.SSHListen); err != nil {

@@ -11,6 +11,27 @@ COPY . .
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/atelier ./cmd/atelier
 
+# ---- atelier-runner image: docker build --target runner -t atelier-runner . ----
+# Kept before the server's runtime stage so a plain `docker build` still
+# produces the Atelier server image.
+FROM build AS runner-build
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/atelier-runner ./cmd/atelier-runner
+
+FROM alpine:3.22 AS runner
+# git for checkout, bash for run steps, nodejs for JavaScript actions,
+# docker-cli for container: jobs (mount the host's /var/run/docker.sock)
+RUN apk add --no-cache git ca-certificates tzdata bash nodejs docker-cli \
+ && git config --system safe.directory '*' \
+ && mkdir -p /runner
+COPY --from=runner-build /out/atelier-runner /usr/local/bin/atelier-runner
+# The config (with the runner token) and the action cache live in /runner.
+# Job workspaces go to the --work-dir chosen at register time; when jobs use
+# docker, mount it at the same path on the host (the host resolves bind mounts).
+ENV HOME=/runner
+VOLUME ["/runner"]
+ENTRYPOINT ["/usr/local/bin/atelier-runner"]
+CMD ["run", "--config", "/runner/config.json"]
+
 # ---- runtime ----
 FROM alpine:3.22
 

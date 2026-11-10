@@ -24,7 +24,7 @@ func TestParseRefUpdates(t *testing.T) {
 	if err := runHook([]string{"pre-receive"}); err == nil {
 		t.Error("missing args accepted")
 	}
-	if err := runHook([]string{"post-receive", "a", "b"}); err == nil {
+	if err := runHook([]string{"update", "a", "b"}); err == nil {
 		t.Error("unknown hook accepted")
 	}
 }

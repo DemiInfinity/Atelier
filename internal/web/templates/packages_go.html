@@ -1,0 +1,59 @@
+{{define "head"}}<link rel="stylesheet" href="/static/packages.css"><script src="/static/packages.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap stack-lg pk">
+  <nav class="crumbs small" aria-label="Breadcrumb"><a href="/packages">Packages</a> <span class="slash">/</span> <a href="/packages/{{$d.Owner.Name}}">{{$d.Owner.Label}}</a> <span class="slash">/</span> <span>{{$d.Module}}</span></nav>
+  <div class="stack-sm">
+    <div class="row wrap-gap">
+      <span class="pk-chip pk-chip-go">Go</span>
+      <h1 class="h-display pk-title mono break">{{$d.Module}}</h1>
+      {{if $d.Repo.Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
+    </div>
+    {{if $d.Repo.Description}}<p class="text-2">{{$d.Repo.Description}}</p>{{end}}
+  </div>
+
+  <div class="layout-2">
+    <div class="col-main stack-lg">
+      <section class="card stack" aria-labelledby="pk-install-h">
+        <h2 class="h-sm" id="pk-install-h">Install</h2>
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-install">go get {{$d.Module}}@{{$d.Latest}}</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-install" aria-label="Copy go get command">{{template "pk-copy-icon"}}</button>
+        </div>
+        <p class="small muted">Point Go at Atelier's module proxy{{if $d.Repo.Private}}, and put an access token for <code>{{$d.Host}}</code> in <code>~/.netrc</code>{{end}}:</p>
+        <div class="pk-snippet-wrap">
+          <pre class="snippet pk-snippet" id="pk-goenv">go env -w GOPROXY={{$d.BaseURL}}/go,https://proxy.golang.org,direct
+go env -w GONOSUMDB={{$d.Host}}{{if $d.Repo.Private}}
+echo "machine {{$d.Host}} login token password $ATELIER_TOKEN" &gt;&gt; ~/.netrc{{end}}</pre>
+          <button type="button" class="clone-copy pk-copy" data-copy="#pk-goenv" aria-label="Copy Go settings">{{template "pk-copy-icon"}}</button>
+        </div>
+        <p class="small muted">Versions are the repository's semver tags. Push a tag like <code>v1.2.0</code> to publish one.</p>
+      </section>
+
+      <section class="list-card" aria-labelledby="pk-versions-h">
+        <h2 class="list-head" id="pk-versions-h">{{len $d.Versions}} {{if eq (len $d.Versions) 1}}version{{else}}versions{{end}}</h2>
+        {{range $d.Versions}}
+        <div class="list-row pk-version">
+          <div class="grow">
+            <p class="row wrap-gap gap-sm"><strong class="mono">{{.Version}}</strong>{{if .Pre}}<span class="pill">Pre-release</span>{{end}}</p>
+            <p class="small muted">{{.Downloads}} downloads{{if not .When.IsZero}} · tagged {{ago .When}}{{end}}</p>
+          </div>
+          <a class="btn btn-ghost btn-sm" href="/{{$d.Repo.FullName}}/tree/{{.Version}}">Browse</a>
+        </div>
+        {{end}}
+      </section>
+    </div>
+    <aside class="col-side stack">
+      <section class="card stack-sm" aria-labelledby="pk-about-h">
+        <h2 class="h-sm" id="pk-about-h">About</h2>
+        <dl class="pk-dl small">
+          <div><dt>Repository</dt><dd><a href="/{{$d.Repo.FullName}}" class="mono">{{$d.Repo.FullName}}</a></dd></div>
+          <div><dt>Downloads</dt><dd>{{$d.Downloads}}</dd></div>
+          <div><dt>Visibility</dt><dd>Follows the repository</dd></div>
+        </dl>
+      </section>
+    </aside>
+  </div>
+</main>
+{{end}}
+{{define "pk-copy-icon"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg>{{end}}
