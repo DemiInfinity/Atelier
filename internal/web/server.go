@@ -204,12 +204,40 @@ func (a *App) sameOrigin(r *http.Request) bool {
 // ---------- sessions ----------
 
 func (a *App) signedIn(r *http.Request) bool {
-	c, err := r.Cookie(sessionCookie)
-	return err == nil && a.db.ValidSession(r.Context(), c.Value)
+	_, ok := a.sessionActor(r)
+	return ok
 }
 
+// sessionActor returns the signed-in person, if the session is valid and the
+// person still exists.
+func (a *App) sessionActor(r *http.Request) (Actor, bool) {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		return Actor{}, false
+	}
+	id, ok := a.db.SessionPerson(r.Context(), c.Value)
+	if !ok {
+		return Actor{}, false
+	}
+	p, err := a.db.Person(r.Context(), id)
+	if err != nil {
+		return Actor{}, false
+	}
+	return Actor{Kind: ActorOwner, Name: p.Name, PersonID: p.ID}, true
+}
+
+// startSession signs in the personal owner (password and GitHub sign-in are
+// the owner's). Use startSessionFor when the person is known another way.
 func (a *App) startSession(w http.ResponseWriter, r *http.Request) error {
-	tok, err := a.db.CreateSession(r.Context(), sessionTTL)
+	me, err := a.db.PersonalOwner(r.Context())
+	if err != nil {
+		return err
+	}
+	return a.startSessionFor(w, r, me.ID)
+}
+
+func (a *App) startSessionFor(w http.ResponseWriter, r *http.Request, personID int64) error {
+	tok, err := a.db.CreateSessionFor(r.Context(), personID, sessionTTL)
 	if err != nil {
 		return err
 	}
@@ -232,11 +260,12 @@ func (a *App) authed(h http.HandlerFunc) http.HandlerFunc {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
-		if !a.signedIn(r) {
+		who, ok := a.sessionActor(r)
+		if !ok {
 			http.Redirect(w, r, "/signin?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 			return
 		}
-		h(w, r)
+		h(w, withActor(r, who))
 	}
 }
 
@@ -250,28 +279,32 @@ func (a *App) serveGit(w http.ResponseWriter, r *http.Request, owner, name, rest
 		return
 	}
 	write := gitrepo.IsWrite(r, rest)
+	need := PermRead
+	if write {
+		need = PermWrite
+	}
 
-	user := ""
-	if !write && !repo.Private {
-		user = "anonymous"
-	} else {
+	who := Actor{Kind: ActorAnonymous, Name: "anonymous"}
+	if !a.can(ctx, who, repo, need) {
 		if !a.lim.allow(a.clientIP(r)) {
 			http.Error(w, "too many attempts, try again in a minute", http.StatusTooManyRequests)
 			return
 		}
 		tok, ok := a.basicToken(r)
-		need := "repo:read"
-		if write {
-			need = "repo:write"
+		if ok {
+			person, err := a.db.TokenPerson(ctx, tok.ID)
+			if err == nil {
+				who = Actor{Kind: ActorToken, Name: tok.Name, PersonID: person, Scopes: tok.Scopes}
+			}
 		}
-		if !ok || !(tok.Has(need) || tok.Has("repo:write")) {
+		if who.Kind != ActorToken || !a.can(ctx, who, repo, need) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Atelier", charset="UTF-8"`)
 			http.Error(w, "authentication required: use an Atelier access token as the password", http.StatusUnauthorized)
 			return
 		}
 		a.lim.reset(a.clientIP(r))
-		user = "token:" + tok.Name
 	}
+	user := who.Kind + ":" + who.Name
 
 	a.git.ServeHTTP(w, r, repo.Owner, repo.Name, rest, user)
 	if write && rest == "git-receive-pack" {

@@ -37,6 +37,11 @@ type Server struct {
 	hostKey ssh.Signer
 	Logf    func(format string, args ...any)
 
+	// Allow decides whether the person behind an SSH key may read (write=false)
+	// or push to (write=true) a repository. Atelier's web package sets it to its
+	// shared permission check. When nil, every stored key has full access.
+	Allow func(ctx context.Context, keyID int64, repo store.Repo, write bool) bool
+
 	mu    sync.Mutex
 	conns map[net.Conn]struct{}
 	wg    sync.WaitGroup
@@ -219,6 +224,7 @@ func (s *Server) handleConn(ctx context.Context, c net.Conn) {
 func (s *Server) handleSession(ctx context.Context, conn *ssh.ServerConn, ch ssh.Channel, reqs <-chan *ssh.Request) {
 	defer ch.Close()
 	keyName := conn.Permissions.Extensions[extKeyName]
+	keyID, _ := strconv.ParseInt(conn.Permissions.Extensions[extKeyID], 10, 64)
 	var gitProtocol string
 	for req := range reqs {
 		switch req.Type {
@@ -237,7 +243,7 @@ func (s *Server) handleSession(ctx context.Context, conn *ssh.ServerConn, ch ssh
 				return
 			}
 			_ = req.Reply(true, nil)
-			code := s.runGit(ctx, ch, p.Command, gitProtocol, keyName, conn.RemoteAddr())
+			code := s.runGit(ctx, ch, p.Command, gitProtocol, keyID, keyName, conn.RemoteAddr())
 			s.exit(ch, code)
 			return
 		case "shell":
@@ -261,7 +267,7 @@ var gitProtocolRe = regexp.MustCompile(`^[A-Za-z0-9=:.,_-]{1,64}$`)
 func validGitProtocol(v string) bool { return gitProtocolRe.MatchString(v) }
 
 // runGit runs one git service for the session and returns its exit code.
-func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtocol, keyName string, remote net.Addr) int {
+func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtocol string, keyID int64, keyName string, remote net.Addr) int {
 	stderr := ch.Stderr()
 	cmd, err := ParseCommand(command)
 	if err != nil {
@@ -277,6 +283,18 @@ func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtoco
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 		fmt.Fprintf(stderr, "atelier: repository '%s' not found\n", repo.FullName())
 		return 128
+	}
+	if s.Allow != nil {
+		write := cmd.Service == ReceivePack
+		if !s.Allow(ctx, keyID, repo, write) {
+			if write && s.Allow(ctx, keyID, repo, false) {
+				fmt.Fprintf(stderr, "atelier: you don't have permission to push to '%s'\n", repo.FullName())
+			} else {
+				// Don't reveal that a repository exists to someone who can't see it.
+				fmt.Fprintf(stderr, "atelier: repository '%s/%s' not found\n", cmd.Owner, cmd.Repo)
+			}
+			return 128
+		}
 	}
 
 	c := exec.CommandContext(ctx, s.git.Git, cmd.Service.subcommand(), dir)

@@ -935,3 +935,6 @@ table { border-collapse: collapse; width: 100%; }
 .side-nav a { padding: 8px 12px; border-radius: 8px; color: #c9c3ba; border-left: 2px solid transparent; text-decoration: none; }
 .side-nav a:hover { background: #1f1d1a; color: #eeeae4; }
 .side-nav a[aria-current="page"] { background: #26231f; color: #eeeae4; border-left-color: #f2b85c; }
+
+/* things that arrived from GitHub / Gitea (imports, later Tether) */
+.pill-tether { background: #172331; border-color: #2f5677; color: #9fd0ff; }

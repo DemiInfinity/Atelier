@@ -600,3 +600,84 @@ func ProtectionFrom(rules []BranchRule, branch string) Protection {
 	}
 	return p
 }
+
+// ---------- imports ----------
+
+// ImportedPull is a pull request as it existed at the source. Merged ones are
+// recorded as merged without Atelier performing any merge.
+type ImportedPull struct {
+	RepoID                 int64
+	Number                 int64
+	Title, Body            string
+	Head, Base             string
+	HeadSHA, BaseSHA       string // only commits present in the repository
+	State                  string // open, closed, merged
+	MergedSHA              string
+	MergedAt               *time.Time
+	MergedBy               string
+	ClosedAt               *time.Time
+	AuthorKind, AuthorName string
+	CreatedAt, UpdatedAt   time.Time
+}
+
+// ImportPull inserts a pull request with an explicit number.
+func (s *Store) ImportPull(ctx context.Context, in ImportedPull) (Pull, error) {
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		title = "(untitled)"
+	}
+	state := in.State
+	if state != "merged" && state != "closed" {
+		state = "open"
+	}
+	method := ""
+	mergedAt, closedAt := in.MergedAt, in.ClosedAt
+	switch state {
+	case "merged":
+		method = "merge"
+		if mergedAt == nil {
+			mergedAt = &in.UpdatedAt
+		}
+		if closedAt == nil {
+			closedAt = mergedAt
+		}
+	case "closed":
+		mergedAt = nil
+		if closedAt == nil {
+			closedAt = &in.UpdatedAt
+		}
+	default:
+		mergedAt, closedAt = nil, nil
+	}
+	opt := func(t *time.Time) any {
+		if t == nil {
+			return nil
+		}
+		return t.Unix()
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO pulls (repo_id, number, title, body, head, base, head_sha, base_sha, state,
+		merge_method, merged_sha, merged_at, merged_by, closed_at, author_kind, author_name, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		in.RepoID, in.Number, title, in.Body, in.Head, in.Base, in.HeadSHA, in.BaseSHA, state, method, in.MergedSHA,
+		opt(mergedAt), in.MergedBy, opt(closedAt), in.AuthorKind, in.AuthorName, in.CreatedAt.Unix(), in.UpdatedAt.Unix())
+	if err != nil {
+		return Pull{}, err
+	}
+	id, _ := res.LastInsertId()
+	return scanPull(s.db.QueryRowContext(ctx, `SELECT `+pullCols+` FROM pulls WHERE id=?`, id))
+}
+
+// ImportPullComment adds a conversation comment with its original author and timestamps.
+func (s *Store) ImportPullComment(ctx context.Context, pullID int64, kind, name, body string, created, updated time.Time) (PullComment, error) {
+	if updated.Before(created) {
+		updated = created
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO pull_comments (pull_id, author_kind, author_name, body, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, pullID, kind, name, body, created.Unix(), updated.Unix())
+	if err != nil {
+		return PullComment{}, err
+	}
+	id, _ := res.LastInsertId()
+	return PullComment{ID: id, PullID: pullID, AuthorKind: kind, AuthorName: name, Body: body,
+		CreatedAt: time.Unix(created.Unix(), 0), UpdatedAt: time.Unix(updated.Unix(), 0)}, nil
+}

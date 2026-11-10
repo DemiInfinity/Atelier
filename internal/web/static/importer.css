@@ -41,3 +41,31 @@ a.im-repo { color: var(--amber); }
   .ip-target { flex: 1 1 100%; padding-left: 28px; }
   .im-actions { flex-basis: 100%; justify-content: flex-start; }
 }
+
+/* Issues, pull requests, labels and milestones */
+.pill.im-partial { background: var(--amber-chip); border-color: #5a4320; color: var(--amber); }
+.im-meta { border-top: 1px solid var(--border); padding-top: 12px; }
+.im-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 16px; }
+
+.im-stages { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 8px 0 0; padding: 0; list-style: none; }
+.im-stage {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 9px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; color: var(--muted); background: transparent;
+}
+.im-stage { position: relative; }
+.im-stage + .im-stage::before { content: "→"; position: absolute; left: -15px; color: var(--muted); opacity: .6; }
+.im-stage-detail { font-family: var(--font-mono); font-size: 11px; }
+.im-stage-detail:empty { display: none; }
+.im-st-running { color: var(--amber); border-color: #5a4320; background: var(--amber-chip); }
+.im-st-done { color: var(--ok); border-color: var(--ok-border); background: var(--ok-bg); }
+.im-st-partial { color: var(--amber); border-color: #5a4320; border-style: dashed; }
+.im-st-failed { color: var(--danger); border-color: var(--danger-border); background: var(--danger-bg); }
+.im-st-skipped { opacity: .6; }
+
+.im-resume { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.im-resume input { flex: 1 1 200px; max-width: 280px; font-family: var(--font-mono); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .im-running::before { animation: none; }
+}

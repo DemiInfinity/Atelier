@@ -201,11 +201,12 @@ func passkeyErr(w http.ResponseWriter, status int, msg string) {
 // passkeyAPI is a.authed for JSON endpoints: it answers 401 instead of redirecting.
 func (a *App) passkeyAPI(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if a.needsSetup(r.Context()) || !a.signedIn(r) {
+		who, ok := a.sessionActor(r)
+		if a.needsSetup(r.Context()) || !ok {
 			passkeyErr(w, http.StatusUnauthorized, "Your session has ended. Sign in again.")
 			return
 		}
-		h(w, r)
+		h(w, withActor(r, who))
 	}
 }
 
@@ -463,8 +464,16 @@ func (a *App) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 			_ = a.db.UsePasskey(r.Context(), row, blob)
 		}
 	}
+	var personID int64
+	if row, ok := owner.rows[string(cred.ID)]; ok {
+		personID, _ = a.db.PasskeyPerson(r.Context(), row)
+	}
+	if personID == 0 {
+		passkeyErr(w, http.StatusUnauthorized, "That passkey isn't registered with this Atelier.")
+		return
+	}
 	a.lim.reset(ip)
-	if err := a.startSession(w, r); err != nil {
+	if err := a.startSessionFor(w, r, personID); err != nil {
 		logErr(r, err)
 		passkeyErr(w, http.StatusInternalServerError, "Something went wrong.")
 		return

@@ -78,8 +78,9 @@ func (s *Store) WebAuthnUserID(ctx context.Context) ([]byte, error) {
 
 func (s *Store) AddPasskey(ctx context.Context, credentialID []byte, name string, credential []byte, addedBy, addedByKind string) (Passkey, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO passkeys (credential_id, name, credential, added_by, added_by_kind, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		credentialID, name, string(credential), addedBy, addedByKind, now())
+		`INSERT INTO passkeys (credential_id, name, credential, added_by, added_by_kind, created_at, person_id)
+		 VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT id FROM owners WHERE kind='user' AND name=? COLLATE NOCASE), `+personalOwnerID+`))`,
+		credentialID, name, string(credential), addedBy, addedByKind, now(), addedBy)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return Passkey{}, ErrKeyExists

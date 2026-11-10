@@ -1,0 +1,119 @@
+{{define "head"}}<link rel="stylesheet" href="/static/notifications.css">{{end}}
+
+{{define "nf-icon"}}{{if eq . "issue"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+{{- else if eq . "pull"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7 V17 M18 17 V10 a3 3 0 0 0-3-3 H11 M13 4 L10 7 L13 10"/></svg>
+{{- else if eq . "backup"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 7 H20 V19 H4 Z M3 4 H21 V7 H3 Z M10 11 H14"/></svg>
+{{- else if eq . "import"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 V15 M7 10 L12 15 L17 10 M5 20 H19"/></svg>
+{{- else if eq . "action"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5 L15.5 12 L10 15.5 Z"/></svg>
+{{- else if eq . "runner"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/><path d="M8 7.5 H8.01 M8 16.5 H8.01"/></svg>
+{{- else if eq . "tether"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14 a4 4 0 0 0 5.66 0 l3-3 a4 4 0 0 0-5.66-5.66 l-1 1 M14 10 a4 4 0 0 0-5.66 0 l-3 3 a4 4 0 0 0 5.66 5.66 l1-1"/></svg>
+{{- else if eq . "release"}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 12 V4 H11 L20 13 L13 20 Z"/><circle cx="7.5" cy="8.5" r="1.2" fill="currentColor"/></svg>
+{{- else}}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/></svg>{{end}}{{end}}
+
+{{define "content"}}
+{{$d := .Data}}{{$s := $d.State}}
+<main class="wrap">
+  <div class="layout-2">
+    <aside class="col-side nf-side">
+      <nav class="nf-filters" aria-label="Inbox filters">
+        {{range $d.Filters}}
+        <a href="{{.URL}}" class="{{if .Class}}{{.Class}}{{else}}nf-all{{end}}" {{if .Active}}aria-current="page"{{end}}>
+          <span class="nf-dot" aria-hidden="true"></span>
+          <span class="nf-filter-label">{{.Label}}</span>
+          {{if .Soon}}<span class="nf-soon-tag">Soon</span>{{else if .Count}}<span class="nf-count">{{.Count}}<span class="sr-only"> {{if $s.Done}}done{{else}}unread{{end}}</span></span>{{end}}
+        </a>
+        {{end}}
+      </nav>
+      {{if $d.Repos}}
+      <div class="stack-sm">
+        <h2 class="nf-side-head" id="nf-repos-head">Repositories</h2>
+        <nav class="nf-filters nf-repos" aria-labelledby="nf-repos-head">
+          {{range $d.Repos}}
+          <a href="{{.URL}}" {{if .Active}}aria-current="page"{{end}}>
+            <span class="nf-filter-label ellipsis">{{.Name}}</span>
+            {{if .Count}}<span class="nf-count">{{.Count}}</span>{{end}}
+          </a>
+          {{end}}
+          {{if $s.RepoID}}<a href="{{$d.ClearRepo}}" class="nf-clear">Any repository</a>{{end}}
+        </nav>
+      </div>
+      {{end}}
+    </aside>
+
+    <section class="col-main stack" aria-labelledby="nf-heading">
+      <div class="row-between wrap-gap">
+        <h1 id="nf-heading" class="display">{{if $s.Done}}Done{{else}}Inbox{{end}}</h1>
+        <div class="nf-tools">
+          <nav class="segmented" aria-label="Inbox or done">
+            <a href="{{$d.InboxURL}}" {{if not $s.Done}}aria-current="page"{{end}}>Inbox</a>
+            <a href="{{$d.DoneURL}}" {{if $s.Done}}aria-current="page"{{end}}>Done</a>
+          </nav>
+          {{if not $s.Done}}
+          <nav class="segmented" aria-label="Show">
+            <a href="{{$d.AllURL}}" {{if not $s.Unread}}aria-current="page"{{end}}>All</a>
+            <a href="{{$d.UnreadURL}}" {{if $s.Unread}}aria-current="page"{{end}}>Unread</a>
+          </nav>
+          {{if $d.Rows}}
+          <form method="post" action="/notifications/done">
+            {{if ne $s.Filter "all"}}<input type="hidden" name="filter" value="{{$s.Filter}}">{{end}}
+            {{if $s.RepoID}}<input type="hidden" name="repo" value="{{$s.RepoID}}">{{end}}
+            {{if $s.Unread}}<input type="hidden" name="unread" value="1">{{end}}
+            <button class="btn btn-sm" type="submit">Mark all as done</button>
+          </form>
+          {{end}}
+          {{end}}
+        </div>
+      </div>
+      {{template "flash" .}}
+      {{if or $d.RepoName $d.Filtered}}
+      <p class="small muted">Showing {{if $s.Unread}}unread {{end}}{{if ne $d.Active.Key "all"}}<strong class="text-2">{{$d.Active.Label}}</strong> {{end}}notifications{{if $d.RepoName}} in <strong class="text-2">{{$d.RepoName}}</strong>{{end}}. <a href="{{$d.ClearFilter}}">Clear filters</a></p>
+      {{end}}
+
+      {{if $d.Active.Soon}}
+      <div class="card nf-soon {{$d.Active.Class}}" role="note">
+        <p><strong>{{$d.Active.Label}}</strong> — {{$d.Active.Soon}}</p>
+        <p class="small muted">They'll land in this inbox with the same mark-as-done controls.</p>
+      </div>
+      {{end}}
+
+      {{if $d.Rows}}
+      <ul class="list-card nf-list" aria-label="Notifications">
+        {{range $d.Rows}}
+        <li class="list-row nf-row {{.Class}}{{if .Unread}} is-unread{{end}}">
+          <span class="nf-glyph" aria-hidden="true">{{template "nf-icon" .Icon}}</span>
+          <div class="grow min0 nf-body">
+            <span class="nf-where">{{.Where}}</span>
+            <a class="nf-title" href="/notifications/{{.ID}}">{{if .Unread}}<span class="sr-only">Unread: </span>{{end}}{{.Title}}</a>
+            <span class="nf-meta"><span class="{{.ActorClass}}">{{.ActorText}}</span> {{.What}}{{if .Detail}}<span class="nf-detail"> · {{.Detail}}</span>{{end}}</span>
+          </div>
+          <span class="nf-when small muted"><span class="sr-only">{{.ReasonText}}, </span><time datetime="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .UpdatedAt}}">{{ago .UpdatedAt}}</time></span>
+          {{if not .Done}}
+          <form method="post" action="/notifications/{{.ID}}/done">
+            <input type="hidden" name="back" value="{{$d.Back}}">
+            <button class="icon-btn nf-done" type="submit" aria-label="Mark “{{.Title}}” as done" title="Mark as done"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5 L10 17.5 L19 7"/></svg></button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{else if not $d.Active.Soon}}
+      <div class="list-card">
+        <div class="empty">
+          <svg class="nf-empty-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 16 V11 a6 6 0 0 1 12 0 v5 l2 2 H4 Z M10 21 h4"/></svg>
+          <h2 class="h-display-sm">{{if $s.Done}}Nothing marked done{{else if $d.Filtered}}Nothing here{{else}}All caught up{{end}}</h2>
+          <p class="muted">{{if $s.Done}}Notifications you mark as done move here.{{else if $d.Filtered}}No notifications match these filters. <a href="{{$d.ClearFilter}}">Clear filters</a>{{else}}You'll hear here when agents, bots, tokens or background jobs like backups and imports do something. Your own clicks don't notify you.{{end}}</p>
+        </div>
+      </div>
+      {{end}}
+
+      {{if or (gt $s.Page 1) $d.More}}
+      <nav class="pager" aria-label="Pagination">
+        {{if gt $s.Page 1}}<a class="btn" href="{{$d.PrevURL}}" rel="prev">← Previous</a>{{else}}<span class="btn is-disabled" aria-disabled="true">← Previous</span>{{end}}
+        <span class="btn btn-ghost is-disabled" aria-current="page">Page {{$s.Page}}</span>
+        {{if $d.More}}<a class="btn" href="{{$d.NextURL}}" rel="next">Next →</a>{{else}}<span class="btn is-disabled" aria-disabled="true">Next →</span>{{end}}
+      </nav>
+      {{end}}
+    </section>
+  </div>
+</main>
+{{end}}

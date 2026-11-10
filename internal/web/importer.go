@@ -16,8 +16,8 @@ import (
 	"atelier/internal/store"
 )
 
-// TODO(issues): import issues, pull requests, releases and wikis once the
-// issues feature lands. The UI already says "coming soon".
+// Gitea and GitHub imports can also bring issues, pull requests, labels and
+// milestones (see importer_meta.go). Releases and wikis are still to come.
 
 func init() {
 	registerFeature(feature{
@@ -29,6 +29,7 @@ func init() {
 			m.HandleFunc("POST /settings/import/pick/{sid}", a.authed(a.importPickSubmit))
 			m.HandleFunc("POST /settings/import/url", a.authed(a.importURLSubmit))
 			m.HandleFunc("GET /settings/import/jobs", a.authed(a.importJobsJSON))
+			m.HandleFunc("POST /settings/import/jobs/{id}/resume", a.authed(a.importResume))
 			m.HandleFunc("POST /settings/import/mirrors/{id}/sync", a.authed(a.importMirrorSync))
 			m.HandleFunc("POST /settings/import/mirrors/{id}/stop", a.authed(a.importMirrorStop))
 		},
@@ -38,6 +39,7 @@ func init() {
 			st.ctx = ctx
 			st.mu.Unlock()
 			// Queued jobs' tokens only lived in memory, so they can't resume.
+			a.failInterruptedStages(ctx)
 			if err := a.db.FailUnfinishedImports(ctx, "Interrupted by a restart. Start the import again."); err != nil {
 				log.Printf("import: %v", err)
 			}
@@ -117,6 +119,11 @@ func (a *App) enqueueImports(ctx context.Context, reqs []importer.Request, who A
 		if err != nil {
 			return err
 		}
+		if req.Meta.Any() {
+			if err := a.saveImportMeta(ctx, id, req, who); err != nil {
+				return err
+			}
+		}
 		st.mu.Lock()
 		st.creds[id] = req.Creds
 		st.mu.Unlock()
@@ -150,23 +157,99 @@ func (a *App) runImport(ctx context.Context, id int64, creds importer.Creds) {
 		log.Printf("import job %d: %v", id, err)
 		return
 	}
-	_ = a.db.SetImportJobStatus(ctx, id, "running", "Cloning…")
+	meta, err := a.db.ImportJobMeta(ctx, id)
+	hasMeta := err == nil
+	if !hasMeta {
+		if !errors.Is(err, store.ErrNotFound) {
+			log.Printf("import job %d: %v", id, err)
+		}
+		_ = a.db.SetImportJobStatus(ctx, id, "running", "Cloning…")
+	}
 	start := time.Now()
-	_, err = importer.Import(ctx, a.db, a.git, importer.Request{
-		Source: j.Source, URL: j.SourceURL, Creds: creds, Owner: j.Owner, Name: j.Name,
-		Description: j.Description, Private: j.Private, Mirror: j.Mirror, MirrorInterval: a.mirrorInterval(),
-	})
 	bg := context.WithoutCancel(ctx)
-	if err != nil {
-		log.Printf("import %s from %s: %v", j.FullName(), j.SourceURL, err)
-		_ = a.db.SetImportJobStatus(bg, id, "failed", err.Error())
-		return
+	var (
+		repo   store.Repo
+		stages []importer.Stage
+	)
+	if hasMeta {
+		stages = decodeStages(meta.Stages, importer.ParseMetaOptions(meta.Options))
+	}
+	if hasMeta && meta.Resume {
+		repo, err = a.db.ImportedRepo(ctx, meta.RepoID)
+		if err != nil || repo.FullName() != j.FullName() {
+			_ = a.db.SetImportJobStatus(bg, id, "failed", "The repository is gone or was renamed.")
+			return
+		}
+	} else {
+		if hasMeta {
+			setStage(stages, "code", "running", "")
+			a.importProgress(ctx, id, 0, stages, "Cloning…")
+		}
+		repo, err = importer.Import(ctx, a.db, a.git, importer.Request{
+			Source: j.Source, URL: j.SourceURL, Creds: creds, Owner: j.Owner, Name: j.Name,
+			Description: j.Description, Private: j.Private, Mirror: j.Mirror, MirrorInterval: a.mirrorInterval(),
+		})
+		if err != nil {
+			log.Printf("import %s from %s: %v", j.FullName(), j.SourceURL, err)
+			if hasMeta {
+				setStage(stages, "code", "failed", "")
+				_ = a.db.FinishImportJobMeta(bg, id, encodeStages(stages), "", nil)
+			}
+			_ = a.db.SetImportJobStatus(bg, id, "failed", err.Error())
+			return
+		}
+		if hasMeta {
+			setStage(stages, "code", "done", "")
+		}
 	}
 	msg := fmt.Sprintf("Imported in %s.", shortDuration(time.Since(start)))
-	if j.Mirror {
+	status := "done"
+	if hasMeta {
+		opts := importer.ParseMetaOptions(meta.Options)
+		a.importProgress(ctx, id, repo.ID, stages, "Importing issues and pull requests…")
+		res, out, merr := importer.ImportMeta(ctx, a.db, a.git, repo, importer.MetaRequest{
+			Source: j.Source, APIBase: meta.APIBase, Repo: meta.SourceRepo, Token: creds.Token, Options: opts,
+			HTTP: importHTTP,
+		}, stages, func(st []importer.Stage) { a.importProgress(ctx, id, 0, st, progressMessage(st)) })
+		stages = out
+		summary := res.Summary()
+		var resumeAt *time.Time
+		switch {
+		case merr != nil:
+			status = "partial"
+			msg = "Partial import: " + scrubToken(merr.Error(), creds.Token) + ". Resume to try the rest again."
+			log.Printf("import %s metadata: %s", j.FullName(), scrubToken(merr.Error(), creds.Token))
+		case res.Partial:
+			status = "partial"
+			msg = "Partial import: the source's API rate limit ran out."
+			if !res.Reset.IsZero() {
+				t := res.Reset
+				resumeAt = &t
+				msg += " Resume after " + t.UTC().Format("15:04") + " UTC."
+			} else {
+				msg += " Resume later to fetch the rest."
+			}
+		default:
+			msg = fmt.Sprintf("Imported in %s.", shortDuration(time.Since(start)))
+		}
+		msg += " " + summary + "."
+		if n := len(res.Problems); n > 0 {
+			shown := res.Problems
+			if n > 3 {
+				shown = shown[:3]
+			}
+			msg += " " + strings.Join(shown, "; ")
+			if n > 3 {
+				msg += fmt.Sprintf(" (and %d more)", n-3)
+			}
+			msg += "."
+		}
+		_ = a.db.FinishImportJobMeta(bg, id, encodeStages(stages), summary, resumeAt)
+	}
+	if j.Mirror && !(hasMeta && meta.Resume) {
 		msg += " Mirroring every " + every(a.mirrorInterval()) + "."
 	}
-	_ = a.db.SetImportJobStatus(bg, id, "done", msg)
+	_ = a.db.SetImportJobStatus(bg, id, status, msg)
 }
 
 func (a *App) mirrorLoop(ctx context.Context) {
@@ -249,7 +332,12 @@ func (a *App) renderImport(w http.ResponseWriter, r *http.Request, f importForm,
 		a.fail(w, r, err)
 		return
 	}
-	jobs, err := a.db.ImportJobs(ctx, 30)
+	rawJobs, err := a.db.ImportJobs(ctx, 30)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	jobs, err := a.importJobViews(ctx, a.actor(r), rawJobs)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -263,6 +351,7 @@ func (a *App) renderImport(w http.ResponseWriter, r *http.Request, f importForm,
 		"queued":  "Import started. Progress shows below.",
 		"stopped": "Mirroring stopped and its stored credentials deleted. The repository stays.",
 		"syncing": "Fetching from the source now.",
+		"resumed": "Import resumed. Anything already imported is skipped.",
 	}[msg]
 	if errMsg != "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -342,10 +431,11 @@ func (a *App) importPick(w http.ResponseWriter, r *http.Request) {
 	for i, rm := range s.Repos {
 		rows[i] = pickRow{Remote: rm, Index: i, Target: rm.Name}
 	}
-	a.renderPick(w, r, s, rows, "", false, "")
+	all := importer.MetaOptions{Issues: true, Pulls: true, Labels: true, Milestones: true}
+	a.renderPick(w, r, s, rows, "", false, all, "")
 }
 
-func (a *App) renderPick(w http.ResponseWriter, r *http.Request, s *importSession, rows []pickRow, owner string, mirror bool, errMsg string) {
+func (a *App) renderPick(w http.ResponseWriter, r *http.Request, s *importSession, rows []pickRow, owner string, mirror bool, meta importer.MetaOptions, errMsg string) {
 	owners, err := a.db.Owners(r.Context())
 	if err != nil {
 		a.fail(w, r, err)
@@ -363,7 +453,7 @@ func (a *App) renderPick(w http.ResponseWriter, r *http.Request, s *importSessio
 	}
 	a.render(w, r, "importer_pick", page{Title: "Choose repositories to import", Error: errMsg, Data: map[string]any{
 		"SID": r.PathValue("sid"), "Source": s.Source, "SourceLabel": label, "Login": s.Login, "Rows": rows,
-		"Owners": owners, "Owner": owner, "Mirror": mirror, "Interval": every(a.mirrorInterval()),
+		"Owners": owners, "Owner": owner, "Mirror": mirror, "Interval": every(a.mirrorInterval()), "Meta": meta,
 	}})
 }
 
@@ -394,6 +484,11 @@ func (a *App) importPickSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	owner := r.FormValue("owner")
 	mirror := r.FormValue("mirror") == "on"
+	meta := metaFromForm(r)
+	apiBase := s.Server
+	if s.Source == "github" {
+		apiBase = githubAPI
+	}
 	selected := map[int]bool{}
 	for _, v := range r.Form["repo"] {
 		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i < len(s.Repos) {
@@ -420,7 +515,7 @@ func (a *App) importPickSubmit(w http.ResponseWriter, r *http.Request) {
 		req := importer.Request{
 			Source: s.Source, URL: a.cloneURL(s, rm), Creds: importer.Creds{Username: user, Token: s.token},
 			Owner: owner, Name: target, Description: rm.Description, Private: rm.Private, Mirror: mirror,
-			MirrorInterval: a.mirrorInterval(),
+			MirrorInterval: a.mirrorInterval(), Meta: meta, MetaAPI: apiBase, MetaRepo: rm.FullName,
 		}
 		if _, err := importer.Check(ctx, a.db, req); err != nil {
 			problems = append(problems, rm.FullName+": "+err.Error())
@@ -435,10 +530,10 @@ func (a *App) importPickSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case len(selected) == 0:
-		a.renderPick(w, r, s, rows, owner, mirror, "Select at least one repository.")
+		a.renderPick(w, r, s, rows, owner, mirror, meta, "Select at least one repository.")
 		return
 	case len(problems) > 0:
-		a.renderPick(w, r, s, rows, owner, mirror, strings.Join(problems, " · "))
+		a.renderPick(w, r, s, rows, owner, mirror, meta, strings.Join(problems, " · "))
 		return
 	}
 	if err := a.enqueueImports(ctx, reqs, a.actor(r)); err != nil {
@@ -490,15 +585,29 @@ func (a *App) importURLSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 type jobJSON struct {
-	ID      int64  `json:"id"`
-	Repo    string `json:"repo"`
-	Status  string `json:"status"`
-	Message string `json:"message"`
-	URL     string `json:"url,omitempty"`
+	ID        int64       `json:"id"`
+	Repo      string      `json:"repo"`
+	Status    string      `json:"status"`
+	Message   string      `json:"message"`
+	URL       string      `json:"url,omitempty"`
+	Stages    []stageJSON `json:"stages,omitempty"`
+	Summary   string      `json:"summary,omitempty"`
+	Resumable bool        `json:"resumable,omitempty"`
+}
+
+type stageJSON struct {
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	State  string `json:"state"`
+	Detail string `json:"detail"`
 }
 
 func (a *App) importJobsJSON(w http.ResponseWriter, r *http.Request) {
-	jobs, err := a.db.ImportJobs(r.Context(), 30)
+	raw, err := a.db.ImportJobs(r.Context(), 30)
+	var jobs []jobView
+	if err == nil {
+		jobs, err = a.importJobViews(r.Context(), a.actor(r), raw)
+	}
 	if err != nil {
 		logErr(r, err)
 		http.Error(w, "error", http.StatusInternalServerError)
@@ -506,9 +615,13 @@ func (a *App) importJobsJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]jobJSON, 0, len(jobs))
 	for _, j := range jobs {
-		jj := jobJSON{ID: j.ID, Repo: j.FullName(), Status: j.Status, Message: j.Message}
-		if j.Status == "done" {
+		jj := jobJSON{ID: j.ID, Repo: j.FullName(), Status: j.Status, Message: j.Message, Summary: j.Summary,
+			Resumable: j.Resumable}
+		if j.Status == "done" || j.Status == "partial" {
 			jj.URL = "/" + j.FullName()
+		}
+		for _, s := range j.Stages {
+			jj.Stages = append(jj.Stages, stageJSON{Key: s.Key, Label: s.Label, State: s.State, Detail: s.Detail})
 		}
 		out = append(out, jj)
 	}

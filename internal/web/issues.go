@@ -297,6 +297,7 @@ func (a *App) issueCreate(w http.ResponseWriter, r *http.Request) {
 			logErr(r, err)
 		}
 	}
+	a.emit(ctx, issueEvent(EventIssueOpened, v, is, act, body))
 	http.Redirect(w, r, fmt.Sprintf("%s/issues/%d", v.Base, is.Number), http.StatusSeeOther)
 }
 
@@ -466,6 +467,7 @@ func (a *App) issueComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		anchor = fmt.Sprintf("#comment-%d", c.ID)
+		a.emit(ctx, issueEvent(EventIssueCommented, v, is, act, body, anchor))
 	} else if action == "" || action == "comment" {
 		a.renderIssue(w, r, v, is, body, "Write something before commenting.")
 		return
@@ -474,6 +476,7 @@ func (a *App) issueComment(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	a.emitIssueState(ctx, v, is, act, action)
 	a.issueBack(w, r, v, is, anchor)
 }
 
@@ -499,6 +502,7 @@ func (a *App) issueState(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	a.emitIssueState(r.Context(), v, is, a.actor(r), r.FormValue("action"))
 	a.issueBack(w, r, v, is, "")
 }
 

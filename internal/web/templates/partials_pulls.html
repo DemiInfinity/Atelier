@@ -11,7 +11,7 @@
 {{define "pulls-branch"}}<span class="pr-branch mono">{{.}}</span>{{end}}
 
 {{/* Marks non-owner actors. Pass the kind. */}}
-{{define "pulls-actor"}}{{if eq . "agent"}} <span class="pill pill-violet">agent</span>{{else if eq . "bot"}} <span class="pill pill-violet">bot</span>{{else if eq . "token"}} <span class="pill">token</span>{{end}}{{end}}
+{{define "pulls-actor"}}{{if eq . "agent"}} <span class="pill pill-violet">agent</span>{{else if eq . "bot"}} <span class="pill pill-violet">bot</span>{{else if eq . "token"}} <span class="pill">token</span>{{else if eq . "import"}} <span class="pill pill-tether">imported</span>{{end}}{{end}}
 
 {{/* One note to self. Pass a *pullNoteView. */}}
 {{define "pulls-note"}}<article class="pr-note{{if .Resolved}} is-resolved{{end}}" id="note-{{.ID}}">{{template "pulls-note-inner" .}}</article>{{end}}

@@ -26,6 +26,16 @@
               <input id="ip-filter" type="search" placeholder="Type to filter by name" autocomplete="off" data-pick-filter>
             </div>
           </div>
+          <fieldset class="field im-meta">
+            <legend>Also import</legend>
+            <p class="hint">Numbers stay the same, so <span class="mono">#12</span> still points at the same issue or pull request. Authors are kept as names (for example <span class="mono">{{$d.Source}}:alice</span>); no accounts are created.</p>
+            <div class="im-meta-grid">
+              <label class="choice"><input type="checkbox" name="meta_issues" {{if $d.Meta.Issues}}checked{{end}}><span><strong>Issues &amp; comments</strong></span></label>
+              <label class="choice"><input type="checkbox" name="meta_pulls" {{if $d.Meta.Pulls}}checked{{end}}><span><strong>Pull requests &amp; comments</strong><span class="small muted">Linked to their branches when those came along. Merged ones are recorded as merged.</span></span></label>
+              <label class="choice"><input type="checkbox" name="meta_labels" {{if $d.Meta.Labels}}checked{{end}}><span><strong>Labels</strong><span class="small muted">With their colours. Labels used by issues come along either way.</span></span></label>
+              <label class="choice"><input type="checkbox" name="meta_milestones" {{if $d.Meta.Milestones}}checked{{end}}><span><strong>Milestones</strong></span></label>
+            </div>
+          </fieldset>
           <label class="choice"><input type="checkbox" name="mirror" {{if $d.Mirror}}checked{{end}}><span><strong>Keep syncing as mirrors</strong><span class="small muted">Fetch from the source every {{$d.Interval}}. The token is then stored on this server (never shown again). Without this, Atelier forgets the token once the imports finish.</span></span></label>
         </section>
 

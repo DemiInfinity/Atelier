@@ -25,6 +25,15 @@ type Request struct {
 	// store their credentials; one-off imports forget them when done.
 	Mirror         bool
 	MirrorInterval time.Duration
+	// Meta selects issues, pull requests, labels and milestones to import
+	// after the git data (gitea and github sources only). MetaAPI is the
+	// GitHub API base or Gitea server address; MetaRepo is owner/name there.
+	Meta     MetaOptions
+	MetaAPI  string
+	MetaRepo string
+	// ResumeRepoID, when set, means the code is already in that repository:
+	// only the metadata is fetched (again), skipping what's already here.
+	ResumeRepoID int64
 }
 
 // Check validates a request against the database without touching disk.

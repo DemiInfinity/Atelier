@@ -97,7 +97,12 @@ func Open(path string) (*Store, error) {
 			return nil, fmt.Errorf("migrate (schema %d): %w", i, err)
 		}
 	}
-	return &Store{db: db}, nil
+	st := &Store{db: db}
+	if err := st.migrate(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return st, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -320,7 +325,7 @@ func (s *Store) TouchRepo(ctx context.Context, id int64) error {
 
 func (s *Store) CreateSession(ctx context.Context, ttl time.Duration) (string, error) {
 	tok := RandomToken(32)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO sessions (token_hash, expires_at) VALUES (?, ?)`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO sessions (token_hash, expires_at, person_id) VALUES (?, ?, `+personalOwnerID+`)`,
 		Hash(tok), time.Now().Add(ttl).Unix())
 	return tok, err
 }
@@ -376,7 +381,7 @@ func (s *Store) CreateToken(ctx context.Context, name string, scopes []string, t
 		exp = time.Now().Add(ttl).Unix()
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO tokens (name, token_hash, prefix, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tokens (name, token_hash, prefix, scopes, created_at, expires_at, person_id) VALUES (?, ?, ?, ?, ?, ?, `+personalOwnerID+`)`,
 		name, Hash(plain), plain[:len(TokenPrefix)+6], strings.Join(scopes, " "), now(), exp)
 	return plain, err
 }

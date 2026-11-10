@@ -18,4 +18,4 @@
 {{define "issues-head"}}<link rel="stylesheet" href="/static/issues.css"><link rel="stylesheet" href="{{.Data.V.Base}}/labels.css"><script src="/static/issues.js" defer></script>{{end}}
 
 {{/* Marks non-owner authors. Pass the actor kind. */}}
-{{define "actor-chip"}}{{if eq . "agent"}}<span class="pill pill-violet">agent</span>{{else if eq . "bot"}}<span class="pill pill-violet">bot</span>{{else if eq . "token"}}<span class="pill">token</span>{{end}}{{end}}
+{{define "actor-chip"}}{{if eq . "agent"}}<span class="pill pill-violet">agent</span>{{else if eq . "bot"}}<span class="pill pill-violet">bot</span>{{else if eq . "token"}}<span class="pill">token</span>{{else if eq . "import"}}<span class="pill pill-tether">imported</span>{{end}}{{end}}

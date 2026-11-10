@@ -201,7 +201,7 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Push/clone over HTTPS and SSH (behind nginx), code browser, commits and diffs, passkey + GitHub sign-in, keys and tokens, backups, import from Gitea/GitHub | Done |
-| 2 | Issues, pull requests (new overview + Files changed), branch rules, notifications, company accounts and profiles | In progress |
+| 2 | Issues, pull requests (new overview + Files changed), branch rules, notifications, company accounts and profiles | Done |
 | 3 | Actions (runners per device, YAML + agentic workflows, lockfile), secrets, releases, packages (npm, containers, Go, Swift), LFS | Planned |
 | 4 | MCP server, Tether (search, feed, mirroring), apps and bots (bridge + native + webhooks), security scanning | Planned |
 | 5 | Projects, Pages, web editor and device workspaces, snippets, ⌘K, mobile app, insights | Planned |
@@ -216,15 +216,15 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 - Import from Gitea/Forgejo, GitHub or any git URL, optionally kept in sync as a mirror (pushes to mirrors are refused)
 - Docker image and Portainer stack behind nginx or Nginx Proxy Manager
 
-**Phase 2: done so far**
+**Phase 2: done**
 - Issues with comments, labels, milestones, search qualifiers and `#123` links
 - Pull requests: compare, merge status bar, Overview / Files changed, notes to self, squash or merge commit
 - Branch rules enforced on every push (HTTPS and SSH) by a server-side hook
 - "Closes #N" in a pull request closes the issue when it merges
+- Notifications inbox with a bell and unread count; you're never notified about your own actions
+- Profiles for you and company accounts: profile README, pinned repositories, Embers
+- Importing issues, pull requests, labels and milestones from Gitea/Forgejo and GitHub, keeping the original numbers (the token needs read access to issues and pull requests)
 
-**Phase 2: still to do**
-- Notifications inbox
-- Profiles (profile README, pinned repos, Embers)
-- Importing issues and pull requests from Gitea/GitHub
+**Built to grow:** sessions, tokens, SSH keys and passkeys belong to a person, and one permission check covers the web, HTTPS and SSH, so the Duo / Team / Company addons can plug in later.
 
 Design canvas: https://claude.ai/artifact/Pk6J4jME2YuBfMdhRHKX2q

@@ -1066,3 +1066,137 @@ func (s *Store) SetIssueMilestone(ctx context.Context, issueID, milestoneID int6
 		return s.issueEvent(ctx, tx, IssueEvent{IssueID: issueID, Kind: EventMilestoned, ActorKind: actorKind, ActorName: actorName, Milestone: newTitle})
 	})
 }
+
+// ---------- imports ----------
+//
+// Used by the importer to bring issues in from Gitea/Forgejo or GitHub with
+// their original numbers, authors and timestamps. They don't record timeline
+// events (the history happened elsewhere) and don't touch repo_counters: the
+// importer bumps the counter once it knows the highest number.
+
+// ImportedIssue is an issue as it existed at the source.
+type ImportedIssue struct {
+	RepoID      int64
+	Number      int64
+	Title       string
+	Body        string
+	State       string // open, closed
+	StateReason string // completed, not_planned, reopened or ""
+	AuthorKind  string // "import"
+	AuthorName  string // e.g. "github:alice"
+	MilestoneID int64
+	LabelIDs    []int64
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	ClosedAt    *time.Time
+}
+
+func optUnix(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return t.Unix()
+}
+
+// ImportIssue inserts an issue with an explicit number. It fails if the
+// number is already used by an issue.
+func (s *Store) ImportIssue(ctx context.Context, in ImportedIssue) (Issue, error) {
+	title := strings.TrimSpace(in.Title)
+	if r := []rune(title); len(r) > 256 {
+		title = string(r[:256])
+	}
+	if title == "" {
+		title = "(untitled)"
+	}
+	state, reason := "open", in.StateReason
+	if in.State == "closed" {
+		state = "closed"
+		if reason != ReasonNotPlanned {
+			reason = ReasonCompleted
+		}
+	} else if reason != "reopened" {
+		reason = ""
+	}
+	closed := in.ClosedAt
+	if state == "closed" && closed == nil {
+		closed = &in.UpdatedAt
+	}
+	if state == "open" {
+		closed = nil
+	}
+	var ms any
+	if in.MilestoneID > 0 {
+		ms = in.MilestoneID
+	}
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `INSERT INTO issues (repo_id, number, title, body, state, state_reason, author_kind,
+			author_name, milestone_id, created_at, updated_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			in.RepoID, in.Number, title, in.Body, state, reason, in.AuthorKind, in.AuthorName, ms,
+			in.CreatedAt.Unix(), in.UpdatedAt.Unix(), optUnix(closed))
+		if err != nil {
+			return err
+		}
+		id, _ := res.LastInsertId()
+		for _, lid := range in.LabelIDs {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO issue_labels (issue_id, label_id)
+				SELECT ?, id FROM labels WHERE id=? AND repo_id=?`, id, lid, in.RepoID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Issue{}, err
+	}
+	return s.IssueByNumber(ctx, in.RepoID, in.Number)
+}
+
+// ImportIssueComment adds a comment with its original author and timestamps.
+// It doesn't change the issue's updated time.
+func (s *Store) ImportIssueComment(ctx context.Context, issueID int64, body, authorKind, authorName string, created, updated time.Time) (IssueComment, error) {
+	if updated.Before(created) {
+		updated = created
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO issue_comments (issue_id, author_kind, author_name, body, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, issueID, authorKind, authorName, body, created.Unix(), updated.Unix())
+	if err != nil {
+		return IssueComment{}, err
+	}
+	id, _ := res.LastInsertId()
+	return s.IssueCommentByID(ctx, id)
+}
+
+// ImportMilestone creates a milestone with its original state and timestamps.
+func (s *Store) ImportMilestone(ctx context.Context, repoID int64, title, desc string, due *time.Time, open bool, created, updated time.Time, closed *time.Time) (Milestone, error) {
+	title, err := validMilestone(title)
+	if err != nil {
+		return Milestone{}, err
+	}
+	state := "open"
+	if !open {
+		state = "closed"
+		if closed == nil {
+			closed = &updated
+		}
+	} else {
+		closed = nil
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO milestones (repo_id, title, description, due_on, state, created_at, updated_at, closed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, repoID, title, strings.TrimSpace(desc), dueArg(due), state,
+		created.Unix(), updated.Unix(), optUnix(closed))
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return Milestone{}, fmt.Errorf("a milestone called %q already exists", title)
+		}
+		return Milestone{}, err
+	}
+	id, _ := res.LastInsertId()
+	return s.MilestoneByID(ctx, repoID, id)
+}
+
+// MarkLabelsSeeded stops the default labels being added to a repo whose
+// labels were imported.
+func (s *Store) MarkLabelsSeeded(ctx context.Context, repoID int64) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO label_seeds (repo_id) VALUES (?)`, repoID)
+	return err
+}

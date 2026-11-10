@@ -1,6 +1,8 @@
 {{define "content"}}
 {{$d := .Data}}
-<main class="wrap narrow stack-lg">
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "tokens"}}</aside>
+  <div class="col-main stack-lg">
   <div>
     <h1 class="display">Access tokens</h1>
     <p class="muted">Use a token as the password for git over HTTPS. Atelier only stores a hash, so copy it when it's shown.</p>
@@ -56,5 +58,6 @@
     <div class="list-row muted">No tokens yet.</div>
     {{end}}
   </section>
+  </div>
 </main>
 {{end}}

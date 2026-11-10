@@ -47,19 +47,45 @@ func (a *App) Start(ctx context.Context) {
 // Accessors for code outside the web package (e.g. the SSH server).
 func (a *App) Store() *store.Store { return a.db }
 
-// Actor is who performed an action. Today it's always the owner, a token or a
-// bot/agent; a future Teams addon adds "user". Record Actor.Name and Kind on
-// anything you store (issue authors, comments, merges) so history stays right
-// when more kinds of actor arrive.
+// Actor is who performed an action. Record Actor.Name and Kind on anything you
+// store (issue authors, comments, merges) so history stays right when more
+// kinds of actor arrive. PersonID says which person is ultimately responsible:
+// the signed-in person, or the person who owns the token / key in use.
 type Actor struct {
-	Kind string // "owner", "token", "bot", "agent"
-	Name string
+	Kind     string // ActorOwner, ActorToken, ActorAnonymous, "bot", "agent"
+	Name     string
+	PersonID int64
+	Scopes   []string // for tokens
 }
 
-// actor returns who is making a UI request. UI routes are always the signed-in owner.
-func (a *App) actor(r *http.Request) Actor {
-	if me, err := a.db.PersonalOwner(r.Context()); err == nil {
-		return Actor{Kind: "owner", Name: me.Name}
+const (
+	ActorOwner     = "owner" // a signed-in person (in core, always the owner)
+	ActorToken     = "token"
+	ActorAnonymous = "anonymous"
+)
+
+func (who Actor) hasScope(s string) bool {
+	for _, x := range who.Scopes {
+		if x == s {
+			return true
+		}
 	}
-	return Actor{Kind: "owner", Name: "owner"}
+	return false
+}
+
+type actorKey struct{}
+
+func withActor(r *http.Request, who Actor) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), actorKey{}, who))
+}
+
+// actor returns who is making a request: the signed-in person on routes wrapped
+// in a.authed (or passkeyAPI), anonymous otherwise.
+func (a *App) actor(r *http.Request) Actor {
+	if who, ok := r.Context().Value(actorKey{}).(Actor); ok {
+		return who
+	}
+	// Not signed in (or a route that doesn't sign people in): never assume
+	// it's the owner.
+	return Actor{Kind: ActorAnonymous, Name: "anonymous"}
 }

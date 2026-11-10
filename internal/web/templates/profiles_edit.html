@@ -1,0 +1,114 @@
+{{define "head"}}<link rel="stylesheet" href="/static/profiles.css"><script src="/static/profiles.js" defer></script>{{end}}
+{{define "content"}}
+{{$v := .Data}}{{$o := $v.Account}}
+<main class="wrap layout-2 {{if $o.IsCompany}}prof-company{{end}}">
+  <aside class="col-side stack">
+    {{if gt (len $v.Accounts) 1}}
+    <nav class="stack-sm" aria-label="Choose an account">
+      <h2 class="eyebrow">Editing</h2>
+      {{range $v.Accounts}}
+      <a href="/settings/profile?account={{.Name}}" class="account {{if eq .ID $o.ID}}is-active{{end}}" {{if eq .ID $o.ID}}aria-current="page"{{end}}>
+        <span class="account-chip {{if .IsCompany}}is-company{{end}}" aria-hidden="true">{{.Initial}}</span>
+        <span class="account-text"><span>{{.Label}}</span><span class="small muted">{{if .IsCompany}}Company{{else}}Personal{{end}}</span></span>
+      </a>
+      {{end}}
+    </nav>
+    {{end}}
+    {{template "accountnav" "profile"}}
+  </aside>
+
+  <div class="col-main stack-lg">
+    <div class="row-between wrap-gap">
+      <div>
+        <h1 class="display">{{if $o.IsCompany}}{{$o.Label}} profile{{else}}Your profile{{end}}</h1>
+        <p class="muted">What people see at <a href="{{$v.ProfileURL}}">/{{$o.Name}}</a>.</p>
+      </div>
+      <a class="btn" href="{{$v.ProfileURL}}">View profile</a>
+    </div>
+    {{if .Error}}<div class="flash flash-error" role="alert">{{.Error}}</div>{{end}}
+    {{if .Notice}}<div class="flash flash-ok" role="status">Saved.</div>{{end}}
+
+    <form method="post" action="/settings/profile" class="card stack" aria-labelledby="prof-details-h">
+      <input type="hidden" name="account" value="{{$o.Name}}">
+      <div class="row gap-sm prof-edit-head">
+        <div class="prof-avatar-md">{{template "prof-avatar" $v.Avatar}}</div>
+        <div class="min0">
+          <h2 class="h-sm" id="prof-details-h">Details</h2>
+          <p class="small muted">Handle <span class="mono">{{$o.Name}}</span> · {{if $o.IsCompany}}company account{{else}}personal account{{end}}</p>
+        </div>
+      </div>
+      <div class="field">
+        <label for="prof-name">Display name</label>
+        <input id="prof-name" name="display_name" maxlength="80" value="{{$v.DisplayName}}" placeholder="{{$o.Name}}" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="prof-bio">Bio</label>
+        <textarea id="prof-bio" name="bio" rows="3" maxlength="{{$v.MaxBio}}" aria-describedby="prof-bio-hint" data-prof-count-for="prof-bio-hint">{{$v.Bio}}</textarea>
+        <p class="hint" id="prof-bio-hint">A sentence or two, up to {{$v.MaxBio}} characters.</p>
+      </div>
+      <div class="prof-fields-2">
+        <div class="field">
+          <label for="prof-pronouns">Pronouns <span class="muted">(optional)</span></label>
+          <input id="prof-pronouns" name="pronouns" maxlength="40" value="{{$v.Pronouns}}" placeholder="she/her">
+        </div>
+        <div class="field">
+          <label for="prof-location">Location</label>
+          <input id="prof-location" name="location" maxlength="80" value="{{$v.Location}}" placeholder="Dublin, Ireland">
+        </div>
+      </div>
+      <div class="field">
+        <label for="prof-website">Website</label>
+        <input id="prof-website" name="website" type="text" inputmode="url" autocomplete="url" spellcheck="false" maxlength="200" value="{{$v.Website}}" placeholder="https://example.com" aria-describedby="prof-website-hint">
+        <p class="hint" id="prof-website-hint">An http:// or https:// address. It's linked with rel="me" so other sites can verify it's you.</p>
+      </div>
+      <fieldset class="field">
+        <legend>Avatar</legend>
+        <div class="prof-avatar-choices">
+          {{range $v.Styles}}
+          <label class="choice prof-avatar-choice">
+            <input type="radio" name="avatar" value="{{.Value}}" {{if eq .Value $v.AvatarStyle}}checked{{end}}>
+            <span><strong>{{.Label}}</strong></span>
+          </label>
+          {{end}}
+        </div>
+      </fieldset>
+      <div class="row-end"><button class="btn btn-primary" type="submit">Save profile</button></div>
+    </form>
+
+    <form method="post" action="/settings/profile/pins" class="card stack" id="pins" aria-labelledby="prof-pins-h" data-prof-pins data-max="{{$v.MaxPins}}">
+      <input type="hidden" name="account" value="{{$o.Name}}">
+      {{/* First submit button, so pressing Enter saves rather than moving a pin. */}}
+      <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Save pins</button>
+      <div class="row-between wrap-gap">
+        <h2 class="h-sm" id="prof-pins-h">Pinned repositories</h2>
+        <span class="small muted" data-prof-pin-count aria-live="polite">{{$v.PinCount}} of {{$v.MaxPins}} pinned</span>
+      </div>
+      <p class="small text-2">Tick up to {{$v.MaxPins}} repositories to show first on the profile. Use the arrows to change their order. With nothing pinned, the most recently updated repositories show instead.</p>
+      {{if $v.PinsError}}<div class="flash flash-error" role="alert">{{$v.PinsError}}</div>{{end}}
+      {{if $v.Pins}}
+      <ul class="list-card prof-pin-list">
+        {{range $v.Pins}}
+        <li class="list-row prof-pin-row{{if .Pinned}} is-pinned{{end}}">
+          <input type="checkbox" name="pin" value="{{.Repo.ID}}" id="pin-{{.Repo.ID}}" {{if .Pinned}}checked{{end}}>
+          <label for="pin-{{.Repo.ID}}" class="grow min0 prof-pin-label">
+            <span class="prof-pin-name">{{.Repo.Name}}</span>
+            {{if .Repo.Private}}<span class="pill">Private</span>{{end}}
+            {{if .Repo.Description}}<span class="small muted ellipsis prof-pin-desc">{{.Repo.Description}}</span>{{end}}
+          </label>
+          {{if .Pinned}}
+          <span class="prof-pin-move">
+            <button class="btn btn-ghost btn-xs" type="submit" name="move" value="up:{{.Repo.ID}}" aria-label="Move {{.Repo.Name}} up" {{if .First}}disabled{{end}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 15 L12 9 L18 15"/></svg></button>
+            <button class="btn btn-ghost btn-xs" type="submit" name="move" value="down:{{.Repo.ID}}" aria-label="Move {{.Repo.Name}} down" {{if .Last}}disabled{{end}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></button>
+          </span>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      <div class="row-end"><button class="btn btn-primary" type="submit">Save pins</button></div>
+      {{else}}
+      <div class="empty"><p class="muted">No repositories in this account yet.</p><a class="btn" href="/new?owner={{$o.Name}}">New repository</a></div>
+      {{end}}
+    </form>
+  </div>
+</main>
+{{end}}

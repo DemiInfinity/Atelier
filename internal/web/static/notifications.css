@@ -1,0 +1,107 @@
+/* Notifications inbox. Row colour = what it's about (left border + glyph):
+   amber your repos, violet agents & bots, green Actions, red runners/failures,
+   Tether blue, muted system. */
+
+:where(.nf-row, .nf-filters a) { --nf: var(--muted); --nf-chip: var(--raised-2); }
+.nf-issue, .nf-pull, .nf-release { --nf: var(--amber); --nf-chip: var(--amber-chip); }
+.nf-agent { --nf: var(--violet); --nf-chip: var(--violet-chip); }
+.nf-action { --nf: var(--ok); --nf-chip: #22301f; }
+.nf-runner, .nf-failed { --nf: var(--danger); --nf-chip: #2e1a17; }
+.nf-tether { --nf: var(--tether); --nf-chip: #172331; }
+.nf-system { --nf: var(--muted); --nf-chip: var(--raised-2); }
+.nf-all { --nf: var(--text); }
+
+/* ---------- sidebar ---------- */
+
+.nf-side { display: flex; flex-direction: column; gap: 20px; }
+.nf-filters { display: flex; flex-direction: column; gap: 2px; }
+.nf-filters a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-weight: 500;
+  text-decoration: none;
+}
+.nf-filters a:hover { background: var(--raised); color: var(--text); }
+.nf-filters a[aria-current="page"] { background: #26231f; color: var(--text); box-shadow: inset 2px 0 0 var(--amber); }
+.nf-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--nf); flex-shrink: 0; }
+.nf-filter-label { flex: 1; min-width: 0; }
+.nf-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.nf-soon-tag {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.nf-side-head { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0 12px; }
+.nf-repos a { font-family: var(--font-mono); font-size: 12.5px; font-weight: 400; }
+.nf-filters a.nf-clear { color: var(--amber); font-family: var(--font); font-size: 13px; }
+
+/* ---------- header ---------- */
+
+.nf-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.nf-tools form { margin: 0; }
+
+/* ---------- rows ---------- */
+
+.nf-list { margin: 0; padding: 0; list-style: none; }
+.nf-row { box-shadow: inset 3px 0 0 var(--nf); align-items: center; gap: 14px; }
+.nf-row:hover { background: var(--raised); }
+.nf-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 9px;
+  background: var(--nf-chip);
+  color: var(--nf);
+  flex-shrink: 0;
+}
+.nf-body { display: flex; flex-direction: column; gap: 2px; }
+.nf-where { font-size: 12px; color: var(--muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.nf-title { color: var(--text-2); overflow-wrap: anywhere; }
+.nf-title:hover { color: var(--amber); }
+.is-unread .nf-title { color: var(--text); font-weight: 600; }
+.is-unread .nf-where::before {
+  content: "";
+  display: inline-block;
+  width: 7px; height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  vertical-align: 1px;
+}
+.nf-meta { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.nf-actor-agent { color: var(--violet); }
+.nf-actor-system { color: var(--text-2); }
+.nf-detail { color: var(--muted); }
+.nf-when { white-space: nowrap; }
+.nf-done { cursor: pointer; }
+.nf-done:hover { color: var(--ok); border-color: var(--ok-border); }
+
+.nf-soon { box-shadow: inset 3px 0 0 var(--nf); display: flex; flex-direction: column; gap: 4px; --nf: var(--muted); }
+.nf-soon.nf-action { --nf: var(--ok); }
+.nf-soon.nf-runner { --nf: var(--danger); }
+.nf-soon.nf-tether { --nf: var(--tether); }
+.nf-soon.nf-release { --nf: var(--amber); }
+.nf-empty-icon { color: var(--muted); }
+
+@media (max-width: 640px) {
+  .nf-row { flex-wrap: nowrap; align-items: flex-start; gap: 10px; padding: 12px 12px 12px 14px; }
+  .nf-when { display: none; }
+  .nf-body { flex: 1 1 auto; }
+}
+
+/* Narrow screens: filters become a scrollable row of chips above the list. */
+@media (max-width: 860px) {
+  .nf-side { gap: 12px; }
+  .nf-filters { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: thin; }
+  .nf-filters a { flex-shrink: 0; white-space: nowrap; border: 1px solid var(--border); min-height: 36px; }
+  .nf-filters a[aria-current="page"] { box-shadow: none; border-color: var(--amber); }
+  .nf-filter-label { flex: none; }
+  .nf-side-head { padding: 0; }
+}

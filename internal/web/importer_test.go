@@ -51,7 +51,7 @@ func waitJobs(t *testing.T, a *App, ck map[string]string, n int) []jobJSON {
 		}
 		finished := 0
 		for _, j := range jobs {
-			if j.Status == "done" || j.Status == "failed" {
+			if j.Status == "done" || j.Status == "failed" || j.Status == "partial" {
 				finished++
 			}
 		}

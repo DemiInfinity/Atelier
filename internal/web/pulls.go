@@ -267,6 +267,7 @@ func (a *App) pullCreate(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	a.emit(ctx, pullEvent(EventPullOpened, v, p, who, body))
 	http.Redirect(w, r, fmt.Sprintf("%s/pulls/%d", v.Base, p.Number), http.StatusSeeOther)
 }
 
@@ -840,6 +841,7 @@ func (a *App) pullMerge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.db.AddPullEvent(ctx, p.ID, "merged", who.Kind, who.Name, method+" "+res.SHA)
+	a.emit(ctx, pullEvent(EventPullMerged, v, p, who, "into "+p.Base))
 	_ = a.db.TouchRepo(ctx, v.Repo.ID)
 	a.closeReferencedIssues(ctx, v.Repo.ID, p, who)
 
@@ -863,10 +865,12 @@ func (a *App) pullState(w http.ResponseWriter, r *http.Request) {
 	case "close":
 		if err = a.db.ClosePull(ctx, p.ID); err == nil {
 			_ = a.db.AddPullEvent(ctx, p.ID, "closed", who.Kind, who.Name, "")
+			a.emit(ctx, pullEvent(EventPullClosed, v, p, who, ""))
 		}
 	case "reopen":
 		if err = a.db.ReopenPull(ctx, p.ID); err == nil {
 			_ = a.db.AddPullEvent(ctx, p.ID, "reopened", who.Kind, who.Name, "")
+			a.emit(ctx, pullEvent(EventPullReopened, v, p, who, ""))
 		}
 	default:
 		err = store.ErrPullStateChanged
@@ -921,6 +925,7 @@ func (a *App) pullComment(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	a.emit(r.Context(), pullEvent(EventPullCommented, v, p, who, body, fmt.Sprintf("#comment-%d", c.ID)))
 	http.Redirect(w, r, fmt.Sprintf("%s/pulls/%d#comment-%d", v.Base, p.Number, c.ID), http.StatusSeeOther)
 }
 
@@ -950,6 +955,7 @@ func (a *App) pullAddNote(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	a.emit(r.Context(), pullEvent(EventPullNote, v, p, who, in.Body, fmt.Sprintf("/files#note-%d", n.ID)))
 	http.Redirect(w, r, fmt.Sprintf("%s/pulls/%d/files#note-%d", v.Base, p.Number, n.ID), http.StatusSeeOther)
 }
 

@@ -91,8 +91,8 @@
       </section>
 
       <section class="card im-soon stack-sm" aria-labelledby="im-soon">
-        <div class="row gap-sm"><h2 class="h-sm" id="im-soon">Issues, pull requests, releases and wikis</h2><span class="pill pill-violet">Coming soon</span></div>
-        <p class="small muted">Imports bring every branch and tag for now. Issues and pull requests come next, once issues land in Atelier.</p>
+        <div class="row gap-sm"><h2 class="h-sm" id="im-soon">Releases and wikis</h2><span class="pill pill-violet">Coming soon</span></div>
+        <p class="small muted">From Gitea, Forgejo and GitHub, imports bring every branch and tag plus, if you choose, issues, pull requests, labels and milestones with their original numbers. Releases and wikis come next.</p>
       </section>
 
       <section class="list-card" aria-labelledby="im-jobs" data-import-jobs>
@@ -103,6 +103,13 @@
             {{if eq .Status "done"}}<a class="im-repo" href="/{{.FullName}}">{{.FullName}}</a>{{else}}<strong class="im-repo">{{.FullName}}</strong>{{end}}
             <div class="small muted ellipsis">{{.SourceURL}}</div>
             <div class="small im-msg {{if eq .Status "failed"}}danger-ink{{else}}muted{{end}}">{{.Message}}</div>
+            {{if .Stages}}<ol class="im-stages" aria-label="Import progress for {{.FullName}}">{{range .Stages}}<li class="im-stage im-st-{{.State}}" data-stage="{{.Key}}"><span class="im-stage-name">{{.Label}}</span> <span class="im-stage-detail">{{.Detail}}</span><span class="sr-only"> ({{.State}})</span></li>{{end}}</ol>{{end}}
+            {{if .Resumable}}
+            <form method="post" action="/settings/import/jobs/{{.ID}}/resume" class="im-resume">
+              {{if .NeedToken}}<label class="sr-only" for="im-rt-{{.ID}}">Access token for {{.FullName}}</label><input id="im-rt-{{.ID}}" name="token" type="password" required autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Access token">{{end}}
+              <button class="btn btn-sm" type="submit">{{.ResumeBtn}}</button>
+            </form>
+            {{end}}
           </div>
           {{if .Mirror}}<span class="pill im-mirror-pill">Mirror</span>{{end}}
           <span class="pill im-status im-{{.Status}}">{{.Status}}</span>

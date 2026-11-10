@@ -39,6 +39,7 @@ func init() {
 				log.Printf("ssh: disabled: %v", err)
 				return
 			}
+			srv.Allow = a.sshAllow
 			log.Printf("ssh: git over SSH listening on %s (clone port %d, host key %s)",
 				a.cfg.SSHListen, a.cfg.SSHPort(), ssh.FingerprintSHA256(srv.HostKey()))
 			if err := srv.ListenAndServe(ctx, a.cfg.SSHListen); err != nil {
@@ -182,4 +183,22 @@ func sshCapitalise(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// sshAllow routes SSH access through the same permission check as the web and
+// git over HTTPS. An SSH key acts as the person it belongs to.
+func (a *App) sshAllow(ctx context.Context, keyID int64, repo store.Repo, write bool) bool {
+	personID, err := a.db.SSHKeyPerson(ctx, keyID)
+	if err != nil {
+		return false
+	}
+	p, err := a.db.Person(ctx, personID)
+	if err != nil {
+		return false
+	}
+	need := PermRead
+	if write {
+		need = PermWrite
+	}
+	return a.can(ctx, Actor{Kind: ActorOwner, Name: p.Name, PersonID: p.ID}, repo, need)
 }

@@ -114,19 +114,9 @@ func (a *App) embers(ctx context.Context, repos []store.Repo) ([]emberCell, int)
 
 // ---------- accounts ----------
 
+// ownerPage is the profile of a person or company account (see profiles.go).
 func (a *App) ownerPage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	o, err := a.db.OwnerByName(ctx, r.PathValue("owner"))
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	repos, err := a.db.ReposByOwner(ctx, o.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	a.render(w, r, "owner", page{Title: o.Label(), Data: map[string]any{"Owner": o, "Repos": repos}})
+	a.showProfile(w, r)
 }
 
 func (a *App) newAccountPage(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +147,7 @@ func (a *App) newRepoPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.render(w, r, "new", page{Title: "New repository", Data: map[string]any{
-		"Owners": owners, "Owner": r.URL.Query().Get("owner"), "Private": true,
+		"Owners": owners, "Owner": r.URL.Query().Get("owner"), "Name": r.URL.Query().Get("name"), "Private": true,
 	}})
 }
 
@@ -228,6 +218,15 @@ func (a *App) loadRepo(w http.ResponseWriter, r *http.Request, tab string) (*rep
 	rp, err := a.db.RepoByName(ctx, r.PathValue("owner"), r.PathValue("repo"))
 	if err != nil {
 		a.fail(w, r, err)
+		return nil, nil, false
+	}
+	who := a.actor(r)
+	if !a.can(ctx, who, rp, PermRead) {
+		a.notFound(w, r) // don't reveal that a private repository exists
+		return nil, nil, false
+	}
+	if need := needFor(r, tab); need != PermRead && !a.can(ctx, who, rp, need) {
+		a.forbidden(w, r)
 		return nil, nil, false
 	}
 	g, err := a.git.Open(rp.Owner, rp.Name)

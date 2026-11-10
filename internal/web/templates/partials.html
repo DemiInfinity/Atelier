@@ -9,7 +9,9 @@
     <a href="/settings/tokens" {{if eq .Nav "tokens"}}aria-current="page"{{end}}>Settings</a>
   </nav>
   <div class="topbar-end">
-    <a href="/new" class="icon-btn" aria-label="New repository"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5 V19 M5 12 H19"/></svg></a>
+    <a href="/notifications" class="icon-btn nf-bell" data-nf-bell aria-label="Notifications" {{if eq .Nav "notifications"}}aria-current="page"{{end}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 16 V11 a6 6 0 0 1 12 0 v5 l2 2 H4 Z M10 21 h4"/></svg><span class="nf-bell-count" data-nf-count aria-hidden="true" hidden></span></a>
+    <link rel="stylesheet" href="/static/notifications_bell.css"><script src="/static/notifications_bell.js" defer></script>
+    <a href="/new"class="icon-btn" aria-label="New repository"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5 V19 M5 12 H19"/></svg></a>
     <a href="/{{.Me.Name}}" class="avatar" aria-label="Your profile">{{.Me.Initial}}</a>
     <form method="post" action="/signout"><button class="btn btn-ghost btn-sm" type="submit">Sign out</button></form>
   </div>
@@ -45,6 +47,7 @@
 {{/* Account settings side menu. Pass the active key: tokens, keys, passkeys, backups, import. */}}
 {{define "accountnav"}}
 <nav class="side-nav" aria-label="Account settings">
+  <a href="/settings/profile" {{if eq . "profile"}}aria-current="page"{{end}}>Profile</a>
   <a href="/settings/tokens" {{if eq . "tokens"}}aria-current="page"{{end}}>Access tokens</a>
   <a href="/settings/keys" {{if eq . "keys"}}aria-current="page"{{end}}>SSH keys</a>
   <a href="/settings/passkeys" {{if eq . "passkeys"}}aria-current="page"{{end}}>Passkeys</a>

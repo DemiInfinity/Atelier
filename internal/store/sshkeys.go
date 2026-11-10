@@ -63,9 +63,9 @@ func scanSSHKey(row interface{ Scan(...any) error }) (SSHKey, error) {
 // when a key with the same fingerprint exists.
 func (s *Store) AddSSHKey(ctx context.Context, name, keyType, fingerprint, publicKey, addedBy, addedByKind string) (SSHKey, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO ssh_keys (name, kind, key_type, fingerprint, public_key, added_by, added_by_kind, created_at)
-		 VALUES (?, 'owner', ?, ?, ?, ?, ?, ?)`,
-		name, keyType, fingerprint, publicKey, addedBy, addedByKind, now())
+		`INSERT INTO ssh_keys (name, kind, key_type, fingerprint, public_key, added_by, added_by_kind, created_at, person_id)
+		 VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, COALESCE((SELECT id FROM owners WHERE kind='user' AND name=? COLLATE NOCASE), `+personalOwnerID+`))`,
+		name, keyType, fingerprint, publicKey, addedBy, addedByKind, now(), addedBy)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return SSHKey{}, ErrKeyExists

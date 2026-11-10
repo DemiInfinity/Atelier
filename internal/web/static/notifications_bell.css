@@ -1,0 +1,18 @@
+/* Top-bar bell (loaded from the topbar partial on every page). */
+.nf-bell { position: relative; }
+.nf-bell[aria-current="page"] { color: var(--amber); border-color: #5a4320; }
+.nf-bell-count {
+  position: absolute;
+  top: -6px; right: -7px;
+  min-width: 18px; height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--amber);
+  color: var(--amber-ink);
+  border: 2px solid var(--surface);
+  font: 600 10.5px/14px var(--font);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+.nf-bell-count[hidden] { display: none; }

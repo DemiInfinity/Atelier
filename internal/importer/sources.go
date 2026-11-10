@@ -1,8 +1,8 @@
 // Package importer brings repositories into Atelier from Gitea/Forgejo,
 // GitHub or any git URL, and keeps optional mirrors in sync.
 //
-// TODO(issues): importing issues, pull requests, releases and wikis is not
-// done yet. Issues are being built now; add them here once that lands.
+// Issues, pull requests, labels and milestones come along from Gitea and
+// GitHub (meta_api.go, meta_import.go). Releases and wikis are not imported yet.
 package importer
 
 import (
