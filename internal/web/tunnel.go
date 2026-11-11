@@ -449,39 +449,45 @@ func (a *App) tunnelOn(w http.ResponseWriter, r *http.Request) {
 	if !a.tunnelLANOnly(w, r) {
 		return
 	}
-	ctx := r.Context()
-	c, err := a.db.TunnelConfig(ctx)
+	problem, err := a.tunnelTurnOn(r.Context(), a.actor(r).Name)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	fail := func(msg string) {
+	if problem != "" {
 		v, _ := a.tunnelData(r)
-		v.Error = msg
+		v.Error = problem
 		a.tunnelRender(w, r, http.StatusBadRequest, v)
+		return
+	}
+	http.Redirect(w, r, "/settings/remote", http.StatusSeeOther)
+}
+
+// tunnelTurnOn turns remote access on for by (the web switch and the app
+// API). problem says why it can't be turned on yet, in a sentence.
+func (a *App) tunnelTurnOn(ctx context.Context, by string) (problem string, err error) {
+	c, err := a.db.TunnelConfig(ctx)
+	if err != nil {
+		return "", err
 	}
 	if _, err := exec.LookPath(a.cfg.TunnelBin); err != nil {
-		fail("cloudflared isn't installed here (" + a.cfg.TunnelBin + "). The Docker image includes it; set ATELIER_CLOUDFLARED when running elsewhere.")
-		return
+		return "cloudflared isn't installed here (" + a.cfg.TunnelBin + "). The Docker image includes it; set ATELIER_CLOUDFLARED when running elsewhere.", nil
 	}
 	if c.Mode == tunnel.ModeNamed && (!c.HasToken || c.Hostname == "") {
-		fail("A named tunnel needs its token and public hostname. Save them first.")
-		return
+		return "A named tunnel needs its token and public hostname. Save them first.", nil
 	}
 	if !c.ExposeWeb && !c.ExposeGit && !c.ExposeMCP && !c.ExposePages && !c.ExposeAPI && !a.connectTunnelExposed(ctx) {
-		fail("Choose at least one thing to expose.")
-		return
+		return "Choose at least one thing to expose.", nil
 	}
 	m := a.tunnel()
 	m.mu.Lock()
 	m.killed = false
 	m.mu.Unlock()
-	if _, err := a.db.SetTunnelEnabled(ctx, true, a.actor(r).Name); err != nil {
-		a.fail(w, r, err)
-		return
+	if _, err := a.db.SetTunnelEnabled(ctx, true, by); err != nil {
+		return "", err
 	}
 	m.apply(ctx)
-	http.Redirect(w, r, "/settings/remote", http.StatusSeeOther)
+	return "", nil
 }
 
 // tunnelOff is the kill switch. It works from anywhere, including through

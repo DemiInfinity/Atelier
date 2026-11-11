@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -55,10 +56,14 @@ func TestRegisterStatusAndDryRunInstall(t *testing.T) {
 		}
 	}
 	out.Reset()
-	if err := run([]string{"status", "--config", cfg}, &out, &out); err != nil {
-		t.Fatal(err)
+	// registered but not running: the configuration is shown, exit code 3
+	err = run([]string{"status", "--config", cfg}, &out, &out)
+	var ee *exitError
+	if !errors.As(err, &ee) || ee.code != 3 || ee.Error() != "not running" {
+		t.Fatalf("status of a stopped runner: %v", err)
 	}
-	if !strings.Contains(out.String(), "Runner: box (id 9)") || strings.Contains(out.String(), "rnr_cli_token") {
+	if !strings.Contains(out.String(), "Runner: box (id 9)") || !strings.Contains(out.String(), "Process: not running") ||
+		strings.Contains(out.String(), "rnr_cli_token") {
 		t.Errorf("status = %s", out.String())
 	}
 	if err := run([]string{"register", "--config", cfg, "--url", srv.URL, "--token", "x", "--capabilities", "nope"}, &out, &out); err == nil {

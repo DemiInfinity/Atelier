@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -261,61 +262,71 @@ func (a *App) searchGitHub(ctx context.Context, who Actor, q string, d *searchDa
 // Private ones are cloned once with the token and then kept up to date by
 // a Tether link (Home: GitHub), so the token stays sealed.
 func (a *App) tetherMirrorToStudio(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	who := a.actor(r)
 	full := strings.TrimSpace(r.FormValue("repo"))
 	back := "/search?" + url.Values{"q": {r.FormValue("q")}, "src": {r.FormValue("src")}}.Encode()
 	sep := "&"
 	if b := r.FormValue("back"); ghSafeBack(b) {
 		back, sep = b, "?" // a /gh/… page (gh.go): errors go back there
 	}
-	fail := func(msg string) { http.Redirect(w, r, back+sep+"err="+url.QueryEscape(msg), http.StatusSeeOther) }
+	_, err := a.tetherMirrorRepo(r.Context(), a.actor(r), full)
+	var me tetherMirrorError
+	switch {
+	case errors.As(err, &me):
+		http.Redirect(w, r, back+sep+"err="+url.QueryEscape(string(me)), http.StatusSeeOther)
+	case err != nil:
+		a.fail(w, r, err)
+	default:
+		http.Redirect(w, r, "/settings/import", http.StatusSeeOther)
+	}
+}
+
+// tetherMirrorError is a problem with a "Mirror to studio" request that the
+// person can fix (not connected, not a repository, name taken…).
+type tetherMirrorError string
+
+func (e tetherMirrorError) Error() string { return string(e) }
+
+// tetherMirrorRepo starts mirroring the GitHub repository full ("owner/name")
+// into who's personal account and returns the new repository's full name. The
+// import runs in the background (Settings → Import shows it).
+func (a *App) tetherMirrorRepo(ctx context.Context, who Actor, full string) (string, error) {
 	if !tether.ValidRepo(full) {
-		fail("That isn't a GitHub repository.")
-		return
+		return "", tetherMirrorError("That isn't a GitHub repository.")
 	}
 	c, _, err := a.tetherLinkClient(ctx, who.PersonID, full)
 	if err != nil {
-		fail(tetherErrText(err))
-		return
+		return "", tetherMirrorError(tetherErrText(err))
 	}
 	gh, err := c.Repo(ctx, full)
 	if err != nil {
-		fail("Couldn't look up " + full + ": " + tetherErrText(err))
-		return
+		return "", tetherMirrorError("Couldn't look up " + full + ": " + tetherErrText(err))
 	}
 	me, err := a.db.Person(ctx, who.PersonID)
 	if err != nil {
-		a.fail(w, r, err)
-		return
+		return "", err
 	}
 	name := gh.Name
 	req := importer.Request{Source: "github", URL: a.tetherRemote(gh.FullName), Owner: me.Name, Name: name,
 		Description: eventExcerpt(gh.Description, 300), Private: true}
 	if _, err := importer.Check(ctx, a.db, req); err != nil {
-		fail(err.Error())
-		return
+		return "", tetherMirrorError(err.Error())
 	}
 	if !gh.Private {
 		req.Mirror, req.MirrorInterval = true, a.mirrorInterval()
 		if err := a.enqueueImports(ctx, []importer.Request{req}, who); err != nil {
-			a.fail(w, r, err)
-			return
+			return "", err
 		}
-		http.Redirect(w, r, "/settings/import", http.StatusSeeOther)
-		return
+		return me.Name + "/" + name, nil
 	}
 	tok, err := a.tetherLinkToken(ctx, who.PersonID, full)
 	if err != nil {
-		fail(tetherErrText(err))
-		return
+		return "", tetherMirrorError(tetherErrText(err))
 	}
 	req.Creds = importer.Creds{Token: tok}
 	id, err := a.db.CreateImportJob(ctx, store.ImportJob{Source: "github", SourceURL: req.URL, Owner: req.Owner, Name: req.Name,
 		Description: req.Description, Private: true, Mirror: true, ActorKind: who.Kind, ActorName: who.Name})
 	if err != nil {
-		a.fail(w, r, err)
-		return
+		return "", err
 	}
 	_ = a.db.SetImportJobStatus(ctx, id, "running", "Cloning through Tether…")
 	bctx := context.WithoutCancel(ctx)
@@ -331,5 +342,5 @@ func (a *App) tetherMirrorToStudio(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = a.db.SetImportJobStatus(bctx, id, "done", "Imported through Tether. It stays up to date with GitHub (Home: GitHub).")
 	})
-	http.Redirect(w, r, "/settings/import", http.StatusSeeOther)
+	return me.Name + "/" + name, nil
 }

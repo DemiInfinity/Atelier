@@ -1,0 +1,29 @@
+[package]
+name = "atl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anstyle = "1.0.14"
+atelier-core = { version = "0.1.0", path = "../atelier-core" }
+clap = { version = "4.5.61", features = ["derive"] }
+clap_complete = "4.5.67"
+dialoguer = "0.12.0"
+open = "5.4.5"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+time = { version = "0.3.41", features = ["parsing", "formatting", "local-offset"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "time", "signal"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+assert_cmd = "2.1.2"
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+time = { version = "0.3.41", features = ["formatting"] }
+tokio = { version = "1.53.3", features = ["rt-multi-thread", "macros", "net", "io-util"] }
+wiremock = "0.6.5"

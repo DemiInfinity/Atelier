@@ -206,6 +206,7 @@ type claudeCodeSession struct {
 	RunContext string
 	Binary     string                    // "" = claude on PATH
 	Log        func(stream, text string) // masked by the caller
+	OnTurn     func(turn, of int)        // optional: a turn started
 }
 
 func (s *claudeCodeSession) logf(stream, format string, a ...any) {
@@ -493,6 +494,9 @@ func (s *claudeCodeSession) run(ctx context.Context) (res agentResult, err error
 						if _, seen := perMsg[id]; !seen {
 							msgOrder = append(msgOrder, id)
 							assistantTurns++
+							if s.OnTurn != nil {
+								s.OnTurn(assistantTurns, maxTurns)
+							}
 						}
 						perMsg[id] = ev.Message.Usage.usage()
 					}

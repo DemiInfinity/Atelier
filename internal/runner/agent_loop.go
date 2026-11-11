@@ -51,6 +51,7 @@ type agentSession struct {
 	JobToken   string
 	RunContext string
 	Log        func(stream, text string) // stdout or system; masked by the caller
+	OnTurn     func(turn, of int)        // optional: a turn started
 
 	APIBaseURL string       // "" = the Claude API
 	HTTPClient *http.Client // for the Claude API and MCP (tests)
@@ -202,6 +203,9 @@ func (s *agentSession) run(ctx context.Context) (res agentResult, err error) {
 	for turn := 1; ; turn++ {
 		if turn > maxTurns {
 			return res, &agentStop{"max_turns", fmt.Sprintf("the agent stopped after %d turns (max-turns) before finishing", maxTurns)}
+		}
+		if s.OnTurn != nil {
+			s.OnTurn(turn, maxTurns)
 		}
 		remaining := budget - res.Usage.Counted()
 		if remaining < agentMinOutputPerTurn {

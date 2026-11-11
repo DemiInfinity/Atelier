@@ -24,6 +24,9 @@ type logStream struct {
 	mask     *Masker
 	onCancel func()
 	log      *slog.Logger
+	// tap, when set before the first line, also gets every masked line
+	// (the control channel's tail keeps the last few).
+	tap func(text string)
 
 	mu      sync.Mutex
 	pending []actions.LogLine
@@ -49,8 +52,12 @@ func (s *logStream) Line(step int, stream, text string) {
 		if len(part) > maxLineLen {
 			part = part[:maxLineLen] + "…"
 		}
+		masked := s.mask.Mask(part)
+		if s.tap != nil {
+			s.tap(masked)
+		}
 		s.mu.Lock()
-		s.pending = append(s.pending, actions.LogLine{Time: time.Now().UTC(), Step: step, Stream: stream, Text: s.mask.Mask(part)})
+		s.pending = append(s.pending, actions.LogLine{Time: time.Now().UTC(), Step: step, Stream: stream, Text: masked})
 		n := len(s.pending)
 		s.mu.Unlock()
 		if n >= logBatchLines {

@@ -56,6 +56,12 @@
       </form>
     </div>
     {{if not $s.CanMerge}}<p class="pr-merge-reason small" id="pr-merge-reason">{{$s.Reason}}</p>{{end}}
+    {{with pullAutoMerge $v.Repo.ID $p.Number}}
+    <form method="post" action="{{$d.URL}}/auto-merge" class="row gap-sm pr-automerge">
+      <p class="small"><strong>Will merge when checks pass</strong> <span class="muted">({{.Method}}, asked by {{.ByName}} {{ago .CreatedAt}})</span></p>
+      <button class="btn btn-sm" type="submit" name="action" value="cancel">Cancel</button>
+    </form>
+    {{end}}
     {{if $s.Conflicts}}
     <details class="pr-conflicts small">
       <summary>Conflicting files</summary>

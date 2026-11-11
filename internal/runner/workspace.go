@@ -494,7 +494,7 @@ func (r *Runner) RunWorkspaces(ctx context.Context, wc *WorkspaceConfig) error {
 	failures := 0
 	for ctx.Err() == nil {
 		started := time.Now()
-		req, err := r.Client.WorkspacePoll(ctx, actions.WorkspacePollRequest{Capabilities: r.Config.Capabilities,
+		req, err := r.Client.WorkspacePoll(ctx, actions.WorkspacePollRequest{Capabilities: r.Config.Caps(),
 			Version: r.Version, Presets: wc.PresetNames(), Root: root, SSH: wc.Remote == "ssh"})
 		if err != nil {
 			if ctx.Err() != nil {
@@ -506,11 +506,13 @@ func (r *Runner) RunWorkspaces(ctx context.Context, wc *WorkspaceConfig) error {
 			if errors.As(err, &he) && (he.Status == 401 || he.Status == 403 || he.Status == 404) {
 				d = maxBackoff
 			}
+			r.ctl.wsOnline.Store(false)
 			r.logger().Warn("workspace poll failed", "err", err, "retry_in", d.Round(time.Millisecond))
 			sleepCtx(ctx, d)
 			continue
 		}
 		failures = 0
+		r.ctl.wsOnline.Store(true)
 		if req != nil {
 			r.handleWorkspace(ctx, wc, root, req)
 			r.syncWorkspaces(ctx, root)

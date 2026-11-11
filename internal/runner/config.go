@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	"atelier/internal/actions"
 )
@@ -39,14 +40,30 @@ type Config struct {
 	// claude-code enable` (services start with a minimal PATH). Empty: look
 	// for claude on PATH.
 	ClaudeCodePath string `json:"claude_code_path,omitempty"`
+	// Paused: don't take new jobs (running ones finish). Set over the local
+	// control channel (control.go) or by hand.
+	Paused bool `json:"paused,omitempty"`
+	// PauseOnBattery: don't take new jobs while this device runs on battery.
+	PauseOnBattery bool `json:"pause_on_battery,omitempty"`
+
+	// mu guards the fields the control channel changes while the runner
+	// runs: Capabilities, Parallel, Paused and PauseOnBattery.
+	mu sync.RWMutex
+}
+
+// Caps is a copy of the capabilities switched on in the config.
+func (c *Config) Caps() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return append([]string(nil), c.Capabilities...)
 }
 
 // AdvertisedCaps are the capabilities sent to the server: the ones switched
 // on in the config, plus "agents" when jobs are on, since this runner
 // understands agent steps.
 func (c *Config) AdvertisedCaps() []string {
-	out := append([]string(nil), c.Capabilities...)
-	if c.HasCap(actions.CapJobs) && !slices.Contains(out, actions.CapAgents) {
+	out := c.Caps()
+	if slices.Contains(out, actions.CapJobs) && !slices.Contains(out, actions.CapAgents) {
 		out = append(out, actions.CapAgents)
 	}
 	return out
@@ -88,7 +105,9 @@ func (c *Config) Save(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
+	c.mu.RLock()
 	b, err := json.MarshalIndent(c, "", "  ")
+	c.mu.RUnlock()
 	if err != nil {
 		return err
 	}
@@ -118,7 +137,11 @@ func (c *Config) Save(path string) error {
 }
 
 // HasCap reports whether a capability is switched on.
-func (c *Config) HasCap(name string) bool { return slices.Contains(c.Capabilities, name) }
+func (c *Config) HasCap(name string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return slices.Contains(c.Capabilities, name)
+}
 
 // Dirs fills in defaults for the work and cache directories.
 func (c *Config) Dirs() (work, cache string) {

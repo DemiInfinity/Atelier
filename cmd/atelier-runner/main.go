@@ -3,13 +3,14 @@
 //	atelier-runner register --url URL --token TOKEN [--name N] [--labels a,b] [--capabilities jobs,docker,discovery]
 //	atelier-runner run [--parallel N] [--grace 2m]
 //	atelier-runner install [--system] [--dry-run] | uninstall [--dry-run]
-//	atelier-runner status | version
+//	atelier-runner status [--json] | version
 //
 // Every command takes --config PATH (default: <user config dir>/atelier-runner/config.json).
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -34,9 +35,21 @@ var version = "dev"
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "atelier-runner:", err)
+		var ee *exitError
+		if errors.As(err, &ee) {
+			os.Exit(ee.code)
+		}
 		os.Exit(1)
 	}
 }
+
+// exitError is an error with its own exit code.
+type exitError struct {
+	code int
+	msg  string
+}
+
+func (e *exitError) Error() string { return e.msg }
 
 const usage = `atelier-runner runs Atelier Actions jobs on this device.
 
@@ -45,7 +58,7 @@ Commands:
   run        run in the foreground [--parallel N] [--grace DURATION]
   install    install as a service (launchd / systemd / Windows service) [--system] [--dry-run]
   uninstall  remove the service [--dry-run]
-  status     show configuration and service state
+  status     show configuration, service state and the running runner [--json]; exit code 3 when not running
   workspaces enable|disable|show: "Open on <device>" workspaces (off by default)
   claude-code enable|disable|show: run engine: claude-code agents with this device's Claude Code [--path]
   version    print the version
@@ -184,6 +197,14 @@ func runCmd(ctx context.Context, args []string, stderr io.Writer) error {
 		Log:      slog.New(slog.NewTextHandler(stderr, nil)),
 		Parallel: p,
 		Grace:    *grace,
+
+		ConfigPath: *cfgPath,
+	}
+	// the local control channel (docs/app-api.md, section 10); the runner works without it
+	if stop, err := r.StartControl(); err != nil {
+		r.Log.Warn("the local control channel is off", "err", err)
+	} else {
+		defer stop()
 	}
 	return r.Run(ctx)
 }
@@ -239,13 +260,42 @@ func installCmd(args []string, stdout io.Writer, uninstall bool) error {
 	return service.Install(spec, o)
 }
 
+// exitNotRunning is the exit code of `status` when no runner answers.
+const exitNotRunning = 3
+
+// statusCmd shows the configuration and the service state, then asks the
+// running runner for its live status over the local control channel
+// (docs/app-api.md, section 10). --json prints only that reply.
 func statusCmd(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	cfgPath := configFlag(fs)
 	system := fs.Bool("system", false, "Linux: check the system unit")
+	asJSON := fs.Bool("json", false, "print the running runner's status as JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	raw, liveErr := runner.ControlRequest(*cfgPath, map[string]string{"op": "status"}, 10*time.Second)
+	var st runner.ControlStatus
+	if liveErr == nil {
+		if err := json.Unmarshal(raw, &st); err != nil {
+			liveErr = fmt.Errorf("control channel: %w", err)
+		} else if !st.OK {
+			liveErr = fmt.Errorf("control channel: %s", st.Error)
+		}
+	}
+	notRunning := errors.Is(liveErr, runner.ErrNotRunning)
+	if *asJSON {
+		switch {
+		case notRunning:
+			fmt.Fprintln(stdout, `{"ok":false,"error":"not running"}`)
+			return &exitError{exitNotRunning, "not running"}
+		case liveErr != nil:
+			return liveErr
+		}
+		fmt.Fprintln(stdout, string(raw))
+		return nil
+	}
+
 	fmt.Fprintf(stdout, "atelier-runner %s (%s/%s)\nConfig: %s\n", version, runtime.GOOS, runtime.GOARCH, *cfgPath)
 	cfg, err := runner.LoadConfig(*cfgPath)
 	if err != nil {
@@ -263,7 +313,64 @@ func statusCmd(args []string, stdout io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "Service: %s\n", st)
 	}
+	switch {
+	case notRunning:
+		fmt.Fprintln(stdout, "Process: not running")
+		return &exitError{exitNotRunning, "not running"}
+	case liveErr != nil:
+		fmt.Fprintln(stdout, "Process: no answer on", runner.ControlAddress(*cfgPath))
+		return liveErr
+	}
+	printLiveStatus(stdout, &st)
 	return nil
+}
+
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
+func printLiveStatus(w io.Writer, st *runner.ControlStatus) {
+	fmt.Fprintf(w, "Process: running (version %s)\n", st.Version)
+	if st.Online {
+		fmt.Fprintf(w, "Connection: online (%s)\n", st.Server)
+	} else {
+		fmt.Fprintf(w, "Connection: offline (the last poll of %s didn't succeed)\n", st.Server)
+	}
+	taking := "yes"
+	if !st.TakingJobs {
+		taking = "no"
+		if st.PausedReason != nil {
+			switch *st.PausedReason {
+			case "user":
+				taking = "no (paused)"
+			case "battery":
+				taking = "no (on battery)"
+			case "jobs_off":
+				taking = "no (the jobs capability is off)"
+			default:
+				taking = "no (" + *st.PausedReason + ")"
+			}
+		}
+	}
+	fmt.Fprintf(w, "Taking jobs: %s\n", taking)
+	fmt.Fprintf(w, "Rules: pause on battery %s, %d at once, container jobs %s\n",
+		onOff(st.Rules.PauseOnBattery), st.Rules.MaxParallel, onOff(st.Rules.ContainerJobs))
+	if len(st.Current) == 0 {
+		fmt.Fprintln(w, "Running now: nothing")
+		return
+	}
+	fmt.Fprintln(w, "Running now:")
+	for _, j := range st.Current {
+		line := fmt.Sprintf("  job %d  %s  %s (%s), %s", j.JobID, j.Repo, j.Workflow, j.Kind,
+			time.Since(j.StartedAt).Round(time.Second))
+		if j.Detail != "" {
+			line += ": " + j.Detail
+		}
+		fmt.Fprintln(w, line)
+	}
 }
 
 func splitList(s string) []string {

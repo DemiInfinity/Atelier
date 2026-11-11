@@ -21,6 +21,9 @@ type actCheck struct {
 	Detail   string // the job's own status (queued, waiting, cancelled…)
 	URL      string
 	Required bool
+	// RunID and JobID name the Actions job behind the check (0 for checks
+	// set by bots and other apps).
+	RunID, JobID int64
 }
 
 type actChecks struct {
@@ -77,7 +80,7 @@ func (a *App) commitChecks(ctx context.Context, rp store.Repo, sha string, requi
 		}
 		seen[key] = true
 		c := actCheck{Name: j.Name, Workflow: run.WorkflowName, Status: checkStatus(j.Status), Detail: j.Status,
-			URL: actionsRunURL(rp, run)}
+			URL: actionsRunURL(rp, run), RunID: run.ID, JobID: j.ID}
 		out.Checks = append(out.Checks, c)
 	}
 	// Commit statuses and check runs from bots and other apps.

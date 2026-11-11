@@ -44,6 +44,7 @@ func (j *jobRun) runAgent(ctx context.Context, sc *scope, st stepDef, stepEnv en
 		}
 	}
 	logf := func(stream, text string) { j.log.Line(sc.logStep, stream, text) }
+	onTurn := func(turn, of int) { j.live.setDetail(fmt.Sprintf("turn %d of %d", turn, of)) }
 	var res agentResult
 	var runErr error
 	engine := ag.Engine
@@ -53,14 +54,14 @@ func (j *jobRun) runAgent(ctx context.Context, sc *scope, st stepDef, stepEnv en
 			return 1, errors.New("agent: this runner hasn't switched on Claude Code: run `atelier-runner claude-code enable` on it")
 		}
 		s := &claudeCodeSession{Step: *ag, JobToken: j.job.JobToken, RunContext: j.agentRunContext(),
-			Binary: j.r.Config.ClaudeCodePath, Log: logf}
+			Binary: j.r.Config.ClaudeCodePath, Log: logf, OnTurn: onTurn}
 		res, runErr = s.run(ctx)
 	} else {
 		engine = workflow.AgentEngine
 		key := strings.TrimSpace(with["api-key"])
 		j.mask.Add(key)
 		s := &agentSession{Step: *ag, APIKey: key, JobToken: j.job.JobToken, RunContext: j.agentRunContext(),
-			APIBaseURL: agentAPIBaseURL(), HTTPClient: agentHTTPClient, Log: logf}
+			APIBaseURL: agentAPIBaseURL(), HTTPClient: agentHTTPClient, Log: logf, OnTurn: onTurn}
 		res, runErr = s.run(ctx)
 	}
 

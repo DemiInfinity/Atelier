@@ -1,0 +1,45 @@
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "devices"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Devices</h1>
+      <p class="muted">The Atelier desktop app and the <code>atl</code> command sign in here as devices. A device can read and write your repositories and use the app. It can't change settings, manage tokens or keys, or approve other devices.</p>
+    </div>
+    {{template "flash" .}}
+
+    <form method="get" action="/settings/devices/approve" class="card stack">
+      <h2 class="h-sm">Approve a device</h2>
+      {{if $d.Remote}}
+      <p class="small muted">Devices can only be approved from your home network, not through remote access.</p>
+      {{else}}
+      <div class="row wrap-gap">
+        <div class="field grow">
+          <label for="dev-code">Code shown on the device</label>
+          <input id="dev-code" name="code" required maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" class="mono" placeholder="AMBER-4127">
+        </div>
+      </div>
+      <div class="row-end"><button class="btn btn-primary" type="submit">Continue</button></div>
+      {{end}}
+    </form>
+
+    <section class="list-card" aria-labelledby="dev-list">
+      <div class="list-head" id="dev-list">Your devices</div>
+      {{range $d.Devices}}
+      <div class="list-row">
+        <div class="grow min0">
+          <strong class="break">{{.Name}}</strong> <span class="pill">{{if eq .Kind "cli"}}Command line{{else}}Desktop app{{end}}</span>
+          <div class="small muted">{{if .OS}}{{.OS}}{{else}}Unknown system{{end}}{{if .Version}} · version {{.Version}}{{end}} · signed in {{ago .CreatedAt}}</div>
+          <div class="small muted">{{if .LastSeen.IsZero}}Never seen{{else}}Last seen {{ago .LastSeen}}{{end}}{{if .LastIP}} from <span class="mono">{{.LastIP}}</span>{{end}}</div>
+        </div>
+        <form method="post" action="/settings/devices/revoke"><input type="hidden" name="id" value="{{.ID}}"><button class="btn btn-danger btn-sm" type="submit" aria-label="Revoke device {{.Name}}">Revoke</button></form>
+      </div>
+      {{else}}
+      <div class="list-row muted">No devices yet. Start a sign-in from the desktop app or run <code>atl login</code>.</div>
+      {{end}}
+    </section>
+    <p class="small muted">Revoking a device stops its token at once and removes the SSH keys it added.</p>
+  </div>
+</main>
+{{end}}

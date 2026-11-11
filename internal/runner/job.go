@@ -98,6 +98,7 @@ type jobRun struct {
 	r    *Runner
 	spec *JobSpec
 	job  *actions.Job
+	live *liveJob // what the control channel shows of this job (control.go)
 	log  *logStream
 	mask *Masker
 	slog *slog.Logger
@@ -144,7 +145,10 @@ func (r *Runner) runJob(parent context.Context, spec *JobSpec) {
 	defer r.untrackJob(job.ID)
 
 	j := &jobRun{r: r, spec: spec, job: job, mask: m, slog: r.logger(), ctx: ctx, cancel: cancel, actDirs: map[string]string{}}
+	j.live = r.ctl.addJob(spec, m, started, func() { cancel(errCancelled) })
+	defer r.ctl.removeJob(job.ID)
 	j.log = newLogStream(r.Client, job.ID, m, func() { cancel(errCancelled) }, r.logger())
+	j.log.tap = j.live.addLine
 
 	status, outputs, setupErr := j.execute()
 
@@ -490,6 +494,7 @@ func (j *jobRun) runOneStep(sc *scope, st stepDef) stepResult {
 		return skip
 	}
 	j.log.System(sc.logStep, "Run "+strings.TrimPrefix(name, "Run "))
+	j.live.setDetail(name)
 
 	// When the job was already interrupted (an always() step), give it a
 	// fresh, bounded context.

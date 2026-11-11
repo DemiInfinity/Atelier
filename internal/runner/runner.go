@@ -30,9 +30,14 @@ type Runner struct {
 	// MaxBackoff caps the error backoff (default 60s).
 	MaxBackoff time.Duration
 
+	// ConfigPath is the config file; changes made over the control channel
+	// (control.go) are persisted there. Empty: they only last until exit.
+	ConfigPath string
+
 	fetchMu sync.Mutex
 	jobsMu  sync.Mutex
 	jobs    map[int64]context.CancelCauseFunc
+	ctl     controlState // local control channel state (control.go)
 }
 
 func (r *Runner) logger() *slog.Logger {
@@ -88,7 +93,6 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 // Run polls for jobs until ctx is cancelled, then shuts down gracefully:
 // running jobs get Grace to finish and are then cancelled and reported.
 func (r *Runner) Run(ctx context.Context) error {
-	parallel := max(r.Parallel, 1)
 	maxBackoff := r.MaxBackoff
 	if maxBackoff == 0 {
 		maxBackoff = 60 * time.Second
@@ -110,33 +114,39 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 	labels := AllLabels(r.Config.Labels)
 	r.logger().Info("runner started", "name", r.Config.Name, "server", r.Config.ServerURL, "labels", labels,
-		"capabilities", r.Config.Capabilities, "parallel", parallel, "os", runtime.GOOS, "arch", runtime.GOARCH)
+		"capabilities", r.Config.Caps(), "parallel", r.maxParallel(), "os", runtime.GOOS, "arch", runtime.GOARCH)
 
 	// jobs run on a context that is not cancelled with ctx: shutdown cancels
 	// them explicitly after the grace period, with errShutdown as the cause.
 	jobCtx := context.WithoutCancel(ctx)
-	slots := make(chan struct{}, parallel)
 	var wg sync.WaitGroup
 	failures := 0
 	for ctx.Err() == nil {
-		busy := len(slots) >= parallel
+		// busy: every slot is taken, or the runner is paused (control.go).
+		// Either way it only heartbeats and the server sends it no job.
+		busy := r.busy()
 		if busy {
-			// all slots taken: heartbeat until one frees up
+			// heartbeat until a slot frees up or a setting changes
 			select {
 			case <-ctx.Done():
 				continue
-			case slots <- struct{}{}:
-				<-slots
+			case <-r.ctl.wakeCh():
 				continue
 			case <-time.After(hb):
 			}
 		}
 		started := time.Now()
-		job, err := r.Client.Poll(ctx, actions.PollRequest{Labels: labels, Capabilities: r.Config.AdvertisedCaps(), Busy: busy, Version: r.Version})
+		pollCtx, pollDone := r.pollContext(ctx, busy)
+		job, err := r.Client.Poll(pollCtx, actions.PollRequest{Labels: labels, Capabilities: r.Config.AdvertisedCaps(), Busy: busy, Version: r.Version})
+		interrupted := pollDone()
 		if err != nil {
 			if ctx.Err() != nil {
 				break
 			}
+			if interrupted {
+				continue // a control change (pause, rules) stopped this poll
+			}
+			r.ctl.jobsOnline.Store(false)
 			failures++
 			d := backoff(failures, maxBackoff)
 			var he *HTTPError
@@ -150,6 +160,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			continue
 		}
 		failures = 0
+		r.ctl.jobsOnline.Store(true)
 		if job == nil {
 			// a server that answers at once (no long-poll) must not make us spin
 			if time.Since(started) < time.Second {
@@ -157,17 +168,16 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		if busy {
+		if r.slotsFull() {
 			r.logger().Warn("server sent a job to a busy runner; it will run when a slot frees", "job", job.ID)
-			slots <- struct{}{}
-		} else {
-			slots <- struct{}{}
+			r.waitSlot(ctx)
 		}
 		r.logger().Info("job received", "job", job.ID, "name", job.Name, "repo", job.Repo.Owner+"/"+job.Repo.Name)
+		r.ctl.running.Add(1)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() { <-slots }()
+			defer func() { r.ctl.running.Add(-1); r.ctl.wake() }()
 			r.runJob(jobCtx, job)
 		}()
 	}

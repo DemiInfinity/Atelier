@@ -30,7 +30,7 @@
       </div>
       <div class="field grow">
         <label for="access">Access</label>
-        <select id="access" name="access"><option value="write">Read and write (push)</option><option value="read">Read only (clone)</option><optgroup label="Packages"><option value="write-packages">Repositories and packages, read and write</option><option value="packages-write">Packages: install and publish</option><option value="packages-read">Packages: install only</option></optgroup><optgroup label="MCP (for Claude and other AI clients)"><option value="mcp">MCP: read and write (issues, pull requests, releases)</option><option value="mcp-read">MCP: read only</option></optgroup></select>
+        <select id="access" name="access"><option value="write">Read and write (push)</option><option value="read">Read only (clone)</option><optgroup label="Packages"><option value="write-packages">Repositories and packages, read and write</option><option value="packages-write">Packages: install and publish</option><option value="packages-read">Packages: install only</option></optgroup><optgroup label="MCP (for Claude and other AI clients)"><option value="mcp">MCP: read and write (issues, pull requests, releases)</option><option value="mcp-read">MCP: read only</option></optgroup><optgroup label="App API (for scripts; the desktop app and atl sign in under Devices)"><option value="app">App API: read and write</option></optgroup></select>
       </div>
       <div class="field grow">
         <label for="expires">Expires</label>

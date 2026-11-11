@@ -75,9 +75,27 @@ func (a *App) home(w http.ResponseWriter, r *http.Request) {
 	}
 	repos = a.readableRepos(ctx, who, repos)
 
-	// Recent activity: the latest commit in each recently updated repo.
+	acts := a.homeActivity(ctx, all)
+
+	cells, total := a.embers(ctx, all)
+	// Tether: GitHub activity blended in, and "Popular this week" (cache only).
+	acct := ""
+	if r.URL.Query().Get("account") != "" {
+		acct = active.Name
+	}
+	th := a.tetherHomeData(ctx, a.actor(r).PersonID, r.URL.Query().Get("lang"), acct)
+	a.render(w, r, "home", page{Title: "Home", Nav: "home", Data: map[string]any{
+		"Owners": owners, "Active": active, "Repos": repos, "Activity": acts,
+		"Embers": cells, "EmberTotal": total, "Tether": th, "Feed": a.connectHomeFeed(ctx, who, blendHomeFeed(acts, th.Feed, 24), 24),
+	}})
+}
+
+// homeActivity is the local side of the home feed: the latest commit in each
+// recently updated repository (at most 8), newest first. repos must already
+// be limited to what the viewer may read.
+func (a *App) homeActivity(ctx context.Context, repos []store.Repo) []activity {
 	var acts []activity
-	for _, rp := range all {
+	for _, rp := range repos {
 		if len(acts) == 8 {
 			break
 		}
@@ -91,18 +109,7 @@ func (a *App) home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.SliceStable(acts, func(i, j int) bool { return acts[i].Commit.When.After(acts[j].Commit.When) })
-
-	cells, total := a.embers(ctx, all)
-	// Tether: GitHub activity blended in, and "Popular this week" (cache only).
-	acct := ""
-	if r.URL.Query().Get("account") != "" {
-		acct = active.Name
-	}
-	th := a.tetherHomeData(ctx, a.actor(r).PersonID, r.URL.Query().Get("lang"), acct)
-	a.render(w, r, "home", page{Title: "Home", Nav: "home", Data: map[string]any{
-		"Owners": owners, "Active": active, "Repos": repos, "Activity": acts,
-		"Embers": cells, "EmberTotal": total, "Tether": th, "Feed": a.connectHomeFeed(ctx, who, blendHomeFeed(acts, th.Feed, 24), 24),
-	}})
+	return acts
 }
 
 // embers builds a 53-week contribution grid (column = week, Sunday first).
@@ -555,6 +562,9 @@ var tokenScopes = map[string][]string{
 	// MCP (Claude and other AI clients): the MCP tools, limited per repository by a.can.
 	"mcp":      {"mcp", "repo:read", "repo:write"},
 	"mcp-read": {"mcp", "repo:read"},
+	// The app API (/api/app/v1, docs/app-api.md) for scripts; the desktop app
+	// and the atl CLI sign in as devices instead (appapi.go).
+	"app": {"app", "repo:read", "repo:write"},
 }
 
 var tokenExpiry = map[string]time.Duration{

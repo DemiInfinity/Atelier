@@ -1,0 +1,40 @@
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "devices"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Approve a device</h1>
+      <p class="muted">Only approve a sign-in you started yourself, and check the code matches the one on the device.</p>
+    </div>
+    {{template "flash" .}}
+
+    {{if $d.Found}}{{with $d.Code}}
+    <section class="card stack" aria-labelledby="dev-approve-h">
+      <h2 class="h-sm" id="dev-approve-h">{{.Name}} wants to sign in</h2>
+      <dl class="stack-sm">
+        <div class="row gap-sm"><dt class="muted">Code</dt><dd class="mono"><strong>{{.UserCode}}</strong></dd></div>
+        <div class="row gap-sm"><dt class="muted">Kind</dt><dd>{{if eq .Kind "cli"}}Command line (atl){{else}}Desktop app{{end}}</dd></div>
+        <div class="row gap-sm"><dt class="muted">System</dt><dd>{{if .OS}}{{.OS}}{{else}}Unknown{{end}}{{if .Version}} · version {{.Version}}{{end}}</dd></div>
+        <div class="row gap-sm"><dt class="muted">Asked from</dt><dd class="mono">{{if .IP}}{{.IP}}{{else}}unknown{{end}}</dd></div>
+      </dl>
+      <p class="small muted">Approving lets this device read and write your repositories and use the app as you. You can revoke it under Settings → Devices.</p>
+      <form method="post" action="/settings/devices/approve" class="row gap-sm">
+        <input type="hidden" name="code" value="{{.UserCode}}">
+        <button class="btn btn-primary" type="submit" name="decision" value="approve">Approve</button>
+        <button class="btn" type="submit" name="decision" value="deny">Deny</button>
+      </form>
+    </section>
+    {{end}}{{else}}
+    <form method="get" action="/settings/devices/approve" class="card stack">
+      <h2 class="h-sm">Enter the code</h2>
+      <div class="field">
+        <label for="dev-code">Code shown on the device</label>
+        <input id="dev-code" name="code" required maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" class="mono" placeholder="AMBER-4127" value="{{$d.Asked}}">
+      </div>
+      <div class="row-end"><a class="btn" href="/settings/devices">Back to devices</a><button class="btn btn-primary" type="submit">Continue</button></div>
+    </form>
+    {{end}}
+  </div>
+</main>
+{{end}}

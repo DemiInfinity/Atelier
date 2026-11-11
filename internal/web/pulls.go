@@ -784,26 +784,33 @@ func (a *App) pullIdentity(ctx context.Context) gitrepo.Signature {
 	return sig
 }
 
-func (a *App) pullMerge(w http.ResponseWriter, r *http.Request) {
-	v, g, p, ok := a.loadPull(w, r)
-	if !ok {
-		return
-	}
-	ctx := r.Context()
+// pullMergeError is why a merge was refused, with the HTTP status that fits.
+type pullMergeError struct {
+	Code int
+	Msg  string
+}
+
+func (e *pullMergeError) Error() string { return e.Msg }
+
+// pullMergeOpts is one merge request, from the web button or the app API.
+type pullMergeOpts struct {
+	Method       string
+	ExpectedHead string // refuse if the head branch moved past this commit ("" = don't check)
+	DeleteBranch bool
+}
+
+// mergePull merges an open pull request for who, after checking the merge
+// status (conflicts, branch rules, required checks) and the method. d is the
+// freshly built page data. Refusals come back as *pullMergeError.
+func (a *App) mergePull(ctx context.Context, v *repoView, g *gitrepo.Repo, d *pullPageData, opts pullMergeOpts, who Actor) (*gitrepo.MergeResult, error) {
+	p := d.P
 	if !p.IsOpen() {
-		a.renderPull(w, r, v, g, p, "overview", "This pull request isn't open.", http.StatusConflict)
-		return
-	}
-	d, err := a.buildPull(r, v, g, p, "overview")
-	if err != nil {
-		a.fail(w, r, err)
-		return
+		return nil, &pullMergeError{http.StatusConflict, "This pull request isn't open."}
 	}
 	if !d.Status.CanMerge {
-		a.renderPull(w, r, v, g, d.P, "overview", "Can't merge yet: "+d.Status.Reason, http.StatusConflict)
-		return
+		return nil, &pullMergeError{http.StatusConflict, "Can't merge yet: " + d.Status.Reason}
 	}
-	method := r.FormValue("method")
+	method := opts.Method
 	var allowed bool
 	for _, m := range d.Status.Methods {
 		if m.Value == method {
@@ -811,13 +818,11 @@ func (a *App) pullMerge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !allowed {
-		a.renderPull(w, r, v, g, d.P, "overview", "That merge method isn't allowed here.", http.StatusUnprocessableEntity)
-		return
+		return nil, &pullMergeError{http.StatusUnprocessableEntity, "That merge method isn't allowed here."}
 	}
 
-	who := a.actor(r)
 	committer := a.pullIdentity(ctx)
-	req := gitrepo.MergeRequest{Base: p.Base, Head: p.Head, ExpectedHead: r.FormValue("expected_head"),
+	req := gitrepo.MergeRequest{Base: p.Base, Head: p.Head, ExpectedHead: opts.ExpectedHead,
 		Method: method, Committer: committer, Author: committer}
 	if method == "squash" {
 		var b strings.Builder
@@ -841,34 +846,57 @@ func (a *App) pullMerge(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := g.MergeBranches(ctx, req)
 	if err != nil {
-		msg := ""
 		switch {
 		case errors.Is(err, gitrepo.ErrRefMoved):
-			msg = "A branch changed while merging (probably a new push). Check the latest changes and try again."
+			return nil, &pullMergeError{http.StatusConflict, "A branch changed while merging (probably a new push). Check the latest changes and try again."}
 		case errors.Is(err, gitrepo.ErrMergeConflict):
-			msg = "The branches now have conflicts."
+			return nil, &pullMergeError{http.StatusConflict, "The branches now have conflicts."}
 		case errors.Is(err, gitrepo.ErrNothingToMerge):
-			msg = "There's nothing left to merge."
-		default:
-			a.fail(w, r, err)
-			return
+			return nil, &pullMergeError{http.StatusConflict, "There's nothing left to merge."}
 		}
-		a.renderPull(w, r, v, g, d.P, "overview", msg, http.StatusConflict)
-		return
+		return nil, err
 	}
 	if err := a.db.MarkPullMerged(ctx, p.ID, method, res.SHA, res.BaseBefore, res.Head, who.Name); err != nil {
-		a.fail(w, r, err)
-		return
+		return nil, err
 	}
 	_ = a.db.AddPullEvent(ctx, p.ID, "merged", who.Kind, who.Name, method+" "+res.SHA)
 	a.emit(ctx, pullEvent(EventPullMerged, v, p, who, "into "+p.Base))
 	_ = a.db.TouchRepo(ctx, v.Repo.ID)
 	a.closeReferencedIssues(ctx, v.Repo.ID, p, who)
 
-	if r.FormValue("delete_branch") != "" && p.Head != v.Default && !a.headProtected(ctx, v.Repo.ID, p.Head) {
+	if opts.DeleteBranch && p.Head != v.Default && !a.headProtected(ctx, v.Repo.ID, p.Head) {
 		if err := g.DeleteBranch(ctx, p.Head, res.Head, committer); err == nil {
 			_ = a.db.AddPullEvent(ctx, p.ID, "branch_deleted", who.Kind, who.Name, p.Head)
 		}
+	}
+	return res, nil
+}
+
+func (a *App) pullMerge(w http.ResponseWriter, r *http.Request) {
+	v, g, p, ok := a.loadPull(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	if !p.IsOpen() {
+		a.renderPull(w, r, v, g, p, "overview", "This pull request isn't open.", http.StatusConflict)
+		return
+	}
+	d, err := a.buildPull(r, v, g, p, "overview")
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	_, err = a.mergePull(ctx, v, g, d, pullMergeOpts{Method: r.FormValue("method"), ExpectedHead: r.FormValue("expected_head"),
+		DeleteBranch: r.FormValue("delete_branch") != ""}, a.actor(r))
+	var me *pullMergeError
+	switch {
+	case errors.As(err, &me):
+		a.renderPull(w, r, v, g, d.P, "overview", me.Msg, me.Code)
+		return
+	case err != nil:
+		a.fail(w, r, err)
+		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s/pulls/%d", v.Base, p.Number), http.StatusSeeOther)
 }
