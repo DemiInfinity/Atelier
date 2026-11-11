@@ -19,8 +19,9 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 
 FROM alpine:3.22 AS runner
 # git for checkout, bash for run steps, nodejs for JavaScript actions,
-# docker-cli for container: jobs (mount the host's /var/run/docker.sock)
-RUN apk add --no-cache git ca-certificates tzdata bash nodejs docker-cli \
+# docker-cli for container: jobs (mount the host's /var/run/docker.sock),
+# docker-cli-buildx so `docker build` uses BuildKit (the legacy builder is deprecated)
+RUN apk add --no-cache git ca-certificates tzdata bash nodejs docker-cli docker-cli-buildx \
  && git config --system safe.directory '*' \
  && mkdir -p /runner
 COPY --from=runner-build /out/atelier-runner /usr/local/bin/atelier-runner
