@@ -1,4 +1,4 @@
-{{define "head"}}{{template "actions-head" .}}{{end}}
+{{define "head"}}{{template "actions-head" .}}{{template "agents-head" .}}{{end}}
 {{define "content"}}
 {{$d := .Data}}{{$v := $d.V}}
 {{template "repohead" $v}}
@@ -20,7 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - run: make test</pre>
         <button type="button" class="btn btn-sm" data-copy="#act-starter">Copy</button>
-        <p class="small muted">Markdown workflows that run an agent arrive in Phase 4.</p>
+        <p class="small muted">Or write the task in plain Markdown and let a Claude agent run it with only the tools you allow.</p>
+        <a class="btn btn-sm agent-add" href="{{$v.Base}}/actions/agents/new">Add an agent</a>
       </div>
     </details>
 
@@ -101,12 +102,7 @@ jobs:
     </div>
     {{template "flash" .}}
 
-    {{if $d.Selected}}{{if $d.Selected.Agentic}}
-    <section class="card act-agent stack-sm">
-      <p><span class="act-chip is-agent">Agent</span> <strong>Agentic workflows arrive in Phase 4.</strong></p>
-      <p class="small muted">This Markdown workflow will compile to a locked YAML workflow that runs an AI engine with only the MCP tools you allow. Until then it doesn't run.</p>
-    </section>
-    {{end}}
+    {{if $d.Selected}}{{if $d.Agent}}{{template "agents-panel" $d.Agent}}{{end}}
     <details class="list-card act-source">
       <summary class="list-head row-between"><span>Workflow file</span><a class="small" href="{{$d.SourceURL}}">View on {{$v.Default}}</a></summary>
       <div class="table-scroll">

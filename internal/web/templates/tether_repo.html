@@ -1,0 +1,96 @@
+{{define "head"}}<link rel="stylesheet" href="/static/tether.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap narrow stack-lg">
+  <div>
+    <h1 class="h-display row gap-sm">{{template "tether-icon" 22}} Tether</h1>
+    <p class="muted">Link {{$v.Repo.FullName}} to a twin on GitHub and choose which side is home for {{$v.Default}}.</p>
+  </div>
+  {{template "flash" .}}
+
+  {{with $d.Link}}
+  {{if .Diverged}}
+  <section class="tt-banner stack-sm" role="alert" aria-labelledby="tt-recon">
+    <h2 class="h-sm" id="tt-recon">The default branches differ</h2>
+    <p class="small">{{.Diverged}} Nothing was overwritten. Choose which side to keep:</p>
+    <div class="row wrap-gap">
+      <form method="post" action="{{$v.Base}}/settings/tether/reconcile"><input type="hidden" name="keep" value="atelier"><button class="btn btn-sm" type="submit">Keep Atelier's {{$v.Default}} (force-push it to GitHub)</button></form>
+      <form method="post" action="{{$v.Base}}/settings/tether/reconcile"><input type="hidden" name="keep" value="github"><button class="btn btn-sm" type="submit">Keep GitHub's {{$v.Default}} (Atelier's old tip is backed up)</button></form>
+    </div>
+    <p class="hint">Or merge the two yourself and push, then press Sync now.</p>
+  </section>
+  {{end}}
+
+  <section class="tt-card stack" aria-labelledby="tt-twin">
+    <div class="row-between wrap-gap">
+      <h2 class="h-sm" id="tt-twin">Linked to <a href="{{$d.GHURL}}" rel="noopener noreferrer" target="_blank">{{.GHRepo}} ↗</a></h2>
+      <div class="row gap-sm">
+        <form method="post" action="{{$v.Base}}/settings/tether/sync"><button class="btn btn-tether btn-sm" type="submit">Sync now</button></form>
+        <form method="post" action="{{$v.Base}}/settings/tether/unlink"><button class="btn btn-danger btn-sm" type="submit">Unlink</button></form>
+      </div>
+    </div>
+    {{if $d.OtherPerson}}<p class="small">This link uses another person's GitHub connection.</p>{{end}}
+    <dl class="tt-dl small">
+      <dt>Home</dt><dd>{{if eq .Home "github"}}GitHub owns {{$v.Default}}; Atelier fetches it, and merges happen on GitHub.{{else}}Atelier owns {{$v.Default}}; pushes are mirrored to GitHub.{{end}}</dd>
+      <dt>Issues</dt><dd>{{if .SyncIssues}}New GitHub issues and comments sync in; comments made here go to GitHub.{{else}}Only comments on mirrored pull requests sync.{{end}}</dd>
+      {{if eq .Home "atelier"}}<dt>Last push</dt><dd>{{with .LastPushAt}}{{ago .}}{{else}}not yet{{end}}{{with .PushError}} · <span class="tt-error">{{.}}</span>{{end}}</dd>
+      {{else}}<dt>Last fetch</dt><dd>{{with .LastFetchAt}}{{ago .}}{{else}}not yet{{end}}{{with .FetchError}} · <span class="tt-error">{{.}}</span>{{end}}</dd>{{end}}
+      <dt>Last sync</dt><dd>{{with .LastSyncAt}}{{ago .}}{{else}}not yet{{end}}{{with .SyncError}} · <span class="tt-error">{{.}}</span>{{end}}</dd>
+    </dl>
+  </section>
+
+  <section class="card stack" aria-labelledby="tt-home">
+    <h2 class="h-sm" id="tt-home">Home</h2>
+    <form method="post" action="{{$v.Base}}/settings/tether/home" class="stack-sm">
+      <fieldset class="field">
+        <legend class="sr-only">Which side owns {{$v.Default}}</legend>
+        <label class="choice"><input type="radio" name="home" value="atelier" {{if eq .Home "atelier"}}checked{{end}}><span><strong>Home: Atelier</strong><span class="small muted">Atelier owns {{$v.Default}}. Every push here (and every merge) is mirrored to GitHub. {{$v.Default}} is never force-pushed.</span></span></label>
+        <label class="choice"><input type="radio" name="home" value="github" {{if eq .Home "github"}}checked{{end}}><span><strong>Home: GitHub</strong><span class="small muted">GitHub owns {{$v.Default}}. Atelier fetches it, runs Actions on GitHub pull requests and reports the results there. The merge button becomes “Merge on GitHub”.</span></span></label>
+      </fieldset>
+      <p class="hint">Switching needs both {{$v.Default}} branches to be identical.</p>
+      <div class="row-end"><button class="btn" type="submit">Switch home</button></div>
+    </form>
+  </section>
+
+  {{if eq .Home "atelier"}}
+  <section class="card stack-sm" aria-labelledby="tt-protect">
+    <h2 class="h-sm" id="tt-protect">Protect {{$v.Default}} on GitHub</h2>
+    <p class="small muted">Atelier doesn't change GitHub's settings. So that nobody (and no bot) pushes to {{$v.Default}} on GitHub behind Atelier's back:</p>
+    <ol class="tt-steps small">
+      <li>Open <a href="{{$d.ProtectURL}}" rel="noopener noreferrer" target="_blank">{{.GHRepo}} → Settings → Branches ↗</a> (or Rules → Rulesets).</li>
+      <li>Add a branch protection rule (or a branch ruleset) for <code>{{$v.Default}}</code>.</li>
+      <li>Turn on <strong>Require a pull request before merging</strong>, so bots can comment and suggest but not merge.</li>
+      <li>Turn on <strong>Restrict who can push to matching branches</strong> and allow only your account (the one Tether's token belongs to).</li>
+      <li>Leave <strong>Allow force pushes</strong> and <strong>Allow deletions</strong> off.</li>
+      <li>Save. Tether keeps pushing {{$v.Default}} as you, without force, so the rule doesn't get in its way.</li>
+    </ol>
+  </section>
+  {{end}}
+  {{else}}
+  {{if $d.Account}}
+  <form method="post" action="{{$v.Base}}/settings/tether/link" class="tt-card stack" aria-labelledby="tt-new">
+    <h2 class="h-sm" id="tt-new">Tether this repo</h2>
+    <div class="field">
+      <label for="tt-gh">GitHub repository</label>
+      <input id="tt-gh" name="gh_repo" required maxlength="140" value="{{$d.Suggest}}" placeholder="owner/name" autocomplete="off" spellcheck="false">
+    </div>
+    <label class="row gap-sm small"><input type="checkbox" name="create" value="1" checked> Create it as a private repository on GitHub if it doesn't exist</label>
+    <fieldset class="field">
+      <legend>Home</legend>
+      <label class="choice"><input type="radio" name="home" value="atelier" checked><span><strong>Home: Atelier</strong><span class="small muted">Atelier owns {{$v.Default}}; pushes are mirrored to GitHub.</span></span></label>
+      <label class="choice"><input type="radio" name="home" value="github"><span><strong>Home: GitHub</strong><span class="small muted">GitHub owns {{$v.Default}}; Atelier fetches it and merges happen on GitHub.</span></span></label>
+    </fieldset>
+    <label class="row gap-sm small"><input type="checkbox" name="sync_issues" value="1"> Sync issues and comments with GitHub</label>
+    <div class="row-end"><button class="btn btn-tether" type="submit">Link</button></div>
+  </form>
+  {{else}}
+  <section class="tt-card stack-sm">
+    <h2 class="h-sm">Tether this repo</h2>
+    <p class="small">Connect your GitHub account first.</p>
+    <div><a class="btn btn-tether btn-sm" href="/settings/tether">Connect GitHub</a></div>
+  </section>
+  {{end}}
+  {{end}}
+</main>
+{{end}}

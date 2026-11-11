@@ -315,6 +315,7 @@ type pullTimelineItem struct {
 	To      string // renamed: new title
 	SHA     string // merged: commit
 	Method  string // merged: merge or squash
+	URL     string // tether_mirrored: the GitHub pull request
 }
 
 type pullNoteView struct {
@@ -505,6 +506,16 @@ func (a *App) buildPull(r *http.Request, v *repoView, g *gitrepo.Repo, p store.P
 
 	if p.IsOpen() {
 		d.Status = pullStatus(ctx, g, d)
+		// Home: GitHub — the merge happens on GitHub (tether_sync.go takes the POST).
+		if l, err := a.db.TetherLink(ctx, v.Repo.ID); err == nil && l.Home == "github" {
+			for i := range d.Status.Methods {
+				d.Status.Methods[i].Label += " on GitHub"
+			}
+			d.Status.Primary = d.Status.Methods[0]
+			for i := range d.Status.Steps {
+				d.Status.Steps[i].Text += " on GitHub"
+			}
+		}
 	}
 	if !p.IsOpen() && d.HeadExists && p.Head != v.Default && !a.headProtected(ctx, v.Repo.ID, p.Head) &&
 		(p.IsClosed() || curHead == p.HeadSHA) {
@@ -563,6 +574,11 @@ func pullTimeline(base string, cmp *gitrepo.Comparison, comments []store.PullCom
 			it.From, it.To, _ = strings.Cut(e.Data, "\n")
 		case "merged", "force_pushed":
 			it.Method, it.SHA, _ = strings.Cut(e.Data, " ")
+		case "tether_mirrored": // "<GitHub number> <url>"
+			it.SHA, it.URL, _ = strings.Cut(e.Data, " ")
+			if !strings.HasPrefix(it.URL, "https://") && !strings.HasPrefix(it.URL, "http://") {
+				it.URL = ""
+			}
 		}
 		items = append(items, it)
 	}

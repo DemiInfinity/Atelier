@@ -96,14 +96,16 @@ git push -u origin {{$v.Default}}</code></pre>
       {{else}}<p class="muted">No description. <a href="{{$v.Base}}/settings">Add one in settings</a>.</p>{{end}}
       <p class="small muted">{{if $v.Repo.Private}}Private{{else}}Public{{end}} · created {{date $v.Repo.CreatedAt}}</p>
     </section>
-    <section class="card card-tether stack-sm">
+    <section class="card card-tether stack-sm" data-tether-card data-src="{{$v.Base}}/tether/status">
       <div class="row gap-sm">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20 C 9 18, 7 6, 12 12 S 15 4, 20 4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg>
+        {{template "tether-icon" 20}}
         <h2 class="h-display-sm">Tether</h2>
-        <span class="small tether-ink push-right">Coming soon</span>
+        <a class="small tether-ink push-right" data-tether-gh href="#" rel="noopener noreferrer" target="_blank" hidden>GitHub ↗</a>
       </div>
-      <p class="small tether-muted">Link this repository to a GitHub mirror. Linking arrives with Tether in Phase 4.</p>
+      <p class="small tether-muted" data-tether-text>Link this repository to a twin on GitHub: mirror pushes out, or let GitHub stay home and run Atelier's checks on its pull requests.</p>
+      <a class="small" data-tether-link href="{{$v.Base}}/settings/tether">Tether this repo →</a>
     </section>
+    <script src="/static/tether.js" defer></script>
   </aside>
 </main>
 {{end}}

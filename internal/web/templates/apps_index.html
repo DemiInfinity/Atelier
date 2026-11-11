@@ -1,0 +1,127 @@
+{{define "head"}}{{template "apps-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2 apps-page">
+  <aside class="col-side">{{template "accountnav" "apps"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Apps and bots</h1>
+      <p class="muted">GitHub bots through Tether, native agents, and your own bots and webhooks. Bots comment, suggest and set checks; they never merge.</p>
+    </div>
+    {{template "flash" .}}
+
+    {{if $d.Created}}
+    <section class="card card-ok stack-sm" role="status">
+      <h2 class="h-sm">{{$d.CreatedBot}} is ready</h2>
+      <p class="small">Copy its token now. You won’t be able to see it again.</p>
+      <div class="clone">
+        <input class="clone-url" id="new-bot-token" value="{{$d.Created}}" readonly aria-label="New bot token">
+        <button type="button" class="clone-copy" data-copy="#new-bot-token" aria-label="Copy token"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+      </div>
+      <p class="small muted">Use it as <span class="mono">Authorization: Bearer …</span> against <span class="mono">{{$d.APIBase}}</span>, or as the password for git over HTTPS if you allowed pushes.</p>
+    </section>
+    {{end}}
+
+    {{template "apps-steps"}}
+
+    <section class="stack" aria-labelledby="installed-h">
+      <h2 class="h-sm" id="installed-h">Installed</h2>
+      <div class="list-card">
+        {{range $d.Installed}}
+        <div class="list-row apps-row">
+          {{template "apps-avatar" .}}
+          <div class="grow min0">
+            <div class="row gap-sm wrap-gap"><strong class="break">{{.Name}}</strong>{{template "apps-chip" .Kind}}</div>
+            <div class="small muted break">{{if .Detail}}{{.Detail}} · {{end}}{{range $i, $w := .Where}}{{if $i}}, {{end}}<span class="mono">{{$w}}</span>{{end}}</div>
+          </div>
+          {{if .Configure}}<a class="btn btn-sm" href="{{.Configure}}">Configure</a>{{end}}
+        </div>
+        {{else}}
+        <div class="list-row muted small">Nothing yet. Turn on “Review on GitHub” for a repository, create a bot below, or add a webhook.</div>
+        {{end}}
+      </div>
+      <p class="small muted">GitHub bots appear here once one of their comments syncs back{{if not $d.Tethered}} (no repository is linked through Tether yet){{end}}. Native agents appear once they’ve worked in a repository.</p>
+    </section>
+
+    {{template "apps-perms"}}
+
+    <section class="stack" id="bots" aria-labelledby="bots-h">
+      <h2 class="h-sm" id="bots-h">Your bots</h2>
+      {{if $d.Bots}}
+      <div class="list-card">
+        {{range $d.Bots}}
+        <div class="list-row apps-row">
+          <span class="apps-avatar is-custom" aria-hidden="true">{{.Avatar}}</span>
+          <div class="grow min0">
+            <div class="row gap-sm wrap-gap"><strong>{{.Name}}</strong><span class="pill pill-violet">bot</span></div>
+            <div class="small muted break">{{if .Description}}{{.Description}} · {{end}}{{if .CanComment}}comment {{end}}{{if .CanSuggest}}suggest {{end}}{{if .CanChecks}}checks {{end}}{{if .CanPush}}push {{end}}· {{range $i, $r := .Repos}}{{if $i}}, {{end}}<span class="mono">{{$r.FullName}}</span>{{end}}</div>
+          </div>
+          <a class="btn btn-sm" href="/settings/apps/bots/{{.ID}}">Configure</a>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+
+      <form method="post" action="/settings/apps/bots" class="card stack">
+        <h3 class="h-sm">Create a bot</h3>
+        <div class="row wrap-gap apps-hook-row">
+          <div class="field grow-2">
+            <label for="bot-name">Name</label>
+            <input id="bot-name" name="name" required maxlength="39" pattern="[A-Za-z0-9][A-Za-z0-9\-]*" value="{{$d.Form.Name}}" placeholder="release-helper" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field apps-initial">
+            <label for="bot-initial">Avatar</label>
+            <input id="bot-initial" name="initial" maxlength="2" value="{{$d.Form.Initial}}" placeholder="R">
+          </div>
+        </div>
+        <div class="field">
+          <label for="bot-desc">Description</label>
+          <input id="bot-desc" name="description" maxlength="200" value="{{$d.Form.Description}}" placeholder="Labels new issues and posts lint results">
+        </div>
+        <fieldset class="field">
+          <legend>Repositories</legend>
+          {{if $d.Repos}}<div class="apps-repos">{{range $d.Repos}}<label class="row gap-sm"><input type="checkbox" name="repos" value="{{.ID}}" {{if index $d.Form.RepoIDs .ID}}checked{{end}}><span class="mono small">{{.FullName}}</span></label>{{end}}</div>
+          {{else}}<p class="small muted">Create a repository first.</p>{{end}}
+        </fieldset>
+        {{template "apps-bot-perms" $d.Form}}
+        <div class="row-end"><button class="btn btn-primary" type="submit">Create bot and token</button></div>
+      </form>
+    </section>
+
+    <section class="stack" aria-labelledby="hooks-h">
+      <div class="row-between wrap-gap">
+        <h2 class="h-sm" id="hooks-h">Webhooks</h2>
+      </div>
+      <div class="list-card">
+        {{range $d.Accounts}}
+        <div class="list-row">
+          <div class="grow min0"><strong>{{.Label}}</strong><div class="small muted">Account webhooks fire for every repository under <span class="mono">{{.Name}}</span>.</div></div>
+          <a class="btn btn-sm" href="/settings/webhooks?account={{.Name}}">Account webhooks</a>
+        </div>
+        {{end}}
+        <div class="list-row small muted">Repository webhooks live in each repository’s Settings → Webhooks.</div>
+      </div>
+    </section>
+
+    <section class="card stack apps-build" id="build" aria-labelledby="build-h">
+      <div>
+        <h2 class="h-sm" id="build-h">Build your own</h2>
+        <p class="small muted">A webhook tells your bot what happened; its token lets it answer through a GitHub-compatible API, so Octokit and most GitHub bot code work with <span class="mono">baseUrl</span> set to <span class="mono">{{$d.APIBase}}</span>.</p>
+      </div>
+      <div class="table-scroll">
+        <table class="apps-endpoints">
+          <thead><tr><th scope="col">Method</th><th scope="col">Path</th><th scope="col">What</th></tr></thead>
+          <tbody>{{range $d.Endpoints}}<tr><td class="mono">{{.Method}}</td><td class="mono">{{.Path}}</td><td>{{.What}}</td></tr>{{end}}</tbody>
+        </table>
+      </div>
+      <p class="small muted">Review comments take <span class="mono">line</span> and <span class="mono">side</span> (not diff positions) and become Atelier notes. Statuses and check runs show up as checks on the commit. Actions jobs can call the read endpoints with <span class="mono">GITHUB_TOKEN</span>. There’s no merge endpoint.</p>
+      <pre class="apps-code"><code>curl -X POST -H "Authorization: Bearer $BOT_TOKEN" \
+  {{$d.APIBase}}/repos/OWNER/REPO/issues/12/comments \
+  -d '{"body":"Looks good to me"}'</code></pre>
+      <p class="small muted">Verify deliveries like this (Node):</p>
+      <pre class="apps-code"><code>const sig = "sha256=" + crypto.createHmac("sha256", SECRET).update(rawBody).digest("hex");
+const ok = crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(req.headers["x-atelier-signature-256"]));</code></pre>
+    </section>
+  </div>
+</main>
+{{end}}

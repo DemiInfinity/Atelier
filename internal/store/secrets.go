@@ -672,7 +672,66 @@ func (s *Store) RotateSecrets(ctx context.Context, from, to SecretSealer) (int, 
 			return 0, err
 		}
 	}
-	return len(all), tx.Commit()
+	n := len(all)
+	for _, c := range sealedColumns {
+		m, err := rotateSealedColumn(ctx, tx, c, from, to)
+		if err != nil {
+			return 0, err
+		}
+		n += m
+	}
+	return n, tx.Commit()
+}
+
+// sealedColumn is another feature's encrypted column that rotate-key must
+// re-seal along with Actions secrets.
+type sealedColumn struct {
+	what, table, idCol, ctCol string
+	aad                       func(id int64) []byte
+}
+
+var sealedColumns = []sealedColumn{
+	{what: "webhook secret", table: "apps_webhooks", idCol: "id", ctCol: "secret_ct", aad: webhookAAD},
+	{what: "Tether token", table: "tether_accounts", idCol: "person_id", ctCol: "token_ct", aad: tetherAAD},
+}
+
+func rotateSealedColumn(ctx context.Context, tx *sql.Tx, c sealedColumn, from, to SecretSealer) (int, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT `+c.idCol+`, `+c.ctCol+` FROM `+c.table+
+		` WHERE `+c.ctCol+` IS NOT NULL AND length(`+c.ctCol+`) > 0`)
+	if err != nil {
+		return 0, err
+	}
+	type row struct {
+		id int64
+		ct []byte
+	}
+	var all []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.ct); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		all = append(all, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	for _, r := range all {
+		pt, err := from.Open(c.aad(r.id), r.ct)
+		if err != nil {
+			return 0, fmt.Errorf("%s %d: %w", c.what, r.id, err)
+		}
+		fresh, err := to.Seal(c.aad(r.id), pt)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE `+c.table+` SET `+c.ctCol+`=? WHERE `+c.idCol+`=?`, fresh, r.id); err != nil {
+			return 0, err
+		}
+	}
+	return len(all), nil
 }
 
 // SecretCount is how many secrets are stored in total (all scopes).

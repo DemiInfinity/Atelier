@@ -1,0 +1,78 @@
+{{/* Apps and bots: shared bits. */}}
+{{define "apps-head"}}<link rel="stylesheet" href="/static/apps.css">{{end}}
+
+{{define "apps-chip"}}{{if eq . "tether"}}<span class="pill pill-tether">via Tether</span>{{else if eq . "native"}}<span class="pill pill-violet">Native</span>{{else if eq . "custom"}}<span class="pill pill-violet">Custom bot</span>{{else if eq . "webhook"}}<span class="pill">Custom webhook</span>{{end}}{{end}}
+
+{{define "apps-avatar"}}<span class="apps-avatar is-{{.Kind}}" aria-hidden="true">{{.Initial}}</span>{{end}}
+
+{{/* The 4-step strip. */}}
+{{define "apps-steps"}}
+<section class="card card-tether stack apps-how" aria-labelledby="apps-how-h">
+  <div class="row-between wrap-gap">
+    <h2 class="h-sm" id="apps-how-h">How GitHub bots review Atelier pull requests</h2>
+    <span class="pill pill-tether">via Tether</span>
+  </div>
+  <ol class="apps-steps">
+    <li><span class="apps-step-n" aria-hidden="true">1</span><strong>Open a pull request here</strong><span class="small">Turn on “Review on GitHub” for the repository.</span></li>
+    <li><span class="apps-step-n" aria-hidden="true">2</span><strong>Tether mirrors it</strong><span class="small">The branch goes to your private GitHub twin and a matching PR opens there.</span></li>
+    <li><span class="apps-step-n" aria-hidden="true">3</span><strong>Bots review on GitHub</strong><span class="small">CodeRabbit, Cursor Bugbot or any GitHub App you’ve installed on the twin.</span></li>
+    <li><span class="apps-step-n" aria-hidden="true">4</span><strong>Comments sync back</strong><span class="small">They appear on the Atelier PR with a “via Tether” chip. Merging here closes the mirror.</span></li>
+  </ol>
+  <p class="small apps-privacy"><strong>Privacy:</strong> your code goes to the bots’ servers via GitHub. You need your own account with each bot service, and only repositories you switch on are mirrored.</p>
+</section>
+{{end}}
+
+{{/* What bots can do. */}}
+{{define "apps-perms"}}
+<section class="card stack" aria-labelledby="apps-perms-h">
+  <h2 class="h-sm" id="apps-perms-h">What bots can do</h2>
+  <ul class="apps-perms">
+    <li><span class="apps-yes" aria-hidden="true">✓</span><span><strong>Comment</strong><span class="small muted">On issues and pull requests, and set labels on issues.</span></span></li>
+    <li><span class="apps-yes" aria-hidden="true">✓</span><span><strong>Suggest</strong><span class="small muted">Inline notes on pull request lines.</span></span></li>
+    <li><span class="apps-yes" aria-hidden="true">✓</span><span><strong>Set check status</strong><span class="small muted">Commit statuses and check runs, which branch rules can require.</span></span></li>
+    <li><span class="apps-opt" aria-hidden="true">±</span><span><strong>Push fixes</strong> <span class="pill">Opt-in</span><span class="small muted">Only to branches no branch rule protects, never the default branch.</span></span></li>
+    <li><span class="apps-no" aria-hidden="true">✕</span><span><strong>Never merge</strong><span class="small muted">Merging is always yours.</span></span></li>
+  </ul>
+</section>
+{{end}}
+
+{{/* Bot permission checkboxes. Pass an appsBotForm. */}}
+{{define "apps-bot-perms"}}
+<fieldset class="field">
+  <legend>Permissions</legend>
+  <label class="choice"><input type="checkbox" name="comment" value="1" {{if .Comment}}checked{{end}}><span><strong>Comment</strong><span class="small muted">Issues and pull requests; labels on issues.</span></span></label>
+  <label class="choice"><input type="checkbox" name="suggest" value="1" {{if .Suggest}}checked{{end}}><span><strong>Suggest</strong><span class="small muted">Inline notes on pull request lines.</span></span></label>
+  <label class="choice"><input type="checkbox" name="checks" value="1" {{if .Checks}}checked{{end}}><span><strong>Set check status</strong><span class="small muted">Commit statuses and check runs.</span></span></label>
+  <label class="choice"><input type="checkbox" name="push" value="1" {{if .Push}}checked{{end}}><span><strong>Push to unprotected branches</strong><span class="small muted">Opt-in. Never protected or default branches, never tags. Bots can’t merge.</span></span></label>
+</fieldset>
+{{end}}
+
+{{define "apps-delivery-status"}}{{if eq .Status "ok"}}<span class="apps-dot is-ok" aria-hidden="true"></span><span class="sr-only">Delivered</span>{{else if eq .Status "pending"}}<span class="apps-dot is-pending" aria-hidden="true"></span><span class="sr-only">Pending</span>{{else}}<span class="apps-dot is-bad" aria-hidden="true"></span><span class="sr-only">Failed</span>{{end}}{{end}}
+
+{{/* Webhook form fields. Pass .Form and .Events in a dict-like struct (appsHooksData / appsHookData). */}}
+{{define "apps-hook-fields"}}
+<div class="field">
+  <label for="hook-url">Payload URL</label>
+  <input id="hook-url" name="url" type="url" required maxlength="2048" value="{{.Form.URL}}" placeholder="https://example.com/hooks/atelier" autocomplete="off" spellcheck="false">
+</div>
+<div class="row wrap-gap apps-hook-row">
+  <div class="field grow">
+    <label for="hook-ct">Content type</label>
+    <select id="hook-ct" name="content_type" disabled><option>application/json</option></select>
+  </div>
+  <div class="field grow-2">
+    <label for="hook-secret">Secret</label>
+    <input id="hook-secret" name="secret" type="password" maxlength="256" autocomplete="new-password" placeholder="{{if .Form.HasSecret}}Saved · leave blank to keep{{else}}Used to sign each delivery{{end}}">
+  </div>
+</div>
+{{if .Form.HasSecret}}<label class="row gap-sm small"><input type="checkbox" name="remove_secret" value="1"> Remove the saved secret</label>{{end}}
+<p class="small muted">Each delivery is signed with HMAC-SHA256 in <span class="mono">X-Atelier-Signature-256</span> and <span class="mono">X-Hub-Signature-256</span>, and carries <span class="mono">X-GitHub-Event</span> and <span class="mono">X-GitHub-Delivery</span>, so receivers written for GitHub work unchanged.</p>
+<fieldset class="field">
+  <legend>Events</legend>
+  <div class="apps-events">
+    {{range .Events}}<label class="choice"><input type="checkbox" name="events" value="{{.Name}}" {{if index $.Form.Events .Name}}checked{{end}}><span><strong>{{.Label}}</strong><span class="small muted mono">{{.Name}}</span><span class="small muted">{{.Hint}}</span></span></label>{{end}}
+  </div>
+</fieldset>
+<label class="choice"><input type="checkbox" name="active" value="1" {{if .Form.Active}}checked{{end}}><span><strong>Active</strong><span class="small muted">Send deliveries when these events happen.</span></span></label>
+<label class="choice"><input type="checkbox" name="allow_local" value="1" {{if .Form.AllowLocal}}checked{{end}}><span><strong>Allow local network</strong><span class="small muted">Off by default: Atelier refuses loopback, link-local and private addresses (checked after DNS lookup and on redirects). Cloud metadata addresses are always refused.</span></span></label>
+{{end}}

@@ -1,0 +1,40 @@
+# atelier-runner on the server, as its own Portainer stack.
+#
+# One-time setup (on the server, before adding this stack):
+#   1. Atelier → Settings → Runners → Generate, copy the --token value.
+#   2. mkdir -p ~/atelier-runner/work
+#   3. docker run --rm \
+#        -v atelier-runner:/runner \
+#        atelier-runner:latest register --config /runner/config.json \
+#        --url http://atelier.infinityhomelab.lan --name "Portainer host" \
+#        --labels linux,docker --capabilities jobs,docker \
+#        --work-dir /home/demi/atelier-runner/work \
+#        --token <paste>
+#   4. Portainer → Stacks → Add stack → paste this file → Deploy.
+#
+# The image is built on the server:  cd ~/atelier && docker build --target runner -t atelier-runner:latest .
+#
+# Docker access: mounting docker.sock lets workflows build images and redeploy
+# stacks, but it is effectively full control of this server's Docker. Only run
+# your own repositories' workflows here. Drop the docker.sock line (and the
+# "docker" capability above) for a runner that can only run plain Linux jobs.
+
+services:
+  atelier-runner:
+    image: atelier-runner:latest
+    container_name: atelier-runner
+    restart: unless-stopped
+    volumes:
+      # config (with the runner's credential) and the action cache
+      - atelier-runner:/runner
+      # job workspaces; same path inside and out so docker bind mounts work
+      - /home/demi/atelier-runner/work:/home/demi/atelier-runner/work
+      # lets jobs use Docker on this server (see the note above)
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      # built locally, so Watchtower has nothing to pull
+      com.centurylinklabs.watchtower.enable: "false"
+
+volumes:
+  atelier-runner:
+    external: true   # created by the `docker run … register` step

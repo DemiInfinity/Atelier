@@ -1,0 +1,68 @@
+/* Apps and bots. Violet for native and custom bots, Tether blue for GitHub bots. */
+
+.apps-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+  font-weight: 600; font-size: 14px;
+  background: var(--raised-2); border: 1px solid var(--border-strong); color: var(--text-2);
+}
+.apps-avatar.is-custom, .apps-avatar.is-native { background: var(--violet-chip); border-color: #443860; color: var(--violet); }
+.apps-avatar.is-tether { background: var(--tether-surface); border-color: var(--tether-border); color: var(--tether-2); }
+.apps-avatar.is-webhook { background: var(--amber-chip); border-color: #5a4320; color: var(--amber); }
+.apps-avatar-lg { width: 48px; height: 48px; font-size: 20px; border-radius: 12px; }
+
+.apps-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; counter-reset: none; }
+.apps-steps li {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  padding: 12px; border: 1px solid var(--tether-border); border-radius: var(--r); background: #111820;
+}
+.apps-steps strong { color: var(--text); }
+.apps-steps .small { color: var(--tether-2); }
+.apps-step-n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: #172331; color: var(--tether); border: 1px solid var(--tether-border);
+}
+.apps-privacy { color: var(--text-2); }
+@media (max-width: 760px) { .apps-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .apps-steps { grid-template-columns: minmax(0, 1fr); } }
+
+.apps-perms { display: flex; flex-direction: column; gap: 10px; }
+.apps-perms li { display: flex; gap: 10px; align-items: flex-start; }
+.apps-perms li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.apps-yes, .apps-no, .apps-opt {
+  width: 20px; height: 20px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; flex-shrink: 0; margin-top: 1px;
+}
+.apps-yes { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
+.apps-no { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+.apps-opt { background: var(--amber-chip); color: var(--amber); border: 1px solid #5a4320; }
+
+.apps-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px; }
+.apps-repos label { align-items: flex-start; }
+.apps-initial { flex: 0 0 96px; }
+.apps-hook-row { align-items: flex-end; }
+.apps-events { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.apps-events .choice + .choice { margin-top: 0; }
+
+.apps-dot { width: 10px; height: 10px; border-radius: 999px; flex-shrink: 0; background: var(--border-strong); }
+.apps-dot.is-ok { background: var(--ok); }
+.apps-dot.is-bad { background: var(--danger); }
+.apps-dot.is-pending { background: var(--amber); }
+.apps-err { color: var(--danger); }
+
+.apps-code {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 12px 14px; overflow-x: auto; max-height: 480px; font-size: 12.5px; line-height: 1.55;
+  white-space: pre; color: var(--text-2);
+}
+.apps-headers { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 4px 16px; margin: 0; font-size: 12.5px; }
+.apps-headers dt { color: var(--muted); }
+.apps-headers dd { margin: 0; color: var(--text-2); }
+@media (max-width: 560px) { .apps-headers { grid-template-columns: minmax(0, 1fr); } .apps-headers dd { margin-bottom: 6px; } }
+
+.apps-endpoints { width: 100%; border-collapse: collapse; font-size: 13px; }
+.apps-endpoints th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.apps-endpoints td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.apps-endpoints tr:last-child td { border-bottom: 0; }
+.apps-endpoints td.mono { white-space: nowrap; color: var(--text-2); }

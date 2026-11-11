@@ -54,7 +54,14 @@ var md = goldmark.New(goldmark.WithExtensions(extension.GFM)) // raw HTML stays 
 
 func (a *App) loadTemplates() error {
 	funcs := template.FuncMap{
-		"ago":        ago,
+		"ago": ago,
+		// actorKind shows comments Tether synced from GitHub as "tether".
+		"actorKind": func(kind, name string) string {
+			if kind == "import" && strings.HasPrefix(name, "github:") {
+				return "tether"
+			}
+			return kind
+		},
 		"bytes":      humanBytes,
 		"markdown":   renderMarkdown,
 		"isMarkdown": isMarkdown,

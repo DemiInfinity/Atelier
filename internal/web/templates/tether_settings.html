@@ -1,0 +1,84 @@
+{{define "head"}}<link rel="stylesheet" href="/static/tether.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "tether"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Tether</h1>
+      <p class="muted">Your link to GitHub: search it next to your studio, see the people you follow, mirror repositories both ways and let GitHub-only bots review your pull requests.</p>
+    </div>
+    {{template "flash" .}}
+
+    {{with $d.Account}}
+    <section class="tt-card stack" aria-labelledby="tt-linked">
+      <div class="row wrap-gap">
+        {{if $d.Avatar}}<img class="tt-avatar tt-avatar-lg" src="{{$d.Avatar}}" alt="" width="40" height="40" referrerpolicy="no-referrer">{{end}}
+        <div class="grow min0">
+          <h2 class="h-sm" id="tt-linked">Linked to <a href="{{$d.Profile}}" rel="noopener noreferrer" target="_blank">{{.Login}}</a>{{if .Name}} <span class="muted">({{.Name}})</span>{{end}}</h2>
+          <p class="small">{{if eq .Method "oauth"}}Through the GitHub app{{else}}With a personal access token{{end}}{{if .Scopes}} · scopes: {{.Scopes}}{{end}}{{if .PrivateMirror}} · private mirroring on{{end}} · linked {{ago .CreatedAt}}</p>
+        </div>
+        <form method="post" action="/settings/tether/disconnect"><button class="btn btn-danger btn-sm" type="submit">Disconnect</button></form>
+      </div>
+      <dl class="tt-dl small">
+        <dt>Rate limit</dt><dd>{{if $d.Rate}}{{$d.Rate}}{{with $d.RateReset}}, {{.}}{{end}}{{else}}Not known yet{{end}}</dd>
+        {{with $d.Blocked}}<dt>Status</dt><dd>{{.}}</dd>{{end}}
+        {{with .LastError}}<dt>Last problem</dt><dd class="tt-error">{{.}}</dd>{{end}}
+        {{with $d.KeyProblem}}<dt>Token</dt><dd class="tt-error">{{.}}</dd>{{end}}
+      </dl>
+      <p class="hint">The token is encrypted on this server and only sent to GitHub. Disconnecting deletes it and everything Tether cached for you; linked repositories stay linked but pause until you connect again.</p>
+    </section>
+
+    <section class="tt-card stack-sm" aria-labelledby="tt-badge">
+      <h2 class="h-sm" id="tt-badge">“I use Atelier” badge</h2>
+      <p class="small">Adds a small <code>.atelier</code> file to your GitHub profile repository ({{$d.ProfileRepo}}), so other Atelier people see an amber mark next to you and a link to your studio. Off by default.</p>
+      <form method="post" action="/settings/tether/badge" class="row gap-sm">
+        {{if .Badge}}<input type="hidden" name="on" value="0"><span class="small">The badge is on.</span><button class="btn btn-sm" type="submit">Remove the badge</button>
+        {{else}}<input type="hidden" name="on" value="1"><button class="btn btn-tether btn-sm" type="submit">Add the badge</button>{{end}}
+      </form>
+    </section>
+    {{else}}
+    <section class="tt-card stack" aria-labelledby="tt-connect">
+      <h2 class="h-sm" id="tt-connect">Connect GitHub</h2>
+      <p class="small">Create a <a href="{{$d.TokenURL}}" rel="noopener noreferrer" target="_blank">fine-grained personal access token ↗</a> for the repositories you want to mirror (or all of them), with these permissions:</p>
+      <table class="tt-scopes">
+        <thead><tr><th scope="col">Permission</th><th scope="col">Access</th><th scope="col">Used for</th></tr></thead>
+        <tbody>{{range $d.Scopes}}<tr><td>{{.Name}}</td><td>{{.Access}}</td><td>{{.Why}}</td></tr>{{end}}</tbody>
+      </table>
+      <form method="post" action="/settings/tether/token" class="stack-sm">
+        <div class="field">
+          <label for="tt-token">Token</label>
+          <input id="tt-token" name="token" type="password" class="tt-token" required maxlength="255" autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-describedby="tt-token-hint">
+          <p class="hint" id="tt-token-hint">Stored encrypted. Atelier never shows it again.</p>
+        </div>
+        <label class="row gap-sm small"><input type="checkbox" name="private_mirror" value="1"> I want to mirror private repositories (the token must include them)</label>
+        <div class="row-end"><button class="btn btn-tether" type="submit">Connect</button></div>
+      </form>
+      {{if $d.OAuth}}
+      <div class="stack-sm">
+        <p class="small">Or use the GitHub app you sign in with:</p>
+        <div class="row wrap-gap">
+          <a class="btn btn-tether btn-sm" href="/settings/tether/oauth">Connect with GitHub (public repositories)</a>
+          <a class="btn btn-sm" href="/settings/tether/oauth?private=1">Include private repositories</a>
+        </div>
+        <p class="hint">Private mirroring asks GitHub for the <code>repo</code> scope, which covers all your repositories. A fine-grained token can be limited to some.</p>
+      </div>
+      {{end}}
+    </section>
+    {{end}}
+
+    <section class="list-card" aria-labelledby="tt-links">
+      <div class="list-head" id="tt-links">Linked repositories</div>
+      {{range $d.Links}}
+      <div class="list-row row-between wrap-gap">
+        <div class="min0"><a href="/{{.Repo.FullName}}/settings/tether"><strong>{{.Repo.FullName}}</strong></a> <span class="small muted">→ {{.Link.GHRepo}} · Home: {{if eq .Link.Home "github"}}GitHub{{else}}Atelier{{end}}</span>
+          {{if .Link.Diverged}}<div class="small tt-error">{{.Link.Diverged}}</div>{{end}}</div>
+        <span class="small muted">{{with .Link.LastSyncAt}}synced {{ago .}}{{else}}{{with .Link.LastPushAt}}pushed {{ago .}}{{else}}not synced yet{{end}}{{end}}</span>
+      </div>
+      {{else}}
+      <div class="list-row muted small">No repositories are linked. Open a repository's Settings → Tether to link one.</div>
+      {{end}}
+    </section>
+  </div>
+</main>
+{{end}}

@@ -1,0 +1,60 @@
+/* Tether: everything from GitHub is blue (--tether on --tether-surface). */
+.tt-person { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.tt-avatar { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--tether-border); flex: none; background: var(--tether-surface); }
+.tt-avatar-blank { display: inline-flex; align-items: center; justify-content: center; font-size: 11px; color: var(--tether-2); }
+.tt-avatar-lg { width: 40px; height: 40px; }
+.tt-login { color: var(--tether-2); font-weight: 500; }
+.tt-login:hover { color: var(--tether); }
+.tt-mark { display: inline-flex; align-items: center; }
+.tt-mark-dot { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px;
+  background: var(--amber-chip); color: var(--amber); border: 1px solid #5a4320; font: 700 10px/1 var(--font-display); }
+.tt-studio { color: var(--amber); font-size: 12px; }
+.tt-via { display: inline-flex; align-items: center; gap: 4px; color: var(--tether); font-size: 12px; }
+
+/* Feed rows from GitHub: blue left border. */
+.feed-item.tt-feed { border-left: 3px solid var(--tether); padding-left: 12px; background: linear-gradient(90deg, var(--tether-surface), transparent 60%); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.tt-feed .feed-source { color: var(--tether); border-color: var(--tether-border); background: var(--tether-surface); }
+.tt-feed .feed-chip { background: var(--tether-surface); color: var(--tether); border-color: var(--tether-border); }
+.tt-detail { color: var(--tether-2); }
+.tt-asof { color: var(--tether-2); font-size: 12px; }
+
+/* Cards */
+.tt-card { background: var(--tether-surface); border: 1px solid var(--tether-border); border-radius: var(--r-lg); padding: 16px; color: var(--tether-2); }
+.tt-card h2, .tt-card h3 { color: var(--text); }
+.tt-card a:not(.btn) { color: var(--tether); }
+.tt-card .hint, .tt-card .muted { color: var(--tether-2); opacity: .85; }
+.tt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.tt-list > li { border-top: 1px solid var(--tether-border); padding: 10px 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.tt-list > li:first-child { border-top: 0; padding-top: 0; }
+.tt-repo { font-weight: 600; color: var(--tether-2); }
+.tt-stars { color: var(--tether-2); font-size: 12px; white-space: nowrap; }
+.tt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tt-chip { border: 1px solid var(--tether-border); color: var(--tether-2); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+.tt-chip[aria-current="true"] { background: var(--tether); color: #0b1620; border-color: var(--tether); }
+.tt-chip:hover { text-decoration: none; border-color: var(--tether); }
+.tt-banner { border: 1px solid var(--amber); background: var(--amber-chip); color: var(--text); border-radius: var(--r); padding: 12px 16px; }
+.tt-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.tt-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.tt-dl dt { color: var(--tether-2); }
+.tt-dl dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.tt-scopes { border-collapse: collapse; width: 100%; font-size: 13px; }
+.tt-scopes th, .tt-scopes td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--tether-border); vertical-align: top; }
+.tt-token { font-family: var(--font-mono); }
+.tt-inline { display: inline; }
+.tt-error { color: var(--danger); }
+
+/* Search */
+.srch-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.srch-form { display: flex; gap: 8px; flex: 1 1 320px; }
+.srch-form input[type=search] { flex: 1; min-width: 0; }
+.srch-section { display: flex; flex-direction: column; gap: 8px; }
+.srch-hit { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.srch-code { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.srch-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.topbar-search { display: flex; flex: 0 1 260px; min-width: 0; }
+.topbar-search input { width: 100%; min-width: 0; padding: 5px 10px; font-size: 13px; }
+@media (max-width: 760px) { .topbar-search { display: none; } }
+
+/* Repo card on the code page (filled by tether.js) */
+.tt-card-status[hidden] { display: none; }
+.tt-feed .feed-body a:not(.tt-studio), .tt-list a:not(.tt-studio):not(.btn) { color: var(--tether); }

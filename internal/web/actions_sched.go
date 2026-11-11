@@ -363,10 +363,27 @@ func (a *App) readyJobLocked(ctx context.Context, rp store.Repo, run store.Actio
 	return j.Status
 }
 
+// githubHostedLabel maps GitHub-hosted runner names (ubuntu-latest,
+// macos-14, windows-2022…) to the OS label every Atelier runner advertises,
+// so workflows copied from GitHub run on your own runners unchanged.
+func githubHostedLabel(l string) string {
+	k := strings.ToLower(strings.TrimSpace(l))
+	switch {
+	case strings.HasPrefix(k, "ubuntu-"), k == "ubuntu":
+		return "linux"
+	case strings.HasPrefix(k, "macos-"):
+		return "macos"
+	case strings.HasPrefix(k, "windows-"):
+		return "windows"
+	}
+	return l
+}
+
 func actDedupeLabels(in []string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, l := range in {
+		l = githubHostedLabel(l)
 		k := strings.ToLower(l)
 		if !seen[k] {
 			seen[k] = true

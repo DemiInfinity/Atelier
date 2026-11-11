@@ -178,7 +178,7 @@ func TestNotificationsPageFiltersAndDone(t *testing.T) {
 	check("?filter=agents", []string{"Agent issue", "Bot pull"}, []string{"Backup failed"})
 	check("?filter=system", []string{"Backup failed"}, []string{"Agent issue", "Bot pull"})
 	check("?filter=actions", nil, []string{"Agent issue", "arrive with Phase 3"})
-	check("?filter=tether", []string{"arrive with Phase 4"}, nil)
+	check("?filter=tether", nil, []string{"Agent issue", "arrive with Phase 4"})
 	check(fmt.Sprintf("?repo=%d", f.repo.ID), []string{"Agent issue", "Bot pull"}, []string{"Backup failed"})
 
 	// Opening one marks it read and goes to the subject.

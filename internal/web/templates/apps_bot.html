@@ -1,0 +1,61 @@
+{{define "head"}}{{template "apps-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$b := $d.Bot}}
+<main class="wrap layout-2 apps-page">
+  <aside class="col-side">{{template "accountnav" "apps"}}</aside>
+  <div class="col-main stack-lg">
+    <p class="small"><a class="muted-link" href="/settings/apps">← Apps and bots</a></p>
+    <div class="row gap-sm">
+      <span class="apps-avatar is-custom apps-avatar-lg" aria-hidden="true">{{$b.Avatar}}</span>
+      <div class="min0">
+        <h1 class="display break">{{$b.Name}}</h1>
+        <p class="muted"><span class="pill pill-violet">bot</span> Created {{ago $b.CreatedAt}}</p>
+      </div>
+    </div>
+    {{template "flash" .}}
+
+    {{if $d.Created}}
+    <section class="card card-ok stack-sm" role="status">
+      <h2 class="h-sm">New token</h2>
+      <p class="small">The old token stopped working. Copy this one now; you won’t see it again.</p>
+      <div class="clone">
+        <input class="clone-url" id="new-bot-token" value="{{$d.Created}}" readonly aria-label="New bot token">
+        <button type="button" class="clone-copy" data-copy="#new-bot-token" aria-label="Copy token"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+      </div>
+    </section>
+    {{end}}
+
+    <form method="post" action="/settings/apps/bots/{{$b.ID}}" class="card stack">
+      <h2 class="h-sm">Settings</h2>
+      <div class="row wrap-gap apps-hook-row">
+        <div class="field grow-2">
+          <label for="bot-desc">Description</label>
+          <input id="bot-desc" name="description" maxlength="200" value="{{$d.Form.Description}}">
+        </div>
+        <div class="field apps-initial">
+          <label for="bot-initial">Avatar</label>
+          <input id="bot-initial" name="initial" maxlength="2" value="{{$d.Form.Initial}}" placeholder="{{$b.Avatar}}">
+        </div>
+      </div>
+      <fieldset class="field">
+        <legend>Repositories</legend>
+        <div class="apps-repos">{{range $d.Repos}}<label class="row gap-sm"><input type="checkbox" name="repos" value="{{.ID}}" {{if index $d.Form.RepoIDs .ID}}checked{{end}}><span class="mono small">{{.FullName}}</span></label>{{end}}</div>
+      </fieldset>
+      {{template "apps-bot-perms" $d.Form}}
+      <div class="row-end"><button class="btn btn-primary" type="submit">Save changes</button></div>
+    </form>
+
+    <section class="card stack-sm">
+      <h2 class="h-sm">Token</h2>
+      <p class="small muted">The bot authenticates with <span class="mono">Authorization: Bearer …</span> against <span class="mono">{{$d.APIBase}}</span>. Generating a new token revokes the current one.</p>
+      <form method="post" action="/settings/apps/bots/{{$b.ID}}/token" class="row-end"><button class="btn" type="submit">Generate a new token</button></form>
+    </section>
+
+    <form method="post" action="/settings/apps/bots/{{$b.ID}}/delete" class="card card-danger stack-sm">
+      <h2 class="h-sm danger-ink">Delete this bot</h2>
+      <p class="small">Its token stops working. Comments it wrote stay, still marked as a bot.</p>
+      <div class="row-end"><button class="btn btn-danger" type="submit">Delete {{$b.Name}}</button></div>
+    </form>
+  </div>
+</main>
+{{end}}

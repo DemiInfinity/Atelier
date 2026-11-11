@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -298,6 +299,9 @@ func (a *App) issueCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.emit(ctx, issueEvent(EventIssueOpened, v, is, act, body))
+	if len(labels) > 0 {
+		a.emitAddedLabels(ctx, v, is, nil, labels, act)
+	}
 	http.Redirect(w, r, fmt.Sprintf("%s/issues/%d", v.Base, is.Number), http.StatusSeeOther)
 }
 
@@ -537,11 +541,40 @@ func (a *App) issueSetLabels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	act := a.actor(r)
-	if err := a.db.SetIssueLabels(r.Context(), is.ID, formIDs(r, "label"), act.Kind, act.Name); err != nil {
+	ids := formIDs(r, "label")
+	if err := a.db.SetIssueLabels(r.Context(), is.ID, ids, act.Kind, act.Name); err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	a.emitAddedLabels(r.Context(), v, is, is.Labels, ids, act)
 	a.issueBack(w, r, v, is, "")
+}
+
+// emitAddedLabels sends issue.labeled for each label in ids that the issue
+// didn't have before (agentic workflows and webhooks listen for it).
+func (a *App) emitAddedLabels(ctx context.Context, v *repoView, is store.Issue, before []store.Label, ids []int64, act Actor) {
+	had := map[int64]bool{}
+	for _, l := range before {
+		had[l.ID] = true
+	}
+	want := map[int64]bool{}
+	for _, id := range ids {
+		if !had[id] {
+			want[id] = true
+		}
+	}
+	if len(want) == 0 {
+		return
+	}
+	all, err := a.db.Labels(ctx, v.Repo.ID)
+	if err != nil {
+		return
+	}
+	for _, l := range all {
+		if want[l.ID] {
+			a.emit(ctx, issueEvent(EventIssueLabeled, v, is, act, l.Name))
+		}
+	}
 }
 
 func (a *App) issueSetMilestone(w http.ResponseWriter, r *http.Request) {

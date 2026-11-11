@@ -80,6 +80,8 @@ func (a *App) commitChecks(ctx context.Context, rp store.Repo, sha string, requi
 			URL: actionsRunURL(rp, run)}
 		out.Checks = append(out.Checks, c)
 	}
+	// Commit statuses and check runs from bots and other apps.
+	out.Checks = append(out.Checks, a.appsExternalChecks(ctx, rp, sha)...)
 	for _, req := range required {
 		found := false
 		for i := range out.Checks {

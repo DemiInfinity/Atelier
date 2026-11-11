@@ -22,7 +22,7 @@
       {{if $is.IsOpen}}<span class="state-badge state-open">{{template "issue-icon" $is}} Open</span>
       {{else if eq $is.StateReason "not_planned"}}<span class="state-badge state-not-planned">{{template "issue-icon" $is}} Closed as not planned</span>
       {{else}}<span class="state-badge state-closed">{{template "issue-icon" $is}} Closed</span>{{end}}
-      <p class="muted"><strong class="text-2">{{$is.AuthorName}}</strong> {{template "actor-chip" $is.AuthorKind}} opened this issue <time datetime="{{$is.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $is.CreatedAt}}">{{ago $is.CreatedAt}}</time> · {{$is.Comments}} comment{{if ne $is.Comments 1}}s{{end}}</p>
+      <p class="muted"><strong class="text-2">{{$is.AuthorName}}</strong> {{template "actor-chip" (actorKind $is.AuthorKind $is.AuthorName)}} opened this issue <time datetime="{{$is.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $is.CreatedAt}}">{{ago $is.CreatedAt}}</time> · {{$is.Comments}} comment{{if ne $is.Comments 1}}s{{end}}</p>
     </div>
   </header>
   {{template "flash" .}}
@@ -32,7 +32,7 @@
       <article class="tl-comment" id="issue-body">
         <header class="tl-comment-head">
           <span class="avatar avatar-sm" aria-hidden="true">{{initial $is.AuthorName}}</span>
-          <strong>{{$is.AuthorName}}</strong> {{template "actor-chip" $is.AuthorKind}}
+          <strong>{{$is.AuthorName}}</strong> {{template "actor-chip" (actorKind $is.AuthorKind $is.AuthorName)}}
           <span class="muted small">opened <time datetime="{{$is.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $is.CreatedAt}}">{{ago $is.CreatedAt}}</time></span>
           <span class="pill push-right">Author</span>
         </header>
@@ -54,7 +54,7 @@
       <article class="tl-comment" id="comment-{{$c.ID}}">
         <header class="tl-comment-head">
           <span class="avatar avatar-sm" aria-hidden="true">{{initial $c.AuthorName}}</span>
-          <strong>{{$c.AuthorName}}</strong> {{template "actor-chip" $c.AuthorKind}}
+          <strong>{{$c.AuthorName}}</strong> {{template "actor-chip" (actorKind $c.AuthorKind $c.AuthorName)}}
           <a class="muted-link small" href="#comment-{{$c.ID}}"><time datetime="{{$c.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $c.CreatedAt}}">{{ago $c.CreatedAt}}</time></a>
           {{if $c.Edited}}<span class="small muted" title="Edited {{datetime $c.UpdatedAt}}">· edited</span>{{end}}
           {{if eq $c.AuthorName $is.AuthorName}}<span class="pill push-right">Author</span>{{end}}

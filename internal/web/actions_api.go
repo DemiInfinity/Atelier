@@ -373,6 +373,12 @@ func (a *App) prepareJob(ctx context.Context, j store.ActionsJob, base string) (
 	}
 	pj.ID, pj.RunID = j.ID, j.RunID
 	pj.CloneURL = strings.TrimRight(base, "/") + "/" + rp.FullName() + ".git"
+	if workflow.IsAgenticFile(pj.Workflow) {
+		// Before the token exists: the agent record decides the token's MCP scopes.
+		if msg := a.prepareAgentJob(ctx, &pj, j, run, rp, base); msg != "" {
+			return nil, msg
+		}
+	}
 	person := run.PersonID
 	if person == 0 {
 		if me, err := a.db.PersonalOwner(ctx); err == nil {
@@ -620,6 +626,10 @@ func (a *App) jobActor(ctx context.Context, plain string) (Actor, bool) {
 	scopes := []string{"repo:read", fmt.Sprintf("actions:repo:%d", t.RepoID), fmt.Sprintf("actions:job:%d", t.JobID), "packages:read"}
 	if t.PackagesWrite {
 		scopes = append(scopes, "packages:write")
+	}
+	// Agentic jobs: mcp:<tool> for each allowed tool, and an agent name.
+	if who, ok := a.agentJobActor(ctx, t, scopes); ok {
+		return who, true
 	}
 	if rp, err := a.repoByIDForActions(ctx, t.RepoID); err == nil {
 		scopes = append(scopes, fmt.Sprintf("actions:owner:%d", rp.OwnerID))

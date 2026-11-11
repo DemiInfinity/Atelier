@@ -1,0 +1,97 @@
+{{define "head"}}<link rel="stylesheet" href="/static/tether.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap stack-lg">
+  <div class="srch-head">
+    <form method="get" action="/search" class="srch-form" role="search">
+      <input type="search" name="q" value="{{$d.Q}}" maxlength="200" placeholder="Search your studio and GitHub" aria-label="Search" autofocus>
+      <input type="hidden" name="src" value="{{$d.Src}}">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+    <nav class="tt-chips" aria-label="Where to search">
+      {{range $d.Sources}}<a class="tt-chip" href="{{.URL}}" {{if .Active}}aria-current="true"{{end}}>{{.Label}}</a>{{end}}
+    </nav>
+  </div>
+  {{template "flash" .}}
+
+  {{if not $d.Q}}
+  <p class="muted">Search repositories, issues, pull requests and code in your studio, then GitHub.</p>
+  {{else}}
+
+  {{if ne $d.Src "github"}}
+  <section class="stack" aria-labelledby="srch-studio">
+    <h2 class="h-sm" id="srch-studio">In your studio</h2>
+    {{if or $d.Repos $d.Items $d.Code}}
+    {{if $d.Repos}}
+    <div class="list-card">
+      <div class="list-head">Repositories</div>
+      {{range $d.Repos}}<div class="list-row srch-hit"><a href="/{{.Repo.FullName}}"><strong>{{.Repo.FullName}}</strong></a>{{with .Repo.Description}}<span class="small muted">{{.}}</span>{{end}}</div>{{end}}
+    </div>
+    {{end}}
+    {{if $d.Items}}
+    <div class="list-card">
+      <div class="list-head">Issues and pull requests</div>
+      {{range $d.Items}}<div class="list-row srch-hit"><a href="{{.URL}}">{{.Item.Title}}</a><span class="small muted">{{.Repo.FullName}} #{{.Item.Number}} · {{if eq .Item.Kind "pull"}}pull request{{else}}issue{{end}} · {{.Item.State}} · updated {{ago .Item.UpdatedAt}}</span></div>{{end}}
+    </div>
+    {{end}}
+    {{if $d.Code}}
+    <div class="list-card">
+      <div class="list-head">Code</div>
+      {{range $d.Code}}<div class="list-row srch-hit"><a href="{{.URL}}" class="small">{{.Repo.FullName}} · {{.Path}}:{{.Line}}</a><span class="srch-code">{{.Text}}</span></div>{{end}}
+      {{if $d.CodeCut}}<div class="list-row small muted">Code search stops after a few repositories and results. Narrow the search to see more.</div>{{end}}
+    </div>
+    {{end}}
+    {{else}}
+    <p class="small muted">Nothing in your studio matches “{{$d.Q}}”.</p>
+    {{end}}
+  </section>
+  {{end}}
+
+  {{if ne $d.Src "studio"}}
+  <section class="tt-card stack" aria-labelledby="srch-gh">
+    <div class="row-between wrap-gap">
+      <h2 class="h-sm row gap-sm" id="srch-gh">{{template "tether-icon" 18}} From GitHub via Tether</h2>
+      {{if $d.GHMore}}<a class="small" href="{{$d.GHMore}}" rel="noopener noreferrer" target="_blank">{{$d.GHTotal}} repositories on GitHub ↗</a>{{end}}
+    </div>
+    {{if not $d.Connected}}
+    <p class="small">Connect GitHub in <a href="/settings/tether">Settings → Tether</a> to search it from here.</p>
+    {{else if $d.GHError}}
+    <p class="small tt-error">{{$d.GHError}}</p>
+    {{else}}
+    {{if $d.GHRepos}}
+    <ul class="tt-list">
+      {{range $d.GHRepos}}
+      <li>
+        <div class="row-between wrap-gap">
+          <span class="row gap-sm min0">{{template "tether-person" .Person}}<span class="slash">/</span><a class="tt-repo" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Name}}</a>{{if .Private}}<span class="pill">Private</span>{{end}}</span>
+          <span class="tt-stars">★ {{.Stars}}{{with .Language}} · {{.}}{{end}}</span>
+        </div>
+        {{with .Desc}}<p class="small">{{.}}</p>{{end}}
+        <div class="srch-actions">
+          {{if .InStudio}}<a class="btn btn-sm" href="/{{.InStudio}}">In your studio</a>
+          {{else}}<form method="post" action="/search/mirror" class="tt-inline"><input type="hidden" name="repo" value="{{.FullName}}"><input type="hidden" name="q" value="{{$d.Q}}"><input type="hidden" name="src" value="{{$d.Src}}"><button class="btn btn-tether btn-sm" type="submit">Mirror to studio</button></form>{{end}}
+          <a class="btn btn-ghost btn-sm" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="small">No GitHub repositories match.</p>
+    {{end}}
+    {{if $d.GHItems}}
+    <h3 class="h-sm">Issues and pull requests</h3>
+    <ul class="tt-list">
+      {{range $d.GHItems}}
+      <li>
+        <a href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Title}} ↗</a>
+        <span class="small row gap-sm">{{template "tether-person" .Person}} · {{.Repo}} #{{.Number}} · {{if .IsPull}}pull request{{else}}issue{{end}} · {{.State}}</span>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+    {{end}}
+  </section>
+  {{end}}
+  {{end}}
+</main>
+{{end}}

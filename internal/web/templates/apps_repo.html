@@ -1,0 +1,64 @@
+{{define "head"}}{{template "apps-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap narrow stack-lg apps-page">
+  <div class="stack-sm">
+    <p class="small"><a class="muted-link" href="{{$v.Base}}/settings">← Settings</a></p>
+    <h1 class="h-display">Apps and bots</h1>
+    <p class="muted">GitHub bots, your own bots and webhooks for <span class="mono">{{$v.Repo.FullName}}</span>.</p>
+  </div>
+  {{template "flash" .}}
+
+  {{template "apps-steps"}}
+
+  <form method="post" action="{{$v.Base}}/settings/apps" class="card stack">
+    <div class="row-between wrap-gap">
+      <h2 class="h-sm">Review on GitHub</h2>
+      {{if $d.IsLinked}}<span class="pill pill-tether">Linked to {{$d.Linked}}</span>{{else}}<span class="pill">Not linked</span>{{end}}
+    </div>
+    <label class="choice"><input type="checkbox" name="tether_review" value="1" {{if $d.TetherOn}}checked{{end}}><span><strong>Mirror pull requests to GitHub for bot review</strong><span class="small muted">When a pull request opens or its branch moves, Tether mirrors it to the GitHub twin; merging or closing here closes the mirror. Your code goes to the bots’ servers via GitHub.</span></span></label>
+    {{if not $d.IsLinked}}<p class="small muted">Link this repository to a private GitHub twin in Tether first; until then nothing is mirrored.</p>{{end}}
+    <div class="row-end"><button class="btn btn-tether" type="submit">Save</button></div>
+  </form>
+
+  {{if $d.Mirrors}}
+  <section class="stack" aria-labelledby="mirrors-h">
+    <h2 class="h-sm" id="mirrors-h">Mirrored pull requests</h2>
+    <div class="list-card">
+      {{range $d.Mirrors}}
+      <div class="list-row">
+        <div class="grow min0"><a href="{{$v.Base}}/pulls/{{.Number}}">#{{.Number}} {{.Title}}</a>
+          <div class="small muted">Mirrored to GitHub for bot review · #{{.GHNumber}}{{if .Closed}} · closed{{end}} · {{ago .UpdatedAt}}</div></div>
+        {{if .URL}}<a class="btn btn-sm btn-tether" href="{{.URL}}" rel="noopener noreferrer">On GitHub</a>{{end}}
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  <section class="card row-between wrap-gap">
+    <div>
+      <h2 class="h-sm">Webhooks</h2>
+      <p class="small muted">{{len $d.Hooks}} webhook{{if ne (len $d.Hooks) 1}}s{{end}} on this repository.</p>
+    </div>
+    <a class="btn" href="{{$v.Base}}/settings/webhooks">Manage webhooks</a>
+  </section>
+
+  <section class="stack" aria-labelledby="bots-h">
+    <h2 class="h-sm" id="bots-h">Bots with access</h2>
+    <div class="list-card">
+      {{range $d.Bots}}
+      <div class="list-row apps-row">
+        <span class="apps-avatar is-custom" aria-hidden="true">{{.Avatar}}</span>
+        <div class="grow min0"><strong>{{.Name}}</strong> <span class="pill pill-violet">bot</span>
+          <div class="small muted">{{if .CanComment}}comment {{end}}{{if .CanSuggest}}suggest {{end}}{{if .CanChecks}}checks {{end}}{{if .CanPush}}push{{end}}</div></div>
+        <a class="btn btn-sm" href="/settings/apps/bots/{{.ID}}">Configure</a>
+      </div>
+      {{else}}
+      <div class="list-row small muted">No bots can work here. <a href="/settings/apps#bots">Create one</a>.</div>
+      {{end}}
+    </div>
+  </section>
+</main>
+{{end}}

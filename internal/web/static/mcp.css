@@ -1,0 +1,52 @@
+/* Settings → MCP */
+.mcp-snippet-head { justify-content: space-between; align-items: center; gap: 12px; }
+.mcp-snippet-title { margin: 0; font-size: 14px; font-weight: 600; }
+.mcp-code {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font: 12.5px/1.55 var(--font-mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+}
+.mcp-code:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.mcp-tool { font: 12.5px var(--font-mono); color: var(--violet); }
+
+.mcp-log { font-size: 13px; }
+.mcp-log th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.mcp-log td { padding: 9px 16px; border-top: 1px solid var(--border); vertical-align: top; }
+.mcp-log tbody tr:first-child td { border-top: 0; }
+.mcp-log tbody tr:hover td { background: var(--raised); }
+.mcp-when { white-space: nowrap; }
+.mcp-ok { color: var(--ok); font-weight: 500; }
+.mcp-err { color: var(--danger); font-weight: 500; }
+
+.mcp-actor {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--text-2);
+}
+.mcp-actor-agent { color: var(--violet); background: var(--violet-chip); border-color: #443860; }
+.mcp-actor-token { color: var(--amber); background: var(--amber-chip); border-color: #5a4320; }
+
+@media (max-width: 640px) {
+  .mcp-log th, .mcp-log td { padding: 8px 10px; }
+  .mcp-snippet-head { flex-wrap: wrap; }
+}

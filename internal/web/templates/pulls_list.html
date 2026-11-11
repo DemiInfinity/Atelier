@@ -29,7 +29,7 @@
           {{if .IsMerged}}merged <time datetime="{{.MergedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago .MergedAt.UTC}}</time>
           {{else if .IsClosed}}closed <time datetime="{{.UpdatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago .UpdatedAt}}</time>
           {{else}}opened <time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time>{{end}}
-          by <span class="text-2">{{.AuthorName}}</span>{{template "pulls-actor" .AuthorKind}}
+          by <span class="text-2">{{.AuthorName}}</span>{{template "pulls-actor" (actorKind .AuthorKind .AuthorName)}}
         </p>
       </div>
       <p class="pr-row-branches small"><span class="sr-only">Merging </span>{{template "pulls-branch" .Head}} <span aria-hidden="true">→</span><span class="sr-only"> into </span> {{template "pulls-branch" .Base}}</p>

@@ -592,7 +592,11 @@ func (j *jobRun) execStep(ctx context.Context, sc *scope, st stepDef) (stepOut, 
 			cs.setOutput(k, v)
 		}
 	default:
-		err = errors.New("the step has neither run nor uses")
+		if ag := j.agentStep(st); ag != nil { // agentic workflows (agent.go)
+			code, err = j.runAgent(ctx, sc, st, stepEnv, ag, fc, cs)
+		} else {
+			err = errors.New("the step has neither run nor uses")
+		}
 	}
 	out := j.applyFileCmds(sc, fc, cs)
 	return out, code, err

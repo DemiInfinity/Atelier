@@ -11,7 +11,7 @@
 {{define "pulls-branch"}}<span class="pr-branch mono">{{.}}</span>{{end}}
 
 {{/* Marks non-owner actors. Pass the kind. */}}
-{{define "pulls-actor"}}{{if eq . "agent"}} <span class="pill pill-violet">agent</span>{{else if eq . "bot"}} <span class="pill pill-violet">bot</span>{{else if eq . "token"}} <span class="pill">token</span>{{else if eq . "import"}} <span class="pill pill-tether">imported</span>{{end}}{{end}}
+{{define "pulls-actor"}}{{if eq . "agent"}} <span class="pill pill-violet">agent</span>{{else if eq . "bot"}} <span class="pill pill-violet">bot</span>{{else if eq . "token"}} <span class="pill">token</span>{{else if eq . "import"}} <span class="pill pill-tether">imported</span>{{else if eq . "tether"}} <span class="pill pill-tether">via Tether</span>{{end}}{{end}}
 
 {{/* One note to self. Pass a *pullNoteView. */}}
 {{define "pulls-note"}}<article class="pr-note{{if .Resolved}} is-resolved{{end}}" id="note-{{.ID}}">{{template "pulls-note-inner" .}}</article>{{end}}
@@ -19,7 +19,7 @@
 {{define "pulls-note-inner"}}
   <header class="pr-note-head small">
     <span class="avatar avatar-sm" aria-hidden="true">{{initial .AuthorName}}</span>
-    <strong class="text-2">{{.AuthorName}}</strong>{{template "pulls-actor" .AuthorKind}}
+    <strong class="text-2">{{.AuthorName}}</strong>{{template "pulls-actor" (actorKind .AuthorKind .AuthorName)}}
     <span class="muted"><time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time></span>
     {{if .Resolved}}<span class="pill pr-pill-ok">Resolved</span>{{end}}
     {{if not .Current}}<span class="pill" title="Written on commit {{short .CommitSHA}}; the line may have changed since">Outdated</span>{{end}}

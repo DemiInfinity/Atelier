@@ -1,0 +1,37 @@
+{{define "head"}}{{template "actions-head" .}}{{template "agents-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack act-page agent-new">
+  <p class="small"><a class="muted-link" href="{{$v.Base}}/actions">← Actions</a></p>
+  <header class="stack-sm">
+    <h1 class="h-display"><span class="act-chip is-agent">Agent</span> Add an agent</h1>
+    <p class="muted">An agent is a Markdown workflow: YAML front matter says when it runs and which tools it may use, and the text below it is the task. Copy a template into <span class="mono">.atelier/workflows/</span> and commit it. Nothing here commits for you.</p>
+  </header>
+
+  <section class="card stack-sm agent-howto" aria-labelledby="agent-howto-title">
+    <h2 class="h-sm" id="agent-howto-title">Before the first run</h2>
+    <ol class="small agent-steps">
+      <li>Add your Anthropic API key as the secret <span class="mono">{{$d.Secret}}</span> (repository or account secrets), or name another secret with <span class="mono">secret:</span>.</li>
+      <li>Make sure a runner is online. Agents run on <span class="mono">self-hosted</span> by default and only need network access to this server and the Claude API.</li>
+      <li>The first run waits for your approval, and so does every run after its <span class="mono">tools:</span> list changes or for a pull request someone else opened.</li>
+    </ol>
+    <p class="small muted">Front matter: <span class="mono">on</span>, <span class="mono">engine: claude</span>, <span class="mono">model</span> (default {{$d.Model}}), <span class="mono">effort</span> (low, medium, high, xhigh, max), <span class="mono">tools</span>, <span class="mono">runs-on</span>, <span class="mono">max-turns</span> (≤ 100), <span class="mono">max-tokens</span> (≤ 2M), <span class="mono">timeout-minutes</span>, <span class="mono">secret</span>. Triggers: push, pull_request, schedule, workflow_dispatch, and issues (opened, labeled).</p>
+    <p class="small muted">Tools agents may use: {{range $i, $t := $d.Tools}}{{if $i}}, {{end}}<span class="mono">{{$t}}</span>{{end}}.</p>
+  </section>
+
+  {{range $d.Templates}}
+  <section class="list-card agent-tpl" aria-labelledby="{{.ID}}-title">
+    <div class="list-head row-between wrap-gap">
+      <div class="stack-sm min0">
+        <h2 class="h-sm" id="{{.ID}}-title">{{.Title}} <span class="muted mono small">{{.File}}</span></h2>
+        <p class="small muted">{{.Summary}}</p>
+      </div>
+      <button type="button" class="btn btn-sm" data-copy="#{{.ID}}">Copy</button>
+    </div>
+    <pre class="snippet agent-tpl-text" id="{{.ID}}">{{.Text}}</pre>
+  </section>
+  {{end}}
+  <p class="small muted">These templates are also in Atelier's <span class="mono">docs/agents/</span> folder.</p>
+</main>
+{{end}}

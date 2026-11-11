@@ -262,6 +262,8 @@ func scanRepos(rows *sql.Rows) ([]Repo, error) {
 
 func (s *Store) CreateRepo(ctx context.Context, ownerID int64, name, desc string, private bool) (Repo, error) {
 	t := now()
+	// A new repository takes over a name that used to redirect elsewhere.
+	_ = s.dropRedirect(ctx, ownerID, name)
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO repos (owner_id, name, description, private, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		ownerID, name, desc, private, t, t)
@@ -290,6 +292,11 @@ func (s *Store) RepoByName(ctx context.Context, owner, name string) (Repo, error
 		return Repo{}, err
 	}
 	if len(repos) == 0 {
+		// The repository may have moved (transfer or rename): follow the redirect
+		// so old web links, clone URLs and SSH remotes keep working.
+		if id, ok := s.repoRedirect(ctx, owner, name); ok {
+			return s.RepoByID(ctx, id)
+		}
 		return Repo{}, ErrNotFound
 	}
 	return repos[0], nil

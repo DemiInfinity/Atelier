@@ -1,0 +1,23 @@
+/* Agentic workflows: the agent panel, run usage and the "Add an agent" page. Violet is the agent accent. */
+
+.agent-add { align-self: flex-start; color: var(--violet); border-color: #443860; }
+.agent-panel { border-color: #443860; padding: 16px 18px; }
+.agent-panel h2 { display: flex; align-items: center; gap: 8px; }
+.agent-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; margin: 0; }
+.agent-facts div { min-width: 0; }
+.agent-facts dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.agent-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.agent-tools { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.agent-tools li {
+  padding: 1px 8px; border-radius: 6px; font-size: 12px;
+  color: var(--violet); background: var(--violet-chip); border: 1px solid #443860;
+}
+.agent-lock > summary { cursor: pointer; color: var(--text-2); }
+.agent-lock .table-scroll { margin-top: 8px; }
+.agent-usage { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.agent-usage li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.agent-cost { color: var(--violet); }
+.agent-run { border-color: #443860; padding: 10px 14px; }
+.agent-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.agent-tpl .list-head { align-items: flex-start; }
+.agent-tpl-text { margin: 0; border: 0; border-radius: 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; }

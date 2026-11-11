@@ -17,3 +17,6 @@
 .DS_Store
 .idea/
 .vscode/
+
+# go test -c output
+*.test

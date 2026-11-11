@@ -1,0 +1,70 @@
+/* Security: /{owner}/{repo}/security. Red for secrets, amber for updates, green for clean. */
+
+.secu-page { padding-top: 24px; padding-bottom: 64px; }
+
+.secu-counters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.secu-counter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.secu-counter:hover { text-decoration: none; filter: brightness(1.08); }
+.secu-counter-label { font-size: 12px; color: var(--text-2); }
+.secu-counter-n { font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1.2; }
+.secu-counter-bad { border-color: var(--danger-border); background: var(--danger-bg); }
+.secu-counter-bad .secu-counter-label { color: #c9a9a3; }
+.secu-counter-bad .secu-counter-n { color: var(--danger); }
+.secu-counter-warn { border-color: #4a4239; background: #1d1a15; }
+.secu-counter-warn .secu-counter-n { color: var(--amber); }
+.secu-counter-ok { border-color: var(--ok-border); background: var(--ok-bg); }
+.secu-counter-ok .secu-counter-label { color: #b7c9b0; }
+.secu-counter-ok .secu-counter-n { color: var(--ok); }
+
+.secu-head-title { font-size: 14px; font-weight: 600; margin: 0; }
+.secu-card-bad { border-color: var(--danger-border); }
+.secu-card-bad > .list-head { background: #241816; border-bottom-color: var(--danger-border); }
+.secu-card-bad > .list-row { border-top-color: #3a221e; }
+
+.secu-alert { align-items: flex-start; }
+.secu-alert .grow { display: flex; flex-direction: column; gap: 2px; }
+.secu-alert-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.secu-alert-rule { font-weight: 600; }
+.secu-alert-closed .secu-alert-rule, .secu-alert-closed .secu-partial { color: var(--text-2); }
+.secu-partial { font-size: 12px; color: var(--danger); background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 6px; padding: 0 6px; }
+.secu-alert-closed .secu-partial { background: transparent; border-color: var(--border-strong); }
+.secu-alert-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 0 0 auto; }
+.secu-inline { display: inline-flex; gap: 6px; }
+.secu-pill-bad { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+.secu-pill-ok { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+
+.secu-clean { color: var(--text-2); }
+.secu-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.secu-dot-ok { background: var(--ok); }
+.secu-foot { background: var(--bg); }
+.secu-foot .mono { color: var(--text-2); }
+.secu-warn { color: var(--amber); background: #1d1a15; }
+
+.secu-deps-tools { gap: 12px; align-items: center; }
+.secu-dep { flex-wrap: wrap; gap: 8px 12px; }
+.secu-dep-name { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.secu-dep-action { margin-left: auto; }
+.secu-chip-patch { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
+.secu-chip-minor { background: var(--amber-chip); border-color: #5a4320; color: var(--amber); }
+.secu-chip-major { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+
+.secu-toggles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.secu-toggles .choice + .choice { margin-top: 0; }
+.secu-registries > summary { cursor: pointer; color: var(--text-2); }
+.secu-registry-fields { margin-top: 12px; }
+
+@media (max-width: 720px) {
+  .secu-counters { grid-template-columns: 1fr; }
+  .secu-toggles { grid-template-columns: 1fr; }
+  .secu-dep-action { margin-left: 0; flex-basis: 100%; }
+}

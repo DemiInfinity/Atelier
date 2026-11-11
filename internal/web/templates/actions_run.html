@@ -1,4 +1,4 @@
-{{define "head"}}{{template "actions-head" .}}{{end}}
+{{define "head"}}{{template "actions-head" .}}{{template "agents-head" .}}{{end}}
 {{define "content"}}
 {{$d := .Data}}{{$v := $d.V}}{{$r := $d.Run}}
 {{template "repohead" $v}}
@@ -10,7 +10,7 @@
       <div class="stack-sm min0">
         <h1 class="h-display">{{if $r.Title}}{{$r.Title}}{{else}}{{$r.WorkflowName}}{{end}} <span class="muted act-num">#{{$r.RunNumber}}</span></h1>
         <p class="small muted">
-          <span class="text-2">{{$r.WorkflowName}}</span> · {{template "actions-event" $r.Event}}{{if $r.PullNumber}} <a href="{{$v.Base}}/pulls/{{$r.PullNumber}}">#{{$r.PullNumber}}</a>{{end}}
+          <span class="text-2">{{$r.WorkflowName}}</span>{{if $d.Agent}} <span class="act-chip is-agent">Agent</span>{{end}} · {{template "actions-event" $r.Event}}{{if $r.PullNumber}} <a href="{{$v.Base}}/pulls/{{$r.PullNumber}}">#{{$r.PullNumber}}</a>{{end}}
           by <span class="text-2">{{$r.ActorName}}</span>
           {{if $r.Branch}}on <span class="pr-branch mono act-branch">{{$r.Branch}}</span>{{end}}
           at <a class="mono" href="{{$v.Base}}/commit/{{$r.SHA}}">{{short $r.SHA}}</a>
@@ -31,6 +31,7 @@
     {{end}}
   </header>
   {{template "flash" .}}
+  {{if $d.Agent}}{{template "agents-run" $d.Agent}}{{end}}
 
   {{if $r.Errors}}
   <section class="card card-danger stack-sm" role="alert">

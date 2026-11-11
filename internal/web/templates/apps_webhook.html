@@ -1,0 +1,50 @@
+{{define "head"}}{{template "apps-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$s := $d.Scope}}{{$h := $d.Hook}}
+{{if $s.IsRepo}}{{template "repohead" $s.V}}<main class="wrap narrow stack-lg apps-page">
+{{else}}<main class="wrap layout-2 apps-page"><aside class="col-side">{{template "accountnav" "apps"}}</aside><div class="col-main stack-lg">
+{{end}}
+    <p class="small"><a class="muted-link" href="{{$s.Base}}{{$s.Query}}">← Webhooks</a></p>
+    <div>
+      <h1 class="h-display break">{{$h.URL}}</h1>
+      <p class="muted">{{if $s.IsRepo}}Repository webhook on <span class="mono">{{$s.Title}}</span>{{else}}Account webhook for everything under <span class="mono">{{$s.Owner.Name}}</span>{{end}} · added {{ago $h.CreatedAt}}</p>
+    </div>
+    {{template "flash" .}}
+    {{if $d.Created}}<div class="flash flash-ok" role="status">Webhook added. A ping is on its way; see Recent deliveries below.</div>{{end}}
+
+    <form method="post" action="{{$s.HookURL $h.ID}}" class="card stack">
+      <h2 class="h-sm">Settings</h2>
+      {{template "apps-hook-fields" $d}}
+      <div class="row-end"><button class="btn btn-primary" type="submit">Update webhook</button></div>
+    </form>
+
+    <section class="stack" id="deliveries" aria-labelledby="deliveries-h">
+      <div class="row-between wrap-gap">
+        <h2 class="h-sm" id="deliveries-h">Recent deliveries</h2>
+        <form method="post" action="{{$s.HookURL $h.ID}}/ping"><button class="btn btn-sm" type="submit">Send a ping</button></form>
+      </div>
+      <div class="list-card">
+        {{range $d.Deliveries}}
+        <div class="list-row apps-delivery">
+          {{template "apps-delivery-status" .}}
+          <div class="grow min0">
+            <a href="{{$s.HookURL $h.ID}}/deliveries/{{.ID}}" class="mono small break">{{.GUID}}</a>
+            <div class="small muted"><strong class="text-2">{{.Event}}</strong>{{if .Action}}.{{.Action}}{{end}}{{if .Redelivery}} · <span class="pill">redelivery</span>{{end}} · {{if .RespStatus}}{{.RespStatus}}{{else if eq .Status "pending"}}{{if .Attempts}}retrying{{else}}queued{{end}}{{else}}no response{{end}}{{if .Attempts}} · {{.Attempts}} attempt{{if ne .Attempts 1}}s{{end}}{{end}} · {{ago .CreatedAt}}</div>
+            {{if .Error}}<div class="small apps-err break">{{.Error}}</div>{{end}}
+          </div>
+          <form method="post" action="{{$s.HookURL $h.ID}}/deliveries/{{.ID}}/redeliver"><button class="btn btn-xs" type="submit">Redeliver</button></form>
+        </div>
+        {{else}}
+        <div class="list-row small muted">No deliveries yet.</div>
+        {{end}}
+      </div>
+      <p class="small muted">Failed deliveries are retried up to five times with growing gaps (30 s, 2 min, 8 min, 32 min). Responses over 64 KB are cut short; deliveries time out after 10 seconds.</p>
+    </section>
+
+    <form method="post" action="{{$s.HookURL $h.ID}}/delete" class="card card-danger stack-sm">
+      <h2 class="h-sm danger-ink">Delete this webhook</h2>
+      <p class="small">Deliveries stop and the delivery log is removed.</p>
+      <div class="row-end"><button class="btn btn-danger" type="submit">Delete webhook</button></div>
+    </form>
+{{if $s.IsRepo}}</main>{{else}}</div></main>{{end}}
+{{end}}

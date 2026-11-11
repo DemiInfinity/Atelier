@@ -142,7 +142,7 @@ type Container struct {
 	Env   map[string]string `json:"env,omitempty"`
 }
 
-// Step is one step. Exactly one of Run or Uses is set.
+// Step is one step. Exactly one of Run, Uses or Agent is set.
 type Step struct {
 	Index            int               `json:"index"`
 	ID               string            `json:"id,omitempty"`
@@ -157,6 +157,29 @@ type Step struct {
 	WorkingDirectory string            `json:"working_directory,omitempty"`
 	ContinueOnError  bool              `json:"continue_on_error,omitempty"`
 	TimeoutMinutes   int               `json:"timeout_minutes,omitempty"`
+
+	// Agent, when set, makes this an agent step (an agentic Markdown
+	// workflow) instead of a run/uses step. Optional: runners that don't
+	// know it fail the step. The API key is in With["api-key"] as a
+	// ${{ secrets.* }} expression, so it's resolved and masked like any secret.
+	Agent *AgentStep `json:"agent,omitempty"`
+}
+
+// AgentStep is what a runner needs to run an agent: the task, the model and
+// limits, and the MCP endpoint plus the tools the job token may call there.
+// The runner connects to MCPURL with the job token and offers the model only
+// the tools listed here.
+type AgentStep struct {
+	Engine         string   `json:"engine"` // "claude"
+	Model          string   `json:"model"`
+	Effort         string   `json:"effort"`
+	Task           string   `json:"task"`
+	Tools          []string `json:"tools"`      // MCP tool names, e.g. "pulls.diff"
+	MaxTurns       int      `json:"max_turns"`  // model requests
+	MaxTokens      int      `json:"max_tokens"` // budget: output + uncached input tokens over the whole run
+	TimeoutMinutes int      `json:"timeout_minutes"`
+	MCPURL         string   `json:"mcp_url"`
+	WorkflowName   string   `json:"workflow_name"`
 }
 
 // ---------- logs and results ----------

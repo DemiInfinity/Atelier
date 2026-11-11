@@ -1,0 +1,594 @@
+// Package depupdates finds newer versions of a repository's dependencies
+// (Go modules from go.mod, npm packages from package.json), asks OSV which
+// versions have known vulnerabilities, and edits the manifests for update
+// pull requests. It never regenerates lockfiles (go.sum, package-lock.json):
+// CI does that.
+package depupdates
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
+	"golang.org/x/mod/semver"
+)
+
+const (
+	Go  = "go"
+	Npm = "npm"
+)
+
+// MaxDeps caps how many dependencies one check looks at.
+var MaxDeps = 300
+
+// Dep is one direct dependency in a manifest.
+type Dep struct {
+	Ecosystem string // go, npm
+	Name      string
+	Manifest  string // go.mod, package.json
+	Spec      string // as written: "v1.2.3", "^1.2.3"
+	Version   string // the version the spec starts from, with a "v" prefix (semver form)
+	Op        string // npm range operator: "", "^", "~", ">=" (Go: "")
+}
+
+// ---------- manifests ----------
+
+// ParseGoMod lists go.mod's direct requirements. Modules replaced by a local
+// directory are skipped.
+func ParseGoMod(data []byte) ([]Dep, error) {
+	f, err := modfile.Parse("go.mod", data, nil)
+	if err != nil {
+		if f, err = modfile.ParseLax("go.mod", data, nil); err != nil {
+			return nil, err
+		}
+	}
+	local := map[string]bool{}
+	for _, r := range f.Replace {
+		if r.New.Version == "" {
+			local[r.Old.Path] = true
+		}
+	}
+	var out []Dep
+	for _, r := range f.Require {
+		if r.Indirect || local[r.Mod.Path] || !semver.IsValid(r.Mod.Version) {
+			continue
+		}
+		out = append(out, Dep{Ecosystem: Go, Name: r.Mod.Path, Manifest: "go.mod", Spec: r.Mod.Version, Version: r.Mod.Version})
+	}
+	return out, nil
+}
+
+// ParsePackageJSON lists dependencies and devDependencies with a plain
+// semver spec ("1.2.3", "^1.2.3", "~1.2.3", ">=1.2.3"). Other specs (tags,
+// URLs, workspaces, compound ranges) are left alone.
+func ParsePackageJSON(data []byte) ([]Dep, error) {
+	var pj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &pj); err != nil {
+		return nil, err
+	}
+	var out []Dep
+	seen := map[string]bool{}
+	for _, sec := range []string{"dependencies", "devDependencies", "optionalDependencies"} {
+		var m map[string]string
+		if raw, ok := pj[sec]; !ok || json.Unmarshal(raw, &m) != nil {
+			continue
+		}
+		names := make([]string, 0, len(m))
+		for n := range m {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			op, v, ok := ParseRange(m[n])
+			if !ok || seen[n] {
+				continue
+			}
+			seen[n] = true
+			out = append(out, Dep{Ecosystem: Npm, Name: n, Manifest: "package.json", Spec: m[n], Version: v, Op: op})
+		}
+	}
+	return out, nil
+}
+
+var npmSpecRe = regexp.MustCompile(`^(\^|~|>=|=)?v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$`)
+
+// ParseRange reads a simple npm range into its operator and base version
+// ("v"-prefixed for golang.org/x/mod/semver).
+func ParseRange(spec string) (op, version string, ok bool) {
+	m := npmSpecRe.FindStringSubmatch(strings.TrimSpace(spec))
+	if m == nil {
+		return "", "", false
+	}
+	v := "v" + m[2]
+	if !semver.IsValid(v) {
+		return "", "", false
+	}
+	op = m[1]
+	if op == "=" {
+		op = ""
+	}
+	return op, v, true
+}
+
+// Satisfies reports whether version v is inside the npm range op+base.
+func Satisfies(op, base, v string) bool {
+	if semver.Compare(v, base) < 0 {
+		return false
+	}
+	switch op {
+	case "":
+		return semver.Compare(v, base) == 0
+	case ">=":
+		return true
+	case "~":
+		return semver.MajorMinor(v) == semver.MajorMinor(base)
+	case "^":
+		// ^1.2.3 := <2.0.0, ^0.2.3 := <0.3.0, ^0.0.3 := <0.0.4
+		if semver.Major(base) != "v0" {
+			return semver.Major(v) == semver.Major(base)
+		}
+		if semver.MajorMinor(base) != "v0.0" {
+			return semver.MajorMinor(v) == semver.MajorMinor(base)
+		}
+		return semver.Compare(semver.Canonical(v), semver.Canonical(base)) == 0
+	}
+	return false
+}
+
+// Kind classifies an update: major, minor or patch.
+func Kind(from, to string) string {
+	switch {
+	case semver.Major(from) != semver.Major(to):
+		return "major"
+	case semver.MajorMinor(from) != semver.MajorMinor(to):
+		return "minor"
+	}
+	return "patch"
+}
+
+// NewSpec is the manifest text for an update: Go versions as is, npm ranges
+// keep their operator.
+func (d Dep) NewSpec(version string) string {
+	if d.Ecosystem == Go {
+		return version
+	}
+	return d.Op + strings.TrimPrefix(version, "v")
+}
+
+// UpdateGoMod sets a requirement's version, keeping the rest of go.mod.
+func UpdateGoMod(data []byte, mod, version string) ([]byte, error) {
+	f, err := modfile.Parse("go.mod", data, nil)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for _, r := range f.Require {
+		if r.Mod.Path == mod {
+			found = true
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("%s isn't required in go.mod", mod)
+	}
+	if err := f.AddRequire(mod, version); err != nil {
+		return nil, err
+	}
+	f.Cleanup()
+	return f.Format()
+}
+
+// UpdatePackageJSON replaces "name": "old" with "name": "new" without
+// reformatting the file.
+func UpdatePackageJSON(data []byte, name, oldSpec, newSpec string) ([]byte, error) {
+	qn, _ := json.Marshal(name)
+	qo, _ := json.Marshal(oldSpec)
+	qs, _ := json.Marshal(newSpec)
+	re := regexp.MustCompile(`(` + regexp.QuoteMeta(string(qn)) + `\s*:\s*)` + regexp.QuoteMeta(string(qo)))
+	if !re.Match(data) {
+		return nil, fmt.Errorf("%s %s isn't in package.json", name, oldSpec)
+	}
+	out := re.ReplaceAll(data, []byte("${1}"+strings.ReplaceAll(string(qs), "$", "$$")))
+	if !json.Valid(out) {
+		return nil, errors.New("package.json wouldn't be valid JSON after the edit")
+	}
+	return out, nil
+}
+
+// ---------- picking versions ----------
+
+// Latest picks the newest stable version above current from versions.
+// Pre-releases count only when current is one. For Go, only versions in the
+// same module path (same major family) and no +incompatible ones unless
+// current is.
+func Latest(eco, current string, versions []string) string {
+	pre := semver.Prerelease(current) != ""
+	best := ""
+	for _, v := range versions {
+		if eco == Npm && !strings.HasPrefix(v, "v") {
+			v = "v" + v
+		}
+		if !semver.IsValid(v) || (!pre && semver.Prerelease(v) != "") {
+			continue
+		}
+		if eco == Go {
+			if module.IsPseudoVersion(v) || strings.HasSuffix(v, "+incompatible") != strings.HasSuffix(current, "+incompatible") {
+				continue
+			}
+			if !sameGoMajor(current, v) {
+				continue
+			}
+		}
+		if semver.Compare(v, current) > 0 && (best == "" || semver.Compare(v, best) > 0) {
+			best = v
+		}
+	}
+	return best
+}
+
+func sameGoMajor(a, b string) bool {
+	ma, mb := semver.Major(a), semver.Major(b)
+	if (ma == "v0" || ma == "v1") && (mb == "v0" || mb == "v1") {
+		return true
+	}
+	return ma == mb || strings.HasSuffix(a, "+incompatible")
+}
+
+// ---------- registries ----------
+
+var errNotFound = errors.New("not found")
+
+func getJSON(ctx context.Context, c *http.Client, u, accept string, max int64, v any) error {
+	body, err := get(ctx, c, u, accept, max)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, v)
+}
+
+func get(ctx context.Context, c *http.Client, u, accept string, max int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	req.Header.Set("User-Agent", "atelier-updates")
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone:
+		return nil, errNotFound
+	case resp.StatusCode != http.StatusOK:
+		return nil, fmt.Errorf("%s answered %s", u, resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > max {
+		return nil, fmt.Errorf("%s: response too large", u)
+	}
+	return b, nil
+}
+
+// DefaultClient is used when a source has no client of its own.
+var DefaultClient = &http.Client{Timeout: 20 * time.Second}
+
+// GoProxy lists module versions from GOPROXY-style URLs. Local, when set, is
+// asked first (Atelier's own Go proxy for modules hosted here).
+type GoProxy struct {
+	URLs   []string // tried in order; "direct" and "off" are ignored
+	Client *http.Client
+	Local  func(ctx context.Context, mod string) ([]string, bool)
+}
+
+// ParseGoProxy splits a GOPROXY value ("https://a,https://b|direct").
+func ParseGoProxy(v string) []string {
+	var out []string
+	for _, p := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == '|' }) {
+		p = strings.TrimRight(strings.TrimSpace(p), "/")
+		if p == "" || p == "direct" || p == "off" {
+			continue
+		}
+		if u, err := url.Parse(p); err == nil && (u.Scheme == "https" || u.Scheme == "http") {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (g GoProxy) Versions(ctx context.Context, mod string) ([]string, error) {
+	if g.Local != nil {
+		if vs, ok := g.Local(ctx, mod); ok {
+			return vs, nil
+		}
+	}
+	esc, err := module.EscapePath(mod)
+	if err != nil {
+		return nil, err
+	}
+	c := g.Client
+	if c == nil {
+		c = DefaultClient
+	}
+	var lastErr error = errNotFound
+	for _, base := range g.URLs {
+		body, err := get(ctx, c, base+"/"+esc+"/@v/list", "", 1<<20)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		vs := strings.Fields(string(body))
+		if len(vs) == 0 {
+			// No tagged versions: @latest gives the pseudo-version (not an update by itself).
+			var info struct{ Version string }
+			if err := getJSON(ctx, c, base+"/"+esc+"/@latest", "", 1<<16, &info); err == nil && info.Version != "" {
+				vs = []string{info.Version}
+			}
+		}
+		return vs, nil
+	}
+	return nil, lastErr
+}
+
+// NpmRegistry lists package versions. Doc, when set, fetches the packument
+// instead of the URL (Atelier's own registry and its upstream cache).
+type NpmRegistry struct {
+	URL    string // e.g. https://registry.npmjs.org
+	Client *http.Client
+	Doc    func(ctx context.Context, name string) ([]byte, bool, error)
+}
+
+func (n NpmRegistry) Versions(ctx context.Context, name string) ([]string, error) {
+	var body []byte
+	handled := false
+	if n.Doc != nil {
+		b, ok, err := n.Doc(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		body, handled = b, ok
+	}
+	if !handled {
+		c := n.Client
+		if c == nil {
+			c = DefaultClient
+		}
+		b, err := get(ctx, c, strings.TrimRight(n.URL, "/")+"/"+url.PathEscape(name), "application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8", 32<<20)
+		if err != nil {
+			return nil, err
+		}
+		body = b
+	}
+	var doc struct {
+		Versions map[string]json.RawMessage `json:"versions"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(doc.Versions))
+	for v, meta := range doc.Versions {
+		// Deprecated versions aren't offered.
+		if bytes.Contains(meta, []byte(`"deprecated"`)) {
+			var m struct {
+				Deprecated any `json:"deprecated"`
+			}
+			if json.Unmarshal(meta, &m) == nil && m.Deprecated != nil && m.Deprecated != "" && m.Deprecated != false {
+				continue
+			}
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+// ---------- OSV ----------
+
+// OSV queries https://api.osv.dev/v1/querybatch.
+type OSV struct {
+	URL    string // default DefaultOSVURL
+	Client *http.Client
+}
+
+const DefaultOSVURL = "https://api.osv.dev/v1/querybatch"
+
+// OSVQuery is one package version to look up.
+type OSVQuery struct {
+	Ecosystem string // go, npm
+	Name      string
+	Version   string // "v"-prefixed
+}
+
+func osvEcosystem(eco string) string {
+	if eco == Go {
+		return "Go"
+	}
+	return "npm"
+}
+
+// Vulns returns the advisory IDs affecting each query, in order.
+func (o OSV) Vulns(ctx context.Context, qs []OSVQuery) ([][]string, error) {
+	out := make([][]string, len(qs))
+	c := o.Client
+	if c == nil {
+		c = DefaultClient
+	}
+	u := o.URL
+	if u == "" {
+		u = DefaultOSVURL
+	}
+	type pkg struct {
+		Name      string `json:"name"`
+		Ecosystem string `json:"ecosystem"`
+	}
+	type query struct {
+		Package pkg    `json:"package"`
+		Version string `json:"version"`
+	}
+	for start := 0; start < len(qs); start += 500 {
+		end := min(start+500, len(qs))
+		var req struct {
+			Queries []query `json:"queries"`
+		}
+		for _, q := range qs[start:end] {
+			v := q.Version
+			if q.Ecosystem == Npm {
+				v = strings.TrimPrefix(v, "v")
+			}
+			req.Queries = append(req.Queries, query{Package: pkg{Name: q.Name, Ecosystem: osvEcosystem(q.Ecosystem)}, Version: v})
+		}
+		body, _ := json.Marshal(req)
+		hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		hreq.Header.Set("Content-Type", "application/json")
+		hreq.Header.Set("User-Agent", "atelier-updates")
+		resp, err := c.Do(hreq)
+		if err != nil {
+			return nil, err
+		}
+		var res struct {
+			Results []struct {
+				Vulns []struct {
+					ID string `json:"id"`
+				} `json:"vulns"`
+			} `json:"results"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&res)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("OSV answered %s", resp.Status)
+		}
+		if err != nil {
+			return nil, err
+		}
+		for i, r := range res.Results {
+			if start+i >= end {
+				break
+			}
+			for _, v := range r.Vulns {
+				out[start+i] = append(out[start+i], v.ID)
+			}
+		}
+	}
+	return out, nil
+}
+
+// ---------- checking ----------
+
+// Result is what a check found for one dependency.
+type Result struct {
+	Dep
+	Latest  string   // newest version ("" when up to date)
+	Kind    string   // patch, minor, major
+	InRange bool     // npm: the current range already allows Latest
+	Vulns   []string // advisories affecting the current version
+	Fixes   int      // how many of them Latest no longer has
+	Err     error    // the registry couldn't be asked
+}
+
+// Checker looks up versions and advisories.
+type Checker struct {
+	Go          GoProxy
+	Npm         NpmRegistry
+	OSV         *OSV // nil: no vulnerability lookups
+	Concurrency int
+}
+
+// Check looks up every dependency (at most MaxDeps).
+func (c Checker) Check(ctx context.Context, deps []Dep) ([]Result, error) {
+	if len(deps) > MaxDeps {
+		deps = deps[:MaxDeps]
+	}
+	res := make([]Result, len(deps))
+	n := c.Concurrency
+	if n <= 0 {
+		n = 4
+	}
+	sem := make(chan struct{}, n)
+	var wg sync.WaitGroup
+	for i, d := range deps {
+		res[i].Dep = d
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(r *Result) {
+			defer func() { <-sem; wg.Done() }()
+			var vs []string
+			var err error
+			if r.Ecosystem == Go {
+				vs, err = c.Go.Versions(ctx, r.Name)
+			} else {
+				vs, err = c.Npm.Versions(ctx, r.Name)
+			}
+			if err != nil {
+				r.Err = err
+				return
+			}
+			if l := Latest(r.Ecosystem, r.Version, vs); l != "" {
+				r.Latest, r.Kind = l, Kind(r.Version, l)
+				r.InRange = r.Ecosystem == Npm && Satisfies(r.Op, r.Version, l)
+			}
+		}(&res[i])
+	}
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return res, err
+	}
+	if c.OSV == nil {
+		return res, nil
+	}
+	var qs []OSVQuery
+	var idx []int
+	for i, r := range res {
+		qs = append(qs, OSVQuery{Ecosystem: r.Ecosystem, Name: r.Name, Version: r.Version})
+		idx = append(idx, i)
+		if r.Latest != "" {
+			qs = append(qs, OSVQuery{Ecosystem: r.Ecosystem, Name: r.Name, Version: r.Latest})
+			idx = append(idx, -1-i)
+		}
+	}
+	vulns, err := c.OSV.Vulns(ctx, qs)
+	if err != nil {
+		return res, fmt.Errorf("vulnerability lookup: %w", err)
+	}
+	after := map[int][]string{}
+	for k, i := range idx {
+		if i >= 0 {
+			res[i].Vulns = vulns[k]
+		} else {
+			after[-1-i] = vulns[k]
+		}
+	}
+	for i := range res {
+		if res[i].Latest == "" {
+			continue
+		}
+		still := map[string]bool{}
+		for _, id := range after[i] {
+			still[id] = true
+		}
+		for _, id := range res[i].Vulns {
+			if !still[id] {
+				res[i].Fixes++
+			}
+		}
+	}
+	return res, nil
+}

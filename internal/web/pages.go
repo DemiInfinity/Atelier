@@ -71,9 +71,15 @@ func (a *App) home(w http.ResponseWriter, r *http.Request) {
 	sort.SliceStable(acts, func(i, j int) bool { return acts[i].Commit.When.After(acts[j].Commit.When) })
 
 	cells, total := a.embers(ctx, all)
+	// Tether: GitHub activity blended in, and "Popular this week" (cache only).
+	acct := ""
+	if r.URL.Query().Get("account") != "" {
+		acct = active.Name
+	}
+	th := a.tetherHomeData(ctx, a.actor(r).PersonID, r.URL.Query().Get("lang"), acct)
 	a.render(w, r, "home", page{Title: "Home", Nav: "home", Data: map[string]any{
 		"Owners": owners, "Active": active, "Repos": repos, "Activity": acts,
-		"Embers": cells, "EmberTotal": total,
+		"Embers": cells, "EmberTotal": total, "Tether": th, "Feed": blendHomeFeed(acts, th.Feed, 24),
 	}})
 }
 
@@ -221,6 +227,14 @@ func (a *App) loadRepo(w http.ResponseWriter, r *http.Request, tab string) (*rep
 		return nil, nil, false
 	}
 	who := a.actor(r)
+	if !a.can(ctx, who, rp, PermRead) {
+		a.notFound(w, r)
+		return nil, nil, false
+	}
+	// An old address of a moved repository: send browsers to the new one.
+	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && a.redirectMovedRepo(w, r, rp) {
+		return nil, nil, false
+	}
 	if !a.can(ctx, who, rp, PermRead) {
 		a.notFound(w, r) // don't reveal that a private repository exists
 		return nil, nil, false
@@ -476,7 +490,8 @@ func (a *App) repoSettings(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.render(w, r, "repo_settings", page{Title: "Settings · " + v.Repo.FullName(), Nav: "repos", Notice: r.URL.Query().Get("saved"), Data: map[string]any{"V": v}})
+	a.render(w, r, "repo_settings", page{Title: "Settings · " + v.Repo.FullName(), Nav: "repos", Notice: r.URL.Query().Get("saved"), Error: r.URL.Query().Get("moveerr"),
+		Data: map[string]any{"V": v, "Move": a.moveOptions(r, v.Repo)}})
 }
 
 func (a *App) repoSettingsSubmit(w http.ResponseWriter, r *http.Request) {
@@ -522,6 +537,9 @@ var tokenScopes = map[string][]string{
 	"packages-read":  {"packages:read"},
 	"packages-write": {"packages:read", "packages:write"},
 	"write-packages": {"repo:read", "repo:write", "packages:read", "packages:write"},
+	// MCP (Claude and other AI clients): the MCP tools, limited per repository by a.can.
+	"mcp":      {"mcp", "repo:read", "repo:write"},
+	"mcp-read": {"mcp", "repo:read"},
 }
 
 var tokenExpiry = map[string]time.Duration{

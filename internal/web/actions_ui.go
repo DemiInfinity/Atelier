@@ -81,6 +81,7 @@ type actIndexData struct {
 	More             bool
 	Filtered         bool
 	Statuses         []string
+	Agent            *agentPanelData // the selected workflow is agentic (actions_agent.go)
 }
 
 var actStatusFilters = []string{"in_progress", "queued", "waiting", "success", "failure", "cancelled"}
@@ -120,6 +121,9 @@ func (a *App) renderActionsIndex(w http.ResponseWriter, r *http.Request, v *repo
 					wv.Active = true
 					d.Source = codeLines(wf.Source)
 					d.SourceURL = v.Base + "/blob/" + v.Default + "/" + wf.Path
+					if wf.Agentic {
+						d.Agent = a.agentPanel(ctx, v, wf)
+					}
 				}
 				d.Workflows = append(d.Workflows, wv)
 			}
@@ -258,6 +262,7 @@ type actRunData struct {
 	Duration  string
 	Live      bool
 	Commit    *gitrepo.Commit
+	Agent     *agentRunInfo // agentic workflow runs (actions_agent.go)
 }
 
 const actMaxStepLines = 3000
@@ -319,6 +324,7 @@ func (a *App) renderRun(w http.ResponseWriter, r *http.Request, v *repoView, g *
 		a.fail(w, r, err)
 		return
 	}
+	d.Agent = a.agentRunPanel(run, jobs)
 	runners, _ := a.db.ActionsRunners(ctx)
 	byKey := map[string][]string{}
 	for _, j := range jobs {

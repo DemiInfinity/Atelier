@@ -1,0 +1,121 @@
+{{define "head"}}<link rel="stylesheet" href="/static/mcp.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "mcp"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">MCP</h1>
+      <p class="muted">Atelier is an MCP server. Claude, or any other MCP client, can read your code and work with issues, pull requests, Actions and releases, with the access its token allows. Agentic workflows use the same tools.</p>
+    </div>
+    {{template "flash" .}}
+
+    <section class="card stack-sm" aria-labelledby="mcp-endpoint-h">
+      <h2 class="h-sm" id="mcp-endpoint-h">Server address</h2>
+      <div class="clone">
+        <input class="clone-url" id="mcp-endpoint" value="{{$d.Endpoint}}" readonly aria-label="MCP server address">
+        <button type="button" class="clone-copy" data-copy="#mcp-endpoint" aria-label="Copy server address"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+      </div>
+      <p class="small muted">Streamable HTTP transport. Send a token as <code>Authorization: Bearer atl_…</code>.</p>
+    </section>
+
+    {{if $d.Created}}
+    <section class="card card-ok stack-sm" role="status" aria-labelledby="mcp-new-h">
+      <h2 class="h-sm" id="mcp-new-h">Your new MCP token</h2>
+      <p class="small">Copy it now. You won't be able to see it again. The snippets below already include it.</p>
+      <div class="clone">
+        <input class="clone-url" id="mcp-new-token" value="{{$d.Created}}" readonly aria-label="New MCP token">
+        <button type="button" class="clone-copy" data-copy="#mcp-new-token" aria-label="Copy token"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+      </div>
+    </section>
+    {{else}}
+    <form method="post" action="/settings/mcp/token" class="card stack" aria-labelledby="mcp-token-h">
+      <h2 class="h-sm" id="mcp-token-h">Create an MCP token</h2>
+      <div class="row wrap-gap">
+        <div class="field grow-2">
+          <label for="mcp-tname">Name</label>
+          <input id="mcp-tname" name="name" required maxlength="80" value="{{$d.TokenName}}" placeholder="Claude · MacBook">
+        </div>
+        <div class="field grow">
+          <label for="mcp-access">Access</label>
+          <select id="mcp-access" name="access"><option value="mcp">Read and write</option><option value="mcp-read">Read only</option></select>
+        </div>
+        <div class="field grow">
+          <label for="mcp-expires">Expires</label>
+          <select id="mcp-expires" name="expires"><option value="90">In 90 days</option><option value="30">In 30 days</option><option value="365">In 1 year</option><option value="never">Never</option></select>
+        </div>
+      </div>
+      <p class="hint">Read and write lets the client open and comment on issues and pull requests, leave notes, label and close issues, run workflows and draft releases. It can never merge, push, delete or change settings.</p>
+      <div class="row-end"><button class="btn btn-primary" type="submit">Create MCP token</button></div>
+    </form>
+    {{end}}
+
+    <section class="stack" aria-labelledby="mcp-connect-h">
+      <h2 class="h-sm" id="mcp-connect-h">Connect a client</h2>
+      {{range $d.Snippets}}
+      <div class="card stack-sm mcp-snippet">
+        <div class="row mcp-snippet-head">
+          <h3 class="mcp-snippet-title">{{.Label}}</h3>
+          <button type="button" class="btn btn-sm" data-copy="#{{.ID}}">Copy</button>
+        </div>
+        <pre class="mcp-code" id="{{.ID}}" tabindex="0">{{.Text}}</pre>
+        <p class="small muted">{{.Hint}}</p>
+      </div>
+      {{end}}
+      <p class="small muted">Formats change between clients and versions, so check your client's docs if a snippet doesn't work. Any client that speaks MCP over Streamable HTTP and can send an <code>Authorization</code> header can connect.</p>
+    </section>
+
+    <section class="list-card" aria-labelledby="mcp-tokens-h">
+      <div class="list-head" id="mcp-tokens-h">MCP tokens</div>
+      {{range $d.Tokens}}
+      <div class="list-row">
+        <div class="grow min0">
+          <strong class="break">{{.Name}}</strong> {{if .Has "repo:write"}}<span class="pill pill-violet">Read and write</span>{{else}}<span class="pill">Read only</span>{{end}}
+          <div class="small muted"><span class="mono">{{.Prefix}}…</span> · {{if .LastUsedAt}}Last used {{ago .LastUsedAt.UTC}}{{else}}Never used{{end}} · {{if .ExpiresAt}}Expires {{date .ExpiresAt.UTC}}{{else}}No expiry{{end}}</div>
+        </div>
+        <form method="post" action="/settings/tokens/{{.ID}}/revoke"><button class="btn btn-danger btn-sm" type="submit" aria-label="Revoke token {{.Name}}">Revoke</button></form>
+      </div>
+      {{else}}
+      <div class="list-row muted">No MCP tokens yet.</div>
+      {{end}}
+    </section>
+
+    <section class="list-card" aria-labelledby="mcp-log-h">
+      <div class="list-head" id="mcp-log-h">Recent calls</div>
+      {{if $d.Calls}}
+      <div class="table-scroll">
+        <table class="mcp-log">
+          <caption class="sr-only">The latest MCP tool calls made with your tokens and by your agentic workflows</caption>
+          <thead><tr><th scope="col">Tool</th><th scope="col">Who</th><th scope="col">Repository</th><th scope="col">Result</th><th scope="col">When</th></tr></thead>
+          <tbody>
+          {{range $d.Calls}}
+          <tr>
+            <td><code class="mcp-tool">{{.Tool}}</code>{{if .Target}} <span class="muted small mono">{{.Target}}</span>{{end}}</td>
+            <td><span class="mcp-actor mcp-actor-{{.ActorKind}}">{{.ActorKind}}</span> <span class="small">{{.ActorName}}</span></td>
+            <td class="small">{{if .Repo}}<a href="/{{.Repo}}">{{.Repo}}</a>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td class="small">{{if .OK}}<span class="mcp-ok">OK</span>{{else}}<span class="mcp-err">Error</span> <span class="muted">{{.Error}}</span>{{end}}</td>
+            <td class="small muted mcp-when"><time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago .CreatedAt}}</time></td>
+          </tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="list-row muted">No calls yet. Connect a client and ask it about one of your repositories.</div>
+      {{end}}
+    </section>
+
+    <section class="list-card" aria-labelledby="mcp-tools-h">
+      <div class="list-head" id="mcp-tools-h">Tools</div>
+      {{range $d.Tools}}
+      <div class="list-row mcp-tool-row">
+        <div class="grow min0">
+          <code class="mcp-tool">{{.Name}}</code> {{if .Write}}<span class="pill pill-amber">Writes</span>{{else}}<span class="pill">Reads</span>{{end}}{{if .NoJobs}} <span class="pill">Not for agents</span>{{end}}
+          <div class="small muted">{{.Desc}}</div>
+        </div>
+      </div>
+      {{end}}
+    </section>
+  </div>
+</main>
+{{end}}

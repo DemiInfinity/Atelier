@@ -1,0 +1,150 @@
+{{define "head"}}<link rel="stylesheet" href="/static/security.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg secu-page">
+  <h1 class="h-display">Security</h1>
+  {{with $d.Flash}}<div class="flash flash-ok" role="status">{{.}}</div>{{end}}
+
+  <section class="secu-counters" aria-label="Summary">
+    <a class="secu-counter {{if $d.SecretsOpen}}secu-counter-bad{{else}}secu-counter-ok{{end}}" href="#secret-scanning">
+      <span class="secu-counter-label">Secrets found</span>
+      <span class="secu-counter-n">{{$d.SecretsOpen}}</span>
+    </a>
+    <a class="secu-counter {{if $d.Updates}}secu-counter-warn{{else}}secu-counter-ok{{end}}" href="#dependencies">
+      <span class="secu-counter-label">Dependency updates</span>
+      <span class="secu-counter-n">{{$d.Updates}}</span>
+    </a>
+    <a class="secu-counter {{if $d.Vulns}}secu-counter-bad{{else}}secu-counter-ok{{end}}" href="#dependencies">
+      <span class="secu-counter-label">Known vulnerabilities</span>
+      <span class="secu-counter-n">{{$d.Vulns}}</span>
+    </a>
+  </section>
+
+  {{if not $d.CanAdmin}}
+  <div class="card stack-sm">
+    <h2 class="h-sm">Details are for repository admins</h2>
+    <p class="muted">Where secrets were found and which dependencies need updating are only shown to people who can administer {{$v.Repo.FullName}}.</p>
+  </div>
+  {{else}}
+
+  <section class="list-card {{if $d.SecretsOpen}}secu-card-bad{{end}}" id="secret-scanning" aria-labelledby="secret-scanning-h">
+    <div class="list-head row-between wrap-gap">
+      <h2 class="secu-head-title" id="secret-scanning-h">Secret scanning</h2>
+      <form method="post" action="{{$v.Base}}/security/scan">
+        <button class="btn btn-sm" type="submit" {{if $v.Empty}}disabled{{end}}>Scan history now</button>
+      </form>
+    </div>
+    {{range $d.Alerts}}
+    <div class="list-row secu-alert {{if not .Open}}secu-alert-closed{{end}}">
+      <div class="grow min0">
+        <p class="secu-alert-title"><span class="secu-alert-rule">{{.RuleName}}</span> <span class="mono secu-partial" title="Only the first 4 and last 2 characters are kept">{{.Redacted}}</span>
+          {{if eq .Status "open"}}<span class="pill secu-pill-bad">Open</span>{{else if eq .Status "resolved"}}<span class="pill secu-pill-ok">Resolved</span>{{else}}<span class="pill">False positive</span>{{end}}
+          {{if eq .Source "bypass"}}<span class="pill pill-amber">Pushed with a bypass</span>{{end}}
+        </p>
+        <p class="small muted">
+          {{if .WhereURL}}<a class="muted-link mono" href="{{.WhereURL}}">{{.Where}}</a>{{else}}<span class="mono">{{.Where}}</span>{{end}}
+          · first seen {{ago .FirstSeen}}{{if .CommitSHA}} · commit <span class="mono">{{short .CommitSHA}}</span>{{end}}
+          · fingerprint <span class="mono">{{.Fingerprint}}</span>
+        </p>
+      </div>
+      <div class="secu-alert-actions">
+        {{if .Open}}<a class="btn btn-sm btn-danger" href="{{$d.SecretsURL}}">Rotate and store as a secret</a>{{end}}
+        <form method="post" action="{{$v.Base}}/security/alerts/{{.ID}}" class="secu-inline">
+          {{if .Open}}
+          <button class="btn btn-sm" type="submit" name="status" value="resolved">Mark resolved</button>
+          <button class="btn btn-sm btn-ghost" type="submit" name="status" value="false_positive">False positive</button>
+          {{else}}
+          <button class="btn btn-sm btn-ghost" type="submit" name="status" value="open">Reopen</button>
+          {{end}}
+        </form>
+      </div>
+    </div>
+    {{else}}
+    <div class="list-row secu-clean"><span class="secu-dot secu-dot-ok" aria-hidden="true"></span> No secrets found.</div>
+    {{end}}
+    <div class="list-row small muted secu-foot">
+      <p>
+        {{if $d.Settings.PushProtection}}Pushes containing secrets are blocked before they land.{{else}}Push protection is off: secrets in pushes become alerts.{{end}}
+        {{if $d.Settings.ScanLogs}}Actions logs are scanned and masked after every run.{{end}}
+        {{with $d.History}}
+          {{if eq .Status "running"}}A history scan is running (started {{ago .StartedAt}}).
+          {{else if eq .Status "failed"}}The last history scan failed: {{.Error}}
+          {{else}}History last scanned {{ago .FinishedAt}}: {{.Commits}} commit{{if ne .Commits 1}}s{{end}}{{if .Truncated}} (stopped at the limit of {{$d.ScanMaxCommits}} commits or the size/time limit){{end}}.{{end}}
+        {{end}}
+        Ignore test values with <span class="mono">.atelier/secret-scanning.yml</span> (<span class="mono">paths</span> and <span class="mono">fingerprints</span>).
+      </p>
+    </div>
+  </section>
+
+  {{if $d.Blocks}}
+  <section class="list-card" id="push-blocks" aria-labelledby="push-blocks-h">
+    <div class="list-head"><h2 class="secu-head-title" id="push-blocks-h">Blocked pushes</h2></div>
+    {{range $d.Blocks}}
+    <div class="list-row">
+      <div class="grow min0">
+        <p><span class="secu-alert-rule">{{.RuleName}}</span> <span class="mono secu-partial">{{.Redacted}}</span></p>
+        <p class="small muted"><span class="mono">{{.Path}}:{{.Line}}</span> · <span class="mono">{{.Ref}}</span> · commit <span class="mono">{{short .CommitSHA}}</span> · {{ago .CreatedAt}} · fingerprint <span class="mono">{{.Fingerprint}}</span></p>
+      </div>
+      {{if .Allowed}}
+      <span class="pill pill-amber">Allowed once · push again within an hour</span>
+      {{else}}
+      <form method="post" action="{{$v.Base}}/security/push-blocks/{{.ID}}/allow">
+        <button class="btn btn-sm" type="submit">Allow once</button>
+      </form>
+      {{end}}
+    </div>
+    {{end}}
+  </section>
+  {{end}}
+
+  <section class="list-card" id="dependencies" aria-labelledby="deps-h">
+    <div class="list-head row-between wrap-gap">
+      <h2 class="secu-head-title" id="deps-h">Dependency updates</h2>
+      <div class="row secu-deps-tools">
+        <span class="small muted">{{with $d.DepsScan}}{{if eq .Status "running"}}Checking now…{{else}}Checked {{ago .FinishedAt}}{{end}} · {{end}}weekly</span>
+        <form method="post" action="{{$v.Base}}/security/dependencies/check">
+          <button class="btn btn-sm" type="submit" {{if $v.Empty}}disabled{{end}}>Check now</button>
+        </form>
+      </div>
+    </div>
+    {{range $d.Deps}}
+    <div class="list-row secu-dep">
+      <span class="mono secu-dep-name">{{.Name}}</span>
+      {{if .Latest}}<span class="mono small muted">{{.Current}} → {{.NewSpec}}</span>{{else}}<span class="mono small muted">{{.Current}}</span>{{end}}
+      {{if .Kind}}<span class="pill secu-chip-{{.Kind}}">{{.Kind}}</span>{{end}}
+      {{if .Vulns}}<span class="pill secu-pill-bad" title="{{.VulnIDs}}">{{.Vulns}} advisor{{if eq .Vulns 1}}y{{else}}ies{{end}}</span>{{end}}
+      <span class="pill">{{.Ecosystem}}</span>
+      <span class="secu-dep-action small">
+        {{if .PRURL}}<a href="{{.PRURL}}">Pull request #{{.PRNumber}}</a>{{else if .Latest}}<span class="muted">No pull request</span>{{else}}<span class="muted">No fixed version yet</span>{{end}}
+      </span>
+    </div>
+    {{else}}
+    <div class="list-row secu-clean"><span class="secu-dot secu-dot-ok" aria-hidden="true"></span> {{if $d.DepsScan}}Everything in go.mod and package.json is up to date.{{else}}Not checked yet. Atelier reads go.mod and package.json at the root of {{$v.Default}}.{{end}}</div>
+    {{end}}
+    {{with $d.DepsScan}}{{if .Error}}<div class="list-row small secu-warn">{{.Error}}</div>{{end}}{{end}}
+    <div class="list-row small muted secu-foot"><p>Update pull requests only change the manifest. Lockfiles (<span class="mono">go.sum</span>, <span class="mono">package-lock.json</span>) aren't regenerated: CI runs on the pull request.</p></div>
+  </section>
+
+  <section class="card stack" id="settings" aria-labelledby="settings-h">
+    <h2 class="h-sm" id="settings-h">Settings</h2>
+    <form method="post" action="{{$v.Base}}/security/settings" class="stack">
+      <div class="secu-toggles">
+        <label class="choice"><input type="checkbox" name="push_protection" {{if $d.Settings.PushProtection}}checked{{end}}><span><strong>Block pushes that contain secrets</strong><span class="small muted">Push protection. A blocked secret can be allowed once from this page.</span></span></label>
+        <label class="choice"><input type="checkbox" name="scan_logs" {{if $d.Settings.ScanLogs}}checked{{end}}><span><strong>Scan Actions logs</strong><span class="small muted">After every run, mask and report secrets the runner missed.</span></span></label>
+        <label class="choice"><input type="checkbox" name="security_prs" {{if $d.Settings.SecurityPRs}}checked{{end}}><span><strong>Open PRs for security updates automatically</strong><span class="small muted">When a dependency has a known vulnerability (OSV).</span></span></label>
+        <label class="choice"><input type="checkbox" name="all_prs" {{if $d.Settings.AllPRs}}checked{{end}}><span><strong>Open PRs for all updates</strong><span class="small muted">One pull request per dependency, by atelier-updates.</span></span></label>
+      </div>
+      <details class="secu-registries">
+        <summary class="small">Registries (all repositories)</summary>
+        <div class="grid-2 secu-registry-fields">
+          <div class="field"><label for="goproxy">Go module proxy</label><input id="goproxy" name="goproxy" value="{{$d.GoProxy}}" placeholder="https://proxy.golang.org"><span class="small muted">Comma-separated, like GOPROXY. Modules hosted here use Atelier's own proxy.</span></div>
+          <div class="field"><label for="npm_registry">npm registry</label><input id="npm_registry" name="npm_registry" value="{{$d.NpmRegistry}}" placeholder="https://registry.npmjs.org"><span class="small muted">{{if $d.NpmViaAtelier}}Not used: Atelier's npm registry caches the public one (Settings → Packages).{{else}}Used unless Atelier's npm upstream cache is on.{{end}}</span></div>
+        </div>
+      </details>
+      <div><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+  </section>
+  {{end}}
+</main>
+{{end}}

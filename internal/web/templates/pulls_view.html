@@ -20,7 +20,7 @@
     </div>
     <p class="pr-subtitle">
       {{template "pulls-state" $p}}
-      <span class="text-2"><strong>{{$p.AuthorName}}</strong>{{template "pulls-actor" $p.AuthorKind}}
+      <span class="text-2"><strong>{{$p.AuthorName}}</strong>{{template "pulls-actor" (actorKind $p.AuthorKind $p.AuthorName)}}
       {{if $p.IsMerged}}merged {{$d.Commits}} {{if eq $d.Commits 1}}commit{{else}}commits{{end}} into{{else}}wants to merge {{$d.Commits}} {{if eq $d.Commits 1}}commit{{else}}commits{{end}} into{{end}}
       {{template "pulls-branch" $p.Base}} from {{template "pulls-branch" $p.Head}}</span>
     </p>
@@ -117,7 +117,7 @@ git push</code></pre>
       <article class="pr-comment">
         <header class="pr-comment-head small">
           <span class="avatar avatar-sm" aria-hidden="true">{{initial $p.AuthorName}}</span>
-          <strong>{{$p.AuthorName}}</strong>{{template "pulls-actor" $p.AuthorKind}}
+          <strong>{{$p.AuthorName}}</strong>{{template "pulls-actor" (actorKind $p.AuthorKind $p.AuthorName)}}
           <span class="muted">opened this <time datetime="{{$p.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $p.CreatedAt}}">{{ago $p.CreatedAt}}</time></span>
         </header>
         {{if $p.Body}}<div class="markdown pr-comment-body">{{$d.BodyHTML}}</div>{{else}}<p class="pr-comment-body muted">No description.</p>{{end}}
@@ -133,7 +133,7 @@ git push</code></pre>
       <article class="pr-comment" id="comment-{{.Comment.ID}}">
         <header class="pr-comment-head small">
           <span class="avatar avatar-sm" aria-hidden="true">{{initial .Comment.AuthorName}}</span>
-          <strong>{{.Comment.AuthorName}}</strong>{{template "pulls-actor" .Comment.AuthorKind}}
+          <strong>{{.Comment.AuthorName}}</strong>{{template "pulls-actor" (actorKind .Comment.AuthorKind .Comment.AuthorName)}}
           <span class="muted">commented <time datetime="{{.Comment.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .Comment.CreatedAt}}">{{ago .Comment.CreatedAt}}</time></span>
         </header>
         <div class="markdown pr-comment-body">{{.HTML}}</div>
@@ -146,6 +146,7 @@ git push</code></pre>
         {{else if eq .Event.Kind "renamed"}}<span class="pr-event-icon" aria-hidden="true">✎</span><strong>{{.Event.ActorName}}</strong> changed the title from <del>{{.From}}</del> to <ins>{{.To}}</ins>
         {{else if eq .Event.Kind "branch_deleted"}}<span class="pr-event-icon" aria-hidden="true">⌫</span><strong>{{.Event.ActorName}}</strong> deleted the {{template "pulls-branch" .Event.Data}} branch
         {{else if eq .Event.Kind "force_pushed"}}<span class="pr-event-icon is-warn" aria-hidden="true">↯</span>{{template "pulls-branch" $p.Head}} was force-pushed from <span class="mono">{{short .Method}}</span> to <span class="mono">{{short .SHA}}</span>
+        {{else if eq .Event.Kind "tether_mirrored"}}<span class="pr-event-icon" aria-hidden="true">↗</span>Mirrored to GitHub for bot review · {{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer" target="_blank">#{{.SHA}}</a>{{else}}#{{.SHA}}{{end}} <span class="pill pill-tether">via Tether</span>
         {{else}}{{.Event.Kind}}{{end}}
         <time class="muted" datetime="{{.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .When}}">{{ago .When}}</time>
       </p>

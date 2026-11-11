@@ -1,0 +1,34 @@
+{{define "head"}}{{template "apps-head" .}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$s := $d.Scope}}{{$h := $d.Hook}}{{$x := $d.D}}
+{{if $s.IsRepo}}{{template "repohead" $s.V}}<main class="wrap narrow stack-lg apps-page">
+{{else}}<main class="wrap layout-2 apps-page"><aside class="col-side">{{template "accountnav" "apps"}}</aside><div class="col-main stack-lg">
+{{end}}
+    <p class="small"><a class="muted-link" href="{{$s.HookURL $h.ID}}#deliveries">← {{$h.URL}}</a></p>
+    <div class="row-between wrap-gap">
+      <div class="min0">
+        <h1 class="h-display">{{$x.Event}}{{if $x.Action}}.{{$x.Action}}{{end}}</h1>
+        <p class="muted mono small break">{{$x.GUID}}</p>
+      </div>
+      <form method="post" action="{{$s.HookURL $h.ID}}/deliveries/{{$x.ID}}/redeliver"><button class="btn" type="submit">Redeliver</button></form>
+    </div>
+    <p class="row gap-sm wrap-gap">{{template "apps-delivery-status" $x}}<span>{{if eq $x.Status "ok"}}Delivered{{else if eq $x.Status "pending"}}Waiting to {{if $x.Attempts}}retry{{else}}send{{end}}{{else}}Failed{{end}}</span>
+      {{if $x.RespStatus}}<span class="pill">HTTP {{$x.RespStatus}}</span>{{end}}
+      {{if $x.Attempts}}<span class="small muted">{{$x.Attempts}} attempt{{if ne $x.Attempts 1}}s{{end}} · {{$x.DurationMS}} ms</span>{{end}}
+      {{if $x.Redelivery}}<span class="pill">redelivery</span>{{end}}</p>
+    {{if $x.Error}}<div class="flash flash-error break">{{$x.Error}}</div>{{end}}
+
+    <section class="stack-sm" aria-labelledby="req-h">
+      <h2 class="h-sm" id="req-h">Request</h2>
+      {{if $d.ReqHeaders}}<dl class="apps-headers">{{range $d.ReqHeaders}}<dt class="mono">{{.Name}}</dt><dd class="mono break">{{.Value}}</dd>{{end}}</dl>{{else}}<p class="small muted">Not sent yet.</p>{{end}}
+      <pre class="apps-code"><code>{{$d.Payload}}</code></pre>
+    </section>
+
+    <section class="stack-sm" aria-labelledby="resp-h">
+      <h2 class="h-sm" id="resp-h">Response</h2>
+      {{if $d.RespHeaders}}<dl class="apps-headers">{{range $d.RespHeaders}}<dt class="mono">{{.Name}}</dt><dd class="mono break">{{.Value}}</dd>{{end}}</dl>{{end}}
+      {{if $x.RespBody}}<pre class="apps-code"><code>{{$x.RespBody}}</code></pre>{{else}}<p class="small muted">No response body.</p>{{end}}
+      <p class="small muted">Signatures, cookies and authorization headers are redacted here. The receiver’s answer is shown as text and never run.</p>
+    </section>
+{{if $s.IsRepo}}</main>{{else}}</div></main>{{end}}
+{{end}}

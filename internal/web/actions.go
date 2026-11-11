@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -244,6 +243,11 @@ func (a *App) loadWorkflows(ctx context.Context, repoID int64, g *gitrepo.Repo, 
 					Errors: []string{fmt.Sprintf("The workflow file is larger than %d KB.", workflow.MaxFileSize/1024)}})
 				continue
 			}
+			if workflow.IsAgenticFile(e.Name) {
+				wf, _ := workflow.ParseAgentic(e.Path, b.Data)
+				out = append(out, wf)
+				continue
+			}
 			out = append(out, workflow.Parse(e.Path, b.Data))
 		}
 		if len(out) > 0 {
@@ -447,7 +451,7 @@ func (a *App) triggerPull(ctx context.Context, rp store.Repo, g *gitrepo.Repo, p
 func (a *App) triggerRuns(ctx context.Context, rp store.Repo, g *gitrepo.Repo, t actTrigger) []store.ActionsRun {
 	var started []store.ActionsRun
 	for _, wf := range a.loadWorkflows(ctx, rp.ID, g, t.SHA) {
-		if wf.Agentic || (t.Workflow != "" && wf.Path != t.Workflow) {
+		if t.Workflow != "" && wf.Path != t.Workflow {
 			continue
 		}
 		if !actionsMatches(wf, t) {
@@ -515,7 +519,7 @@ func (a *App) runSchedules(ctx context.Context, minute time.Time) {
 			continue
 		}
 		for _, wf := range a.loadWorkflows(ctx, rp.ID, g, sha) {
-			if !wf.Valid() || wf.Agentic {
+			if !wf.Valid() {
 				continue
 			}
 			for _, s := range wf.On.Schedule {
@@ -727,6 +731,9 @@ func (a *App) startRun(ctx context.Context, rp store.Repo, g *gitrepo.Repo, wf *
 	var jobs []store.ActionsJob
 	if len(run.Errors) == 0 {
 		jobs = a.buildJobs(rp, run, wf, t)
+		if wf.Agentic {
+			a.agentGateJobs(ctx, rp, wf, t, jobs) // first run, changed tools and outside authors need approval
+		}
 	} else {
 		run.Status, run.Conclusion = store.RunCompleted, actions.StatusFailure
 		run.StartedAt, run.FinishedAt = time.Now(), time.Now()
@@ -906,9 +913,6 @@ func (a *App) dispatchWorkflow(ctx context.Context, rp store.Repo, g *gitrepo.Re
 	wf := actFindWorkflow(a.loadWorkflows(ctx, rp.ID, g, sha), wfPath)
 	if wf == nil {
 		return store.ActionsRun{}, fmt.Errorf("%s doesn't exist on %s", wfPath, branch)
-	}
-	if wf.Agentic {
-		return store.ActionsRun{}, errors.New("agentic workflows arrive in Phase 4")
 	}
 	if wf.Valid() && wf.On.Dispatch == nil {
 		return store.ActionsRun{}, fmt.Errorf("%s on %s has no workflow_dispatch trigger", wf.Name, branch)

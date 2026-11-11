@@ -296,3 +296,32 @@ func TestRotateSecrets(t *testing.T) {
 		t.Errorf("after failed rotation: %v %v", got, err)
 	}
 }
+
+func TestRotateSecretsAlsoResealsWebhooksAndTether(t *testing.T) {
+	s, kr, me, rp := secretsFixture(t)
+	ctx := context.Background()
+	h, err := s.SaveWebhook(ctx, Webhook{RepoID: rp.ID, URL: "https://example.com/hook", ContentType: "json", Events: []string{"push"}, Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetWebhookSecret(ctx, kr, h.ID, "hook-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveTetherAccount(ctx, kr, TetherAccount{PersonID: me.ID, Login: "zoe", Method: "pat", RateRemaining: -1}, "ghp_token"); err != nil {
+		t.Fatal(err)
+	}
+	to, _ := secrets.NewKeyring(secrets.GenerateKey())
+	n, err := s.RotateSecrets(ctx, kr, to)
+	if err != nil || n != 2 {
+		t.Fatalf("Rotate = %d, %v", n, err)
+	}
+	if got, err := s.WebhookSecret(ctx, to, h.ID); err != nil || got != "hook-secret" {
+		t.Errorf("webhook secret after rotation = %q, %v", got, err)
+	}
+	if got, err := s.TetherToken(ctx, to, me.ID); err != nil || got != "ghp_token" {
+		t.Errorf("tether token after rotation = %q, %v", got, err)
+	}
+	if _, err := s.WebhookSecret(ctx, kr, h.ID); err == nil {
+		t.Error("old key still opens the webhook secret")
+	}
+}

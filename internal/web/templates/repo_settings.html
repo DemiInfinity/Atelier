@@ -35,6 +35,42 @@
     <a class="btn" href="{{$v.Base}}/settings/secrets">Secrets and variables</a>
   </section>
 
+  <section class="card row-between wrap-gap">
+    <div>
+      <h2 class="h-sm">Apps, bots and webhooks</h2>
+      <p class="small muted">Bots that can comment and post checks here, webhooks, and Review on GitHub through Tether.</p>
+    </div>
+    <a class="btn" href="{{$v.Base}}/settings/apps">Apps and webhooks</a>
+  </section>
+
+  {{with .Data.Move}}{{if .Accounts}}
+  <form method="post" action="{{$v.Base}}/transfer" class="card stack" id="move">
+    <div>
+      <h2 class="h-sm">Move or rename</h2>
+      <p class="small muted">Move <strong>{{$v.Repo.FullName}}</strong> to another of your accounts (for example from personal to your company), and optionally rename it. Issues, pull requests, Actions history, releases, LFS files, branch rules, repository secrets and webhooks go with it. Packages stay with the account that published them.</p>
+      <p class="small muted">The old address keeps working: links, HTTPS clone URLs and SSH remotes redirect here until a new repository takes that name.</p>
+    </div>
+    <div class="row wrap-gap">
+      <div class="field grow">
+        <label for="move-owner">Move to</label>
+        <select id="move-owner" name="owner">
+          {{range .Accounts}}<option value="{{.Name}}" {{if eq .ID $v.Repo.OwnerID}}selected{{end}}>{{.Label}} ({{if .IsCompany}}Company{{else}}Personal{{end}})</option>{{end}}
+        </select>
+      </div>
+      <div class="field grow">
+        <label for="move-name">Name</label>
+        <input id="move-name" name="name" value="{{$v.Repo.Name}}" maxlength="100" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div class="field">
+      <label for="move-confirm">Type <span class="mono">{{$v.Repo.FullName}}</span> to confirm</label>
+      <input id="move-confirm" name="confirm" required autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+    {{if .Redirects}}<p class="small muted">Old addresses that lead here: {{range $i, $n := .Redirects}}{{if $i}}, {{end}}<span class="mono">{{$n}}</span>{{end}}</p>{{end}}
+    <div class="row-end"><button class="btn" type="submit">Move repository</button></div>
+  </form>
+  {{end}}{{end}}
+
   <form method="post" action="{{$v.Base}}/delete" class="card card-danger stack">
     <div>
       <h2 class="h-sm danger-ink">Danger zone</h2>

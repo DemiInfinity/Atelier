@@ -124,7 +124,7 @@ func preReceive(owner, name string, stdin io.Reader, stderr io.Writer) error {
 		fmt.Fprintln(stderr, "atelier: "+m)
 	}
 	fmt.Fprintln(stderr, "")
-	return errors.New("push rejected by branch rules")
+	return errors.New("push rejected")
 }
 
 // checkBranchRules enforces require_pr, block_force_push and linear_history.

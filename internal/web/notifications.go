@@ -269,7 +269,7 @@ var notifFilters = []notifFilter{
 	{Key: "actions", Label: "Actions", Subjects: []string{"run", "job"}, Class: "nf-action"},
 	{Key: "runners", Label: "Runners", Subjects: []string{"runner"}, Class: "nf-runner"},
 	{Key: "releases", Label: "Releases", Subjects: []string{"release"}, Class: "nf-release"},
-	{Key: "tether", Label: "Tether", Subjects: []string{"tether"}, Soon: "Tether notifications arrive with Phase 4.", Class: "nf-tether"},
+	{Key: "tether", Label: "Tether", Subjects: []string{"tether"}, Class: "nf-tether"},
 }
 
 func findNotifFilter(key string) notifFilter {
@@ -515,11 +515,14 @@ func notifRow(n store.Notification) notifRowView {
 	case ActorSystem:
 		v.ActorClass, v.ActorText = "nf-actor-system", "Atelier"
 	}
+	if n.SubjectType == "tether" {
+		v.Class = "nf-tether" // GitHub people sync in as bots; keep Tether's blue
+	}
 	if verb == "failed" {
 		v.Class = "nf-failed"
 	}
 	switch {
-	case n.Repo != "" && n.Number != 0 && (n.SubjectType == "issue" || n.SubjectType == "pull"):
+	case n.Repo != "" && n.Number != 0 && (n.SubjectType == "issue" || n.SubjectType == "pull" || n.SubjectType == "tether"):
 		v.Where = fmt.Sprintf("%s · #%d", n.Repo, n.Number)
 	case n.Repo != "":
 		v.Where = n.Repo
@@ -546,7 +549,7 @@ func notifVerb(kind string) string {
 	switch kind {
 	case EventIssueOpened, EventPullOpened:
 		return "opened"
-	case EventIssueCommented, EventPullCommented:
+	case EventIssueCommented, EventPullCommented, EventTetherComment:
 		return "commented"
 	case EventIssueClosed, EventPullClosed:
 		return "closed"
