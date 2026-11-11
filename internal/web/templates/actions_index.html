@@ -72,9 +72,9 @@ jobs:
         {{if $d.Selected}}<p class="small muted"><span class="mono">{{$d.Selected.Path}}</span>{{if $d.Selected.Events}} · runs on {{range $i, $e := $d.Selected.Events}}{{if $i}}, {{end}}{{template "actions-event" $e}}{{end}}{{end}}</p>{{end}}
       </div>
       {{if and $d.Selected $d.Selected.Dispatch $d.CanWrite}}
-      <details class="dropdown act-dispatch" {{if .Error}}open{{end}}>
+      <details class="dropdown dropdown-end act-dispatch" {{if .Error}}open{{end}}>
         <summary class="btn">Run workflow <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></summary>
-        <form method="post" action="{{$v.Base}}/actions/dispatch" class="dropdown-menu act-dispatch-menu stack-sm">
+        <form method="post" action="{{$v.Base}}/actions/dispatch" class="dropdown-menu dropdown-form act-dispatch-menu stack-sm">
           <input type="hidden" name="workflow" value="{{$d.Selected.Path}}">
           <div class="field">
             <label for="act-ref">Branch</label>
@@ -126,7 +126,7 @@ jobs:
         <option value="">Any branch</option>
         {{range $d.RunBranches}}<option value="{{.}}" {{if eq . $d.Branch}}selected{{end}}>{{.}}</option>{{end}}
       </select>
-      <button class="btn btn-sm" type="submit">Filter</button>
+      <button class="btn" type="submit">Filter</button>
       {{if $d.Filtered}}<a class="small" href="{{$v.Base}}/actions{{if $d.Workflow}}?workflow={{$d.Workflow}}{{end}}">Clear</a>{{end}}
     </form>
 

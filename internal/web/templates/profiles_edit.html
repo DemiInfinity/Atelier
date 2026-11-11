@@ -100,8 +100,8 @@
           </label>
           {{if .Pinned}}
           <span class="prof-pin-move">
-            <button class="btn btn-ghost btn-xs" type="submit" name="move" value="up:{{.Repo.ID}}" aria-label="Move {{.Repo.Name}} up" {{if .First}}disabled{{end}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 15 L12 9 L18 15"/></svg></button>
-            <button class="btn btn-ghost btn-xs" type="submit" name="move" value="down:{{.Repo.ID}}" aria-label="Move {{.Repo.Name}} down" {{if .Last}}disabled{{end}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></button>
+            <button class="btn btn-ghost btn-sm btn-icon" type="submit" name="move" value="up:{{.Repo.ID}}" aria-label="Move {{.Repo.Name}} up" {{if .First}}disabled{{end}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 15 L12 9 L18 15"/></svg></button>
+            <button class="btn btn-ghost btn-sm btn-icon" type="submit" name="move" value="down:{{.Repo.ID}}" aria-label="Move {{.Repo.Name}} down" {{if .Last}}disabled{{end}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></button>
           </span>
           {{end}}
         </li>

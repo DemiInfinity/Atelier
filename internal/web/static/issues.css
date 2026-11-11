@@ -49,7 +49,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  min-height: var(--ctl-h-sm);
+  padding: 0 10px;
   border-radius: var(--r-sm);
   color: var(--text-2);
   font-weight: 500;
@@ -57,7 +58,6 @@
 .issues-states a:hover { color: var(--text); text-decoration: none; background: var(--raised-2); }
 .issues-states a[aria-current="page"] { color: var(--text); font-weight: 600; background: var(--raised-2); }
 .issues-filters { display: flex; flex-wrap: wrap; gap: 2px; }
-.dropdown-end .dropdown-menu { left: auto; right: 0; }
 
 .issue-row { align-items: flex-start; gap: 12px; }
 .issue-row:hover { background: #1d1c19; }
@@ -147,9 +147,11 @@
   width: min(480px, calc(100vw - 32px));
   box-shadow: 0 12px 32px #0009;
 }
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .inline-edit-form { position: static; width: 100%; }
-  .issue-header .inline-edit[open] { flex-basis: 100%; }
+  /* The open title editor takes the full row (its own row and the actions row
+     around it both have to be allowed to stretch). */
+  .issue-header .inline-edit[open], .issue-header-actions:has(.inline-edit[open]) { flex: 1 1 100%; }
 }
 .comment-actions { align-items: flex-start; border-top: 1px solid var(--border); padding-top: 10px; }
 
@@ -159,7 +161,7 @@
 .side-section { border: 0; padding: 0 0 16px; margin: 0 0 16px; border-bottom: 1px solid var(--border); min-width: 0; }
 .side-section:last-child { border-bottom: 0; }
 .side-title { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 8px; padding: 0; }
-.side-picker > summary { list-style: none; cursor: pointer; border-radius: 6px; }
+.side-picker > summary { list-style: none; cursor: pointer; border-radius: 6px; min-height: var(--ctl-h-xs); align-items: center; }
 .side-picker > summary::-webkit-details-marker { display: none; }
 .side-picker > summary:hover, .side-picker > summary:hover .muted-link { color: var(--amber); }
 .side-picker[open] + .side-value { display: none; }
@@ -195,7 +197,6 @@ fieldset.side-section .pick-list { margin-top: 0; }
 .label-form .field { flex: 1 1 180px; }
 .label-form .field.grow-2 { flex: 2 1 240px; }
 .label-form .label-color, .label-edit-form .label-color { flex: 0 0 auto; }
-input[type="color"] { width: 64px; padding: 3px; height: 38px; cursor: pointer; }
 .label-row { gap: 12px; }
 .label-cell { flex: 0 0 200px; min-width: 0; }
 .label-desc { overflow-wrap: anywhere; }
@@ -209,7 +210,8 @@ input[type="color"] { width: 64px; padding: 3px; height: 38px; cursor: pointer; 
   width: min(360px, calc(100vw - 32px));
   box-shadow: 0 12px 32px #0009;
 }
-@media (max-width: 640px) {
+@media (max-width: 900px) {
+  .label-row { flex-wrap: wrap; }
   .label-cell { flex-basis: 100%; }
   .label-edit-form { position: static; width: 100%; margin-top: 8px; }
   .label-edit[open] { flex-basis: 100%; }

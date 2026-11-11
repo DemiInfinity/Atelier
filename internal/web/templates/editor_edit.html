@@ -27,7 +27,7 @@
         <p class="hint edit-keys" id="edit-keys">Tab indents · Shift+Tab outdents · Esc, then Tab, leaves the editor</p>
         <div class="edit-lang" data-edit-lang-field hidden>
           <label for="edit-lang" class="sr-only">Highlight as</label>
-          <select id="edit-lang" class="edit-lang-select" data-edit-lang>
+          <select id="edit-lang" class="ctl-sm edit-lang-select" data-edit-lang>
             <option value="">Auto{{with codeLang $f.Path nil}} ({{.}}){{end}}</option>
             {{range editLangs}}<option value="{{.}}">{{.}}</option>{{end}}
             <option value="text">Plain text</option>

@@ -194,6 +194,24 @@ func appIsAgentJob(j store.ActionsJob) bool {
 	return j.Payload == "" || len(agentJobCaps(j)) > 0
 }
 
+// appChecksSummary is the compact checks object of a pull summary, counted
+// from the head commit's checks (pullChecks). A check waiting for the
+// person's approval is counted in waiting, not pending, and holds the state
+// at pending like a running one.
+func appChecksSummary(n appCheckCounts) map[string]any {
+	state := "passing"
+	switch {
+	case n.Passed+n.Failed+n.Pending+n.Waiting == 0:
+		state = "none"
+	case n.Failed > 0:
+		state = "failing"
+	case n.Pending+n.Waiting > 0:
+		state = "pending"
+	}
+	return map[string]any{"total": n.Passed + n.Failed + n.Pending + n.Waiting, "passed": n.Passed, "failed": n.Failed,
+		"pending": n.Pending, "waiting": n.Waiting, "state": state}
+}
+
 // appChecksSentence describes checks still in the way, for merge.reason.
 func appChecksSentence(n appCheckCounts) string {
 	var parts []string
@@ -264,7 +282,7 @@ func (a *App) appPullJSON(ctx context.Context, rp store.Repo, d *pullPageData, f
 		"updated_at": appTime(p.UpdatedAt),
 	}
 	if !full {
-		out["checks"] = map[string]int{"passed": counts.Passed, "failed": counts.Failed, "pending": counts.Pending, "waiting": counts.Waiting}
+		out["checks"] = appChecksSummary(counts)
 		return out
 	}
 	out["checks"] = checks
@@ -331,10 +349,20 @@ func (a *App) appPullsAll(w http.ResponseWriter, r *http.Request, c *appCaller) 
 	if !ok {
 		return
 	}
-	repos, _, err := a.appReadable(r.Context(), c.Who)
-	if err != nil {
-		a.appFail(w, r, err)
-		return
+	var repos []store.Repo
+	if name := r.URL.Query().Get("repo"); name != "" { // one repository, like /runs?repo=
+		owner, repo, _ := strings.Cut(name, "/")
+		rp, ok := a.appRepoNamed(w, r, c, owner, repo, PermRead)
+		if !ok {
+			return
+		}
+		repos = []store.Repo{rp}
+	} else {
+		var err error
+		if repos, _, err = a.appReadable(r.Context(), c.Who); err != nil {
+			a.appFail(w, r, err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pulls": a.appPullSummaries(r.Context(), repos, state)})
 }

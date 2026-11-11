@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -540,14 +541,25 @@ func (a *App) repoDelete(w http.ResponseWriter, r *http.Request) {
 			Error: "Type the full repository name to confirm deletion.", Data: map[string]any{"V": v}})
 		return
 	}
-	if err := a.db.DeleteRepo(r.Context(), v.Repo.ID); err != nil {
+	if err := a.deleteRepo(r.Context(), v.Repo); err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	if err := a.git.Remove(v.Repo.Owner, v.Repo.Name); err != nil {
-		logErr(r, err)
-	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// deleteRepo deletes a repository for good: its database row (and everything
+// hanging off it), then the bare repository on disk. The caller has checked
+// that the person may administer it and confirmed its name. Shared by the
+// settings page and the app API.
+func (a *App) deleteRepo(ctx context.Context, rp store.Repo) error {
+	if err := a.db.DeleteRepo(ctx, rp.ID); err != nil {
+		return err
+	}
+	if err := a.git.Remove(rp.Owner, rp.Name); err != nil {
+		log.Printf("delete: removing %s from disk: %v", rp.FullName(), err)
+	}
+	return nil
 }
 
 // ---------- access tokens ----------

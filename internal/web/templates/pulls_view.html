@@ -7,9 +7,9 @@
     <div class="row-between wrap-gap align-start">
       <h1 class="h-display pr-title">{{$p.Title}} <span class="pr-number">#{{$p.Number}}</span></h1>
       <div class="row gap-sm">
-        <details class="pr-edit dropdown" {{if $d.Editing}}open{{end}}>
+        <details class="pr-edit dropdown dropdown-end" {{if $d.Editing}}open{{end}}>
           <summary class="btn btn-sm">Edit</summary>
-          <form method="post" action="{{$d.URL}}/edit" class="dropdown-menu pr-edit-menu stack-sm">
+          <form method="post" action="{{$d.URL}}/edit" class="dropdown-menu dropdown-form pr-edit-menu stack-sm">
             <div class="field"><label for="pr-edit-title">Title</label><input id="pr-edit-title" name="title" required maxlength="256" value="{{$p.Title}}"></div>
             <div class="field"><label for="pr-edit-body">Description</label><textarea id="pr-edit-body" name="body" rows="8" maxlength="65536">{{$p.Body}}</textarea></div>
             <div class="row-end"><button class="btn btn-sm btn-primary" type="submit">Save</button></div>

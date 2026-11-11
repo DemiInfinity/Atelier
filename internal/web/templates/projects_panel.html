@@ -26,7 +26,7 @@
         <option value="">No status</option>
         {{range .Options}}<option value="{{.ID}}" {{if eq (print .ID) $v}}selected{{end}}>{{.Name}}</option>{{end}}
       </select>
-      <button class="btn btn-xs" type="submit" data-proj-js-hide>Set</button>
+      <button class="btn btn-sm" type="submit" data-proj-js-hide>Set</button>
     </form>
     {{else}}{{template "proj-status-pill" .Status}}{{if not .Status.Display}}<span class="small muted">No status</span>{{end}}{{end}}
   </div>
@@ -41,7 +41,7 @@
     <select id="proj-panel-add" name="project">
       {{range .Addable}}<option value="{{.ID}}">{{.Title}}</option>{{end}}
     </select>
-    <button class="btn btn-xs" type="submit">Add</button>
+    <button class="btn btn-sm" type="submit">Add</button>
   </form>
   {{end}}
 </div>

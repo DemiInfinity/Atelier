@@ -101,7 +101,6 @@
 .prof-pin-name { font-weight: 600; overflow-wrap: anywhere; }
 .prof-pin-desc { flex: 1 1 100%; }
 .prof-pin-move { display: inline-flex; gap: 2px; flex: 0 0 auto; }
-.prof-pin-move .btn { min-width: 32px; min-height: 32px; padding: 0; }
 .prof-pin-move .btn:disabled { opacity: .35; cursor: default; }
 .prof-pin-row.is-over { opacity: .55; }
 

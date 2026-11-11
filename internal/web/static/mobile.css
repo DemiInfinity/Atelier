@@ -68,7 +68,8 @@ pre, code { overflow-wrap: normal; }
   .topbar .topbar-end form[action="/signout"] { display: none; }
   .topbar .topbar-end { gap: 6px; }
   .topbar .m-menu-btn { display: inline-grid; order: 10; }
-  .topbar .icon-btn, .topbar .avatar { width: 44px; height: 44px; }
+  .topbar .icon-btn, .topbar .avatar { width: 44px; height: 44px; min-width: 44px; }
+  .topbar .pal-trigger { width: auto; }
   .topbar .avatar { font-size: 15px; }
 
   .topbar.m-open { padding-bottom: 12px; }
@@ -88,10 +89,28 @@ pre, code { overflow-wrap: normal; }
   .topbar.m-open .topnav a { min-height: 44px; display: flex; align-items: center; padding: 10px 12px; font-size: 15px; }
   .topbar.m-open .topnav a[aria-current="page"] { box-shadow: inset 2px 0 0 var(--amber); }
   .topbar.m-open .topbar-search { display: flex; order: 21; flex: 1 1 100%; }
-  .topbar.m-open .topbar-search input { min-height: 44px; font-size: 16px; }
+  .topbar.m-open .topbar-search input { height: 44px; font-size: 16px; }
   .topbar.m-open form[action="/signout"] { display: block; order: 22; flex: 1 1 100%; }
   .topbar.m-open form[action="/signout"] .btn { width: 100%; min-height: 44px; justify-content: flex-start; padding-left: 12px; font-size: 15px; }
   .topbar.m-open .m-menu-btn { order: 2; }
+
+  /* Dropdown menus open as a full-width sheet under their button, so a menu
+     on the right-hand side never runs off the screen. The sheet is positioned
+     against the page rather than its button (.dropdown stops being the
+     containing block), and stays absolute so it scrolls with its button. */
+  .dropdown { position: static; }
+  .dropdown[open] > .dropdown-menu {
+    position: absolute;
+    top: auto;
+    left: max(16px, env(safe-area-inset-left));
+    right: max(16px, env(safe-area-inset-right));
+    margin-top: 6px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
 }
 
 /* ---------- phones ---------- */
@@ -107,27 +126,13 @@ pre, code { overflow-wrap: normal; }
     padding-top: 16px;
   }
 
-  /* Tap targets: 44 px for things you tap on a phone. */
-  .btn, .btn-sm, .btn-xs { min-height: 44px; min-width: 44px; }
-  .btn-xs { padding: 4px 12px; font-size: 13px; }
-  .clone { min-height: 44px; }
-  .clone-proto button, .clone-copy { min-height: 42px; min-width: 44px; }
-  .nf-filters a { min-height: 44px; }
-  .issues-states a { min-height: 44px; display: inline-flex; align-items: center; }
+  /* Tap targets: 44 px for things you tap on a phone. Heights come from the
+     control scale (atelier.css raises every --ctl-h-* to 44px at this width),
+     so only widths and the odd non-scale target are set here. */
+  .btn { min-width: 44px; }
+  .btn-xs { padding-left: 12px; padding-right: 12px; }
+  .clone-proto button, .clone-copy { min-width: 44px; }
   p.small > a.muted-link:only-child { display: inline-flex; align-items: center; min-height: 44px; }
-
-  /* Dropdown menus open as a full-width sheet under their button, so a menu
-     on the right-hand side never runs off the screen. */
-  .dropdown[open] > .dropdown-menu {
-    position: fixed;
-    top: auto;
-    left: max(16px, env(safe-area-inset-left));
-    right: max(16px, env(safe-area-inset-right));
-    margin-top: 6px;
-    min-width: 0;
-    max-width: none;
-    max-height: 60vh;
-  }
 
   /* Form rows (name · access · expiry…) stack instead of squeezing selects. */
   .row.wrap-gap > .field.grow, .row.wrap-gap > .field.grow-2 { flex: 1 1 100%; }
@@ -135,16 +140,14 @@ pre, code { overflow-wrap: normal; }
   /* Home: what you came for (activity, embers) before the account list. */
   .layout-3 > .col-main { order: -1; }
   .tabs a { min-height: 44px; display: inline-flex; align-items: center; }
-  .segmented a, .ins-seg a { min-height: 44px; display: inline-flex; align-items: center; }
-  .side-nav a { min-height: 44px; display: flex; align-items: center; }
   .list-row > a:only-child, .repo-list a, .account { min-height: 44px; }
-  .dropdown-item { min-height: 44px; }
   .ins-nav a { min-height: 44px; display: inline-flex; align-items: center; }
   .ins-data summary { min-height: 44px; display: flex; align-items: center; }
+  /* Plain text disclosure rows (they keep their marker, so padding, not flex). */
+  .secu-registries > summary, .cn-profile summary, .edit-diff summary, .pr-conflicts summary, .agent-lock > summary { padding-top: 12px; padding-bottom: 12px; }
 
   /* iOS zooms into inputs smaller than 16px. */
-  input, select, textarea { font-size: 16px; min-height: 44px; }
-  input[type="checkbox"], input[type="radio"] { min-height: 0; }
+  input:not([type="checkbox"]):not([type="radio"]), select:not([multiple]), textarea { font-size: 16px; }
 
   /* Headings shrink a little. */
   .display { font-size: 26px; }

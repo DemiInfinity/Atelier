@@ -107,11 +107,14 @@ type AppDevice struct {
 	LastSeen  time.Time // zero = never
 	LastIP    string
 	RevokedAt time.Time // zero = active
+	// CanAdmin: the person allowed this device to rename and delete their
+	// repositories through the app API (Settings → Devices; off by default).
+	CanAdmin bool
 }
 
 func (d AppDevice) Revoked() bool { return !d.RevokedAt.IsZero() }
 
-const appDeviceCols = `id, person_id, name, kind, os, version, created_at, last_seen, last_ip, revoked_at`
+const appDeviceCols = `id, person_id, name, kind, os, version, created_at, last_seen, last_ip, revoked_at, can_admin`
 
 func appTime(n int64) time.Time {
 	if n == 0 {
@@ -123,7 +126,7 @@ func appTime(n int64) time.Time {
 func scanAppDevice(row interface{ Scan(...any) error }) (AppDevice, error) {
 	var d AppDevice
 	var c, seen, rev int64
-	err := row.Scan(&d.ID, &d.PersonID, &d.Name, &d.Kind, &d.OS, &d.Version, &c, &seen, &d.LastIP, &rev)
+	err := row.Scan(&d.ID, &d.PersonID, &d.Name, &d.Kind, &d.OS, &d.Version, &c, &seen, &d.LastIP, &rev, &d.CanAdmin)
 	d.CreatedAt, d.LastSeen, d.RevokedAt = time.Unix(c, 0), appTime(seen), appTime(rev)
 	return d, err
 }
@@ -139,7 +142,7 @@ func (s *Store) AppDeviceByToken(ctx context.Context, plain string) (AppDevice, 
 	row := s.db.QueryRowContext(ctx, `SELECT token_hash, `+appDeviceCols+` FROM app_devices WHERE token_hash=?`, h)
 	var d AppDevice
 	var c, seen, rev int64
-	if err := row.Scan(&stored, &d.ID, &d.PersonID, &d.Name, &d.Kind, &d.OS, &d.Version, &c, &seen, &d.LastIP, &rev); err != nil {
+	if err := row.Scan(&stored, &d.ID, &d.PersonID, &d.Name, &d.Kind, &d.OS, &d.Version, &c, &seen, &d.LastIP, &rev, &d.CanAdmin); err != nil {
 		return AppDevice{}, notFound(err)
 	}
 	if subtle.ConstantTimeCompare([]byte(stored), []byte(h)) != 1 {
@@ -190,6 +193,30 @@ func (s *Store) TouchAppDevice(ctx context.Context, d AppDevice, ip string) erro
 	}
 	_, err := s.db.ExecContext(ctx, `UPDATE app_devices SET last_seen=?, last_ip=? WHERE id=?`, now(), ip, d.ID)
 	return err
+}
+
+// migrateAppDeviceAdmin adds the per-device "may rename and delete
+// repositories" flag; every existing device starts without it.
+func migrateAppDeviceAdmin(ctx context.Context, tx *sql.Tx) error {
+	ok, err := hasColumn(ctx, tx, "app_devices", "can_admin")
+	if err != nil || ok {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `ALTER TABLE app_devices ADD COLUMN can_admin INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
+// SetAppDeviceAdmin lets one of a person's active devices rename and delete
+// their repositories through the app API, or stops it.
+func (s *Store) SetAppDeviceAdmin(ctx context.Context, personID, id int64, on bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE app_devices SET can_admin=? WHERE id=? AND person_id=? AND revoked_at=0`, on, id, personID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // RevokeAppDevice revokes one of a person's devices: its token stops working

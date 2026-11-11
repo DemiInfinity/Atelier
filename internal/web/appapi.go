@@ -23,8 +23,9 @@ import (
 //	appapi.go           routes, bearer auth, the device flow, /me, device SSH keys
 //	appapi_devices.go   Settings → Devices and the approval page (sessions only)
 //	appapi_status.go    "Today": needs, running, feed, unread
-//	appapi_repos.go     repositories: list, search, create, mirror from GitHub
+//	appapi_repos.go     repositories: list, search, create, rename, delete, mirror from GitHub
 //	appapi_pulls.go     pull requests, merging, merge when green
+//	appapi_issues.go    issues: list, read, open, comment, close and reopen
 //	appapi_runs.go      Actions runs, logs, agent approvals, cancelling
 //	appapi_remote.go    the remote access switch
 //	appapi_events.go    live events (Server-Sent Events)
@@ -36,8 +37,10 @@ import (
 // Device tokens resolve to Actor{Kind: token, Name: "device:<name>"} with the
 // scopes app, repo:read and repo:write, so they also work for git over HTTPS
 // and are limited by App.can like any read/write token: no repository
-// administration, no settings. Through the remote-access tunnel /api/… is
-// the "api" class and is served only when the owner exposed it.
+// administration, no settings. The one exception is renaming and deleting a
+// repository, for a device the person allowed to (appRepoManage). Through
+// the remote-access tunnel /api/… is the "api" class and is served only when
+// the owner exposed it.
 
 const (
 	appAPIPrefix   = "/api/app/v1"
@@ -62,6 +65,8 @@ func init() {
 			m.HandleFunc("GET "+p+"/repos", a.appAuthed(a.appRepos))
 			m.HandleFunc("POST "+p+"/repos", a.appAuthed(a.appRepoCreate))
 			m.HandleFunc("POST "+p+"/repos/mirror", a.appAuthed(a.appRepoMirror))
+			m.HandleFunc("PATCH "+p+"/repos/{owner}/{repo}", a.appAuthed(a.appRepoRename))
+			m.HandleFunc("DELETE "+p+"/repos/{owner}/{repo}", a.appAuthed(a.appRepoDelete))
 
 			m.HandleFunc("GET "+p+"/pulls", a.appAuthed(a.appPullsAll))
 			m.HandleFunc("GET "+p+"/repos/{owner}/{repo}/pulls", a.appAuthed(a.appPullsRepo))
@@ -91,6 +96,7 @@ func init() {
 			})
 
 			appDeviceRoutes(a, m)
+			appIssueRoutes(a, m)
 			appAutoMergeRoutes(a, m)
 		},
 		start: func(ctx context.Context, a *App) { a.appBackground(ctx) },
@@ -508,7 +514,7 @@ func (a *App) appMe(w http.ResponseWriter, r *http.Request, c *appCaller) {
 	studio["connect"] = c.owner(ctx, a) && a.connectActive(ctx) != ""
 	var device any
 	if c.Device != nil {
-		device = map[string]any{"id": c.Device.ID, "name": c.Device.Name, "kind": c.Device.Kind}
+		device = map[string]any{"id": c.Device.ID, "name": c.Device.Name, "kind": c.Device.Kind, "can_admin": c.Device.CanAdmin}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"person": map[string]any{"name": c.Person.Label(), "login": c.Person.Name,

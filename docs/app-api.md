@@ -61,7 +61,7 @@ existing id. Keys added this way are removed when the device is revoked.
              {"name":"elyndrastudios","display":"Elyndra Studios LTD","kind":"company","commit_name":"Demi","commit_email":"demi@company.example"}],
  "studio":{"name":"Atelier","url":"https://studio.example","version":"7f82d31",
            "ssh":{"host":"studio.example","port":2223},"tether":true,"connect":false},
- "device":{"id":7,"name":"MacBook","kind":"desktop"}}
+ "device":{"id":7,"name":"MacBook","kind":"desktop","can_admin":false}}
 ```
 
 ## 3. Status ("Today")
@@ -113,10 +113,38 @@ can't create there. (Publishing a folder = this call, then `git push`.)
 `POST /api/app/v1/repos/mirror` `{"github":"maralind/loopkit"}` → `202 {"full_name":"DemiInfinity/loopkit"}`
 (the existing Tether "Mirror to studio").
 
+`PATCH /api/app/v1/repos/{owner}/{name}` `{"name":"NewName"}` → `200` with the
+repo object under its new name. The same rename as "Move or rename" on the
+repository's settings page: the bare repository moves on disk, and the old
+name keeps redirecting (web, clone URLs, this API). Needs admin on the
+repository. `409 {"error":"name_taken"}`; `422 {"error":"invalid_name"}` (empty,
+not a valid repository name, or a reserved word); `403` readable but not
+admin; `404` not readable. Sending the current name answers `200` unchanged.
+
+`DELETE /api/app/v1/repos/{owner}/{name}` `{"confirm":"owner/name"}` → `204`, no
+body. Deletes the repository for good, like the settings page. Needs admin.
+`confirm` must be the repository's full name (case-insensitive), otherwise
+`422 {"error":"confirm_mismatch"}`; `403`/`404` as above.
+
+**Who can rename and delete:** a device whose person switched on "Can rename
+and delete repositories" for it in Settings → Devices (off by default, per
+device), on repositories that person can administer when signed in on the web.
+While it is off both endpoints answer
+`403 {"error":"device_not_allowed","message":"This device isn't allowed to rename or delete repositories. Turn it on in Settings → Devices."}`.
+`GET /me` says which it is in `device.can_admin`. The switch is a signed-in web
+form (`POST /settings/devices/admin`, `id` and `on=1|0`); nothing in this API
+sets it, and a device token can't post that form. It opens these two calls and
+nothing else: the device's token keeps the scopes `app, repo:read, repo:write`
+and still fails every other admin check (settings, secrets, branch rules,
+tokens, moving between accounts). Ordinary access tokens with the `app` scope
+have no such switch and get `403 forbidden`.
+
 ## 5. Pull requests
 
 `GET /api/app/v1/pulls?state=open` → every open pull request the caller can read,
-across repos: `{"pulls":[<pull summary>]}`.
+across repos: `{"pulls":[<pull summary>]}`. `&repo=owner/name` keeps it to one
+repository (the same list as the per-repo path below; `404` if the caller can't
+read it). No paging: at most 100 pull requests per answer.
 `GET /api/app/v1/repos/{owner}/{repo}/pulls?state=open|closed|merged|all`.
 `GET /api/app/v1/repos/{owner}/{repo}/pulls/{n}` →
 ```json
@@ -132,7 +160,12 @@ across repos: `{"pulls":[<pull summary>]}`.
  "web_path":"/DemiInfinity/Atelier/pulls/14"}
 ```
 Summary = the same object without `comments` and with `checks` reduced to
-`{"passed":2,"failed":0,"pending":1,"waiting":1}`. `status` ∈
+`{"total":4,"passed":2,"failed":0,"pending":1,"waiting":1,"state":"pending"}`,
+counted from the checks of the head commit. `state` ∈ `none` (no checks) `|
+failing` (any failed) `| pending` (any still running, or waiting for approval)
+`| passing`. `pending` counts running and queued checks; a check waiting for
+the person's approval is in `waiting` instead, so
+`total = passed + failed + pending + waiting`. `status` ∈
 `success | failure | pending | waiting | skipped`. `via` ∈ `null | "tether" | "connect" | "bot"`.
 
 `POST …/pulls/{n}/merge` `{"method":"squash","when_green":false}`
@@ -143,6 +176,43 @@ Summary = the same object without `comments` and with `checks` reduced to
   is pushed by someone else, a check fails, or the pull request closes.
   `DELETE …/pulls/{n}/merge` cancels it.
 - The same branch rules and "Merge on GitHub" behaviour as the web button.
+
+## 5a. Issues
+
+`GET /api/app/v1/issues?repo=owner/name&state=open|closed|all&page=1&per_page=30`
+→ newest first:
+```json
+{"issues":[{"repo":"DemiInfinity/Atelier","number":21,"title":"Tray icon flickers","state":"open",
+   "author":"owner:DemiInfinity","via":null,"labels":[{"name":"bug","color":"#d73a4a"}],"comments":2,
+   "created_at":"…","updated_at":"…",
+   "web_path":"/DemiInfinity/Atelier/issues/21","web_url":"https://studio.example/DemiInfinity/Atelier/issues/21"}],
+ "has_more":false}
+```
+Without `repo` it lists across every repository the caller can read. `state`
+defaults to `open` (`422 invalid_state` otherwise), `per_page` to 30 (at most
+100). `author` is `<kind>:<name>` like a pull request's (`token:device:MacBook`
+for an issue opened from a device); `via` as for pull requests. `state` is
+`open` or `closed`. Pull requests are not issues and never appear here.
+
+`GET /api/app/v1/repos/{owner}/{name}/issues/{number}` → the same object with
+`"body"` (Markdown source) and `comments` as a list instead of a count:
+`"comments":[{"id":88,"author":"CodeRabbit[bot]","via":"tether","kind":"bot","body":"…","created_at":"…"}]`
+(oldest first; `author`, `via` and `kind` as in pull request comments).
+
+`POST /api/app/v1/repos/{owner}/{name}/issues` `{"title":"…","body":"…"}` → `201`
+with the full issue. `422 invalid_title` (one line, 1–256 characters),
+`422 body_too_long` (65536 bytes).
+`POST …/issues/{number}/comments` `{"body":"…"}` → `201` with the comment object;
+`422 empty_body`.
+`PATCH …/issues/{number}` `{"state":"open|closed"}` → `200` with the full issue
+(closing closes as completed; asking for the state it already has changes
+nothing); `422 invalid_state`.
+
+Reading needs read access, the rest write access (`403`; `404` when the caller
+can't read the repository, or there is no such issue). Changes are recorded as
+the device (`device:MacBook`) and fire the same events as the web pages
+(`issue.opened`, `issue.commented`, `issue.closed`, `issue.reopened`), so
+notifications, agents and live events follow.
 
 ## 6. Runs and agents
 
@@ -262,7 +332,7 @@ from `SSL_CERT_FILE`), because home studios often use a private CA.
 
 **Devices:** `start` may answer 422 `invalid_name`/`invalid_kind`, 409 `not_set_up`, 429. An unknown or used `device_code` polls as 410 `expired`. Device names are unique per person ("MacBook 2"), so `/me` may return a different name than was sent. `ssh-key` is for device tokens only (403 `device_only`), plus 422 `invalid_key`, 409 `key_taken`.
 
-**`/me`:** `person.avatar_url`, `studio.ssh` and `device` can be `null`. `commit_name`/`commit_email` are the same for every account today. `studio.version` is a build string, not a git sha.
+**`/me`:** `accounts` is the list of accounts the person can create repositories under (use `name` as `owner` in `POST /repos`): their personal account first (`kind` `"user"`), then the company accounts they manage (`kind` `"company"`); `display` is the display name. `person.avatar_url`, `studio.ssh` and `device` can be `null`. `commit_name`/`commit_email` are the same for every account today. `studio.version` is a build string, not a git sha.
 
 **`/status`:** each need also has `at`. Need ids use the full repo name (`pull:<owner>/<name>:<n>`, `review:…`, `security:<full>:secrets|deps`, `preview:<full>:<n>`). `action.type` can also be `open_web`. `run_id` is the global run id. `running[].detail` is `pull request N` or `<event> on <branch>` (the server doesn't know agent turns; ask the runner socket); `engine` is `null` for non-agent jobs; extra `web_path`. Feed items from Connect have `web_path: null` and an absolute `url`.
 

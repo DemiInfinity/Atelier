@@ -47,9 +47,9 @@
         </div>
         <div class="row gap-sm wrap-gap act-rn-actions">
           <a class="btn btn-sm" href="/settings/workspaces?runner={{.ID}}">Workspaces</a>
-          <details class="dropdown">
+          <details class="dropdown dropdown-end">
             <summary class="btn btn-sm">Rename</summary>
-            <form method="post" action="/settings/runners/{{.ID}}/rename" class="dropdown-menu stack-sm act-rename">
+            <form method="post" action="/settings/runners/{{.ID}}/rename" class="dropdown-menu dropdown-form stack-sm act-rename">
               <label for="act-rn-name-{{.ID}}" class="small">New name</label>
               <input id="act-rn-name-{{.ID}}" name="name" value="{{.Name}}" maxlength="80" required>
               <div class="row-end"><button class="btn btn-sm btn-primary" type="submit">Save</button></div>

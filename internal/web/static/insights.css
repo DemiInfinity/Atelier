@@ -57,8 +57,8 @@
   .ins-nav a[aria-current="page"] { border-bottom-color: var(--amber); }
 }
 
-.ins-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r-sm); overflow: hidden; }
-.ins-seg a { padding: 6px 12px; color: var(--text-2); font-weight: 500; }
+.ins-seg { display: inline-flex; height: var(--ctl-h); border: 1px solid var(--border-strong); border-radius: var(--r-sm); overflow: hidden; }
+.ins-seg a { display: inline-flex; align-items: center; padding: 0 12px; color: var(--text-2); font-weight: 500; }
 .ins-seg a + a { border-left: 1px solid var(--border-strong); }
 .ins-seg a:hover { background: var(--raised); text-decoration: none; color: var(--text); }
 .ins-seg a[aria-current="page"] { background: var(--amber-chip); color: var(--amber); }

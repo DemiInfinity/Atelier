@@ -170,6 +170,105 @@ func (a *App) appRepoCreate(w http.ResponseWriter, r *http.Request, c *appCaller
 	writeJSON(w, http.StatusCreated, a.appRepoJSON(ctx, r, rp))
 }
 
+// appRepoManage loads the repository in the path for the two things a device
+// may be allowed to administer: renaming and deleting it. Device tokens never
+// pass App.can(PermAdmin) (corePolicy), and this doesn't change that: no scope
+// is added and no policy widened, so nothing else that asks for admin opens
+// up. Instead, here only, a device whose person switched on "Can rename and
+// delete repositories" (Settings → Devices) is let through when that person,
+// signed in on the web, could administer the repository themselves. Anything
+// App.can already allows (an addon's policy) still counts. Ordinary access
+// tokens with the app scope have no such switch and stay forbidden.
+func (a *App) appRepoManage(w http.ResponseWriter, r *http.Request, c *appCaller) (store.Repo, bool) {
+	ctx := r.Context()
+	rp, ok := a.appRepo(w, r, c, PermRead)
+	if !ok {
+		return rp, false
+	}
+	if a.can(ctx, c.Who, rp, PermAdmin) {
+		return rp, true
+	}
+	if c.Device == nil || !a.can(ctx, personActor(c.Person), rp, PermAdmin) {
+		appError(w, http.StatusForbidden, "forbidden", "You don't have admin access to this repository.")
+		return rp, false
+	}
+	if !c.Device.CanAdmin {
+		appError(w, http.StatusForbidden, "device_not_allowed", "This device isn't allowed to rename or delete repositories. Turn it on in Settings → Devices.")
+		return rp, false
+	}
+	return rp, true
+}
+
+// appRepoRename renames a repository in place, like "Move or rename" on its
+// settings page (moveRepo): the old name keeps redirecting.
+func (a *App) appRepoRename(w http.ResponseWriter, r *http.Request, c *appCaller) {
+	rp, ok := a.appRepoManage(w, r, c)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	var in struct {
+		Name string `json:"name"`
+	}
+	if !appDecode(w, r, &in) {
+		return
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		appError(w, http.StatusUnprocessableEntity, "invalid_name", "Give the repository a name.")
+		return
+	}
+	if name == rp.Name { // nothing to do
+		writeJSON(w, http.StatusOK, a.appRepoJSON(ctx, r, rp))
+		return
+	}
+	owner, err := a.db.OwnerByID(ctx, rp.OwnerID)
+	if err != nil {
+		a.appFail(w, r, err)
+		return
+	}
+	renamed, err := a.moveRepo(ctx, c.Who, rp, owner, name)
+	var me *repoMoveError
+	switch {
+	case errors.As(err, &me) && me.Code == "name_taken":
+		appError(w, http.StatusConflict, "name_taken", me.Msg)
+		return
+	case errors.As(err, &me):
+		appError(w, http.StatusUnprocessableEntity, "invalid_name", me.Msg)
+		return
+	case err != nil:
+		a.appFail(w, r, err)
+		return
+	}
+	log.Printf("appapi: %s renamed %s to %s", c.Who.Name, rp.FullName(), renamed.FullName())
+	writeJSON(w, http.StatusOK, a.appRepoJSON(ctx, r, renamed))
+}
+
+// appRepoDelete deletes a repository for good, like the settings page
+// (deleteRepo). confirm must be its full name.
+func (a *App) appRepoDelete(w http.ResponseWriter, r *http.Request, c *appCaller) {
+	rp, ok := a.appRepoManage(w, r, c)
+	if !ok {
+		return
+	}
+	var in struct {
+		Confirm string `json:"confirm"`
+	}
+	if !appDecode(w, r, &in) {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(in.Confirm), rp.FullName()) {
+		appError(w, http.StatusUnprocessableEntity, "confirm_mismatch", "Send confirm with the repository's full name, "+rp.FullName()+", to delete it.")
+		return
+	}
+	if err := a.deleteRepo(r.Context(), rp); err != nil {
+		a.appFail(w, r, err)
+		return
+	}
+	log.Printf("appapi: %s deleted %s", c.Who.Name, rp.FullName())
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (a *App) appRepoMirror(w http.ResponseWriter, r *http.Request, c *appCaller) {
 	ctx := r.Context()
 	var in struct {

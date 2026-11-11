@@ -17,6 +17,7 @@ func appDeviceRoutes(a *App, m *http.ServeMux) {
 	m.HandleFunc("GET /settings/devices", a.authed(a.appDevicesPage))
 	// Literal paths only (the id travels in the form), like Settings → SSH keys.
 	m.HandleFunc("POST /settings/devices/revoke", a.authed(a.appDeviceRevoke))
+	m.HandleFunc("POST /settings/devices/admin", a.authed(a.appDeviceAdmin))
 	m.HandleFunc("GET /settings/devices/approve", a.authed(a.appApprovePage))
 	m.HandleFunc("POST /settings/devices/approve", a.authed(a.appApproveSubmit))
 }
@@ -35,6 +36,10 @@ func (a *App) appDevicesPage(w http.ResponseWriter, r *http.Request) {
 		notice = "Device approved. It will finish signing in by itself."
 	case "denied":
 		notice = "Sign-in denied."
+	case "admin-on":
+		notice = "That device can now rename and delete your repositories."
+	case "admin-off":
+		notice = "That device can no longer rename or delete repositories."
 	}
 	a.render(w, r, "appapi_devices", page{Title: "Devices", Notice: notice, Data: map[string]any{
 		"Devices": devices, "Remote": isRemote(r),
@@ -56,6 +61,30 @@ func (a *App) appDeviceRevoke(w http.ResponseWriter, r *http.Request) {
 	a.app().hub.dropDevice(id)
 	log.Printf("appapi: %s revoked device %d (%d SSH key(s) removed)", who.Name, id, keys)
 	http.Redirect(w, r, "/settings/devices?done=revoked", http.StatusSeeOther)
+}
+
+// appDeviceAdmin switches "Can rename and delete repositories" for one of
+// the signed-in person's devices. A session only (authed never accepts a
+// token), so a device can't grant it to itself; cross-site posts are refused
+// by ServeHTTP like the page's other actions.
+func (a *App) appDeviceAdmin(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.FormValue("id"), 10, 64)
+	if err != nil {
+		a.notFound(w, r)
+		return
+	}
+	who := a.actor(r)
+	on := r.FormValue("on") == "1"
+	if err := a.db.SetAppDeviceAdmin(r.Context(), who.PersonID, id, on); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	log.Printf("appapi: %s set device %d rename and delete to %v", who.Name, id, on)
+	done := "admin-off"
+	if on {
+		done = "admin-on"
+	}
+	http.Redirect(w, r, "/settings/devices?done="+done, http.StatusSeeOther)
 }
 
 // appApproveRefused answers approval requests that came through the tunnel:

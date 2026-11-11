@@ -26,7 +26,7 @@
   margin: 0;
   padding: 12px 12px 12px 8px;
   text-align: right;
-  color: #6f6a62;
+  color: #8a847b;
   font: 13px/1.7 var(--font-mono);
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -72,7 +72,7 @@
 .edit-stack.is-hl .edit-hl { display: block; }
 .edit-stack.is-hl .edit-text { color: transparent; caret-color: var(--text); }
 .edit-stack.is-hl .edit-text::selection { color: transparent; background: rgba(242, 184, 92, 0.28); }
-.edit-lang-select { font-size: 12px; padding: 4px 8px; max-width: 180px; }
+.edit-lang-select { max-width: 180px; }
 .edit-lang[hidden] { display: none; }
 .edit-text:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; border-radius: 0; }
 .edit-tabs a { cursor: pointer; }

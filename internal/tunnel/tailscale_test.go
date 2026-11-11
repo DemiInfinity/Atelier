@@ -69,8 +69,14 @@ func (f *tsFix) read(name string) string {
 }
 
 func (f *tsFix) pid(name string) int {
-	n, _ := strconv.Atoi(f.read(name))
-	return n
+	// The helper script writes its pid files just after it starts; wait for them.
+	for i := 0; i < 100; i++ {
+		if n, _ := strconv.Atoi(f.read(name)); n > 0 {
+			return n
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return 0
 }
 
 func (f *tsFix) start(mode, key string) {

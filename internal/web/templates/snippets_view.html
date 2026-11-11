@@ -29,9 +29,9 @@
       {{end}}
       {{if $d.CanEdit}}<a class="btn btn-sm" href="{{$d.Base}}/edit">Edit</a>{{end}}
       {{if $d.CanAdmin}}
-      <details class="dropdown snip-delete">
+      <details class="dropdown dropdown-end snip-delete">
         <summary class="btn btn-sm btn-danger">Delete</summary>
-        <div class="dropdown-menu snip-delete-menu">
+        <div class="dropdown-menu dropdown-form snip-delete-menu">
           <p class="small">Delete this snippet and all its revisions? This can't be undone.</p>
           <form method="post" action="{{$d.Base}}/delete"><button class="btn btn-sm btn-danger" type="submit">Delete snippet</button></form>
         </div>

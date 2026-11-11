@@ -18,7 +18,6 @@
 .pk-rename > summary { cursor: pointer; display: inline-block; list-style: none; }
 .pk-rename > summary::-webkit-details-marker { display: none; }
 .pk-rename-form { margin-top: 8px; max-width: 420px; }
-.pk-rename-form input { min-height: 30px; padding: 4px 10px; }
 @media (max-width: 520px) {
   .pk-row { flex-wrap: wrap; }
   .pk-row > form { margin-left: 44px; }

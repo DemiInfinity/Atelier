@@ -128,7 +128,7 @@ html.pal-open { overflow: hidden; }
 .pal-modes { margin-left: auto; }
 
 /* Topbar trigger */
-.pal-trigger { gap: 6px; width: auto; padding: 0 8px; font: 500 12px var(--font); }
+.pal-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; min-width: var(--ctl-h); padding: 0 8px; font: 500 12px var(--font); white-space: nowrap; }
 .pal-trigger kbd { font: inherit; color: var(--muted); }
 
 @media (max-width: 640px) {

@@ -58,7 +58,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  min-height: var(--ctl-h-sm);
+  padding: 0 10px;
   border-radius: var(--r-sm);
   color: var(--text-2);
   font-weight: 500;
@@ -85,6 +86,8 @@
 .pr-compare-arrow { align-self: center; color: var(--muted); padding-top: 18px; }
 .pr-compare-bar .pr-status-pill { align-self: center; }
 .pr-recent { display: flex; flex-wrap: wrap; gap: 8px; }
+.pr-recent li, .pr-recent .btn { min-width: 0; max-width: 100%; }
+.pr-recent .btn .mono { overflow: hidden; text-overflow: ellipsis; }
 .pr-existing { padding: 14px 16px; }
 @media (max-width: 640px) {
   .pr-compare-field { flex-basis: 100%; }
@@ -97,7 +100,7 @@
 .pr-subtitle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .pr-edit > summary { list-style: none; }
 .pr-edit > summary::-webkit-details-marker { display: none; }
-.pr-edit-menu { left: auto; right: 0; width: min(560px, calc(100vw - 32px)); max-width: none; max-height: none; padding: 14px; }
+.pr-edit-menu { width: min(560px, calc(100vw - 32px)); max-width: none; }
 .pr-edit-menu textarea { resize: vertical; }
 
 /* ---------- merge status bar ---------- */
@@ -142,9 +145,10 @@
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   border-left: 1px solid #b98a40;
-  padding: 6px 10px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
-.pr-merge-more .dropdown-menu { left: auto; right: 0; min-width: 280px; }
+.pr-merge-more .dropdown-menu { left: auto; right: 0; min-width: min(280px, calc(100vw - 32px)); }
 .pr-merge-option {
   display: flex;
   flex-direction: column;
@@ -162,8 +166,6 @@
 }
 .pr-merge-option:hover:not(:disabled) { background: var(--raised-2); }
 .pr-merge-option:disabled { cursor: default; opacity: .55; }
-.btn:disabled { opacity: .55; cursor: not-allowed; }
-.btn-primary:disabled:hover { background: var(--amber); border-color: var(--amber); }
 .pr-merge-caret[aria-disabled="true"] { opacity: .55; }
 .pr-delete-check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); cursor: pointer; }
 .pr-delete-check input { margin: 0; }

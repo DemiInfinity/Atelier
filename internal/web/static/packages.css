@@ -45,9 +45,7 @@
   border-radius: var(--r-sm);
   color: var(--text);
   font: inherit;
-  padding: 7px 12px;
 }
-.pk-search input:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
 
 .pk-row { align-items: flex-start; }
 .pk-row .pk-chip { margin-top: 2px; min-width: 76px; justify-content: center; }
@@ -69,8 +67,8 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 32px;
-  height: 32px;
+  width: var(--ctl-h-sm);
+  height: var(--ctl-h-sm);
   border-radius: var(--r-sm);
 }
 .pk-warn {

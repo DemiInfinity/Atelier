@@ -79,7 +79,7 @@
 .snip-visibility legend { grid-column: 1 / -1; }
 
 .snip-file-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
-.snip-file-name { flex: 1 1 auto; max-width: 420px; min-height: 34px; font-size: 13px; }
+.snip-file-name { flex: 1 1 auto; max-width: 420px; font-size: 13px; }
 .snip-file-head .btn { margin-left: auto; }
 .snip-textarea {
   display: block;
@@ -122,10 +122,7 @@
 .snip-delete summary { list-style: none; }
 .snip-delete summary::-webkit-details-marker { display: none; }
 .snip-delete-menu {
-  right: 0;
-  left: auto;
-  width: 260px;
-  padding: 12px;
+  width: min(260px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
   gap: 10px;

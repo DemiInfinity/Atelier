@@ -52,7 +52,7 @@
 .proj-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .proj-filter { display: flex; gap: 8px; flex: 1 1 420px; min-width: 0; }
 .proj-filter input[type="search"] { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); font-size: 13px; }
-.proj-menu-body { width: 280px; padding: 12px; right: 0; left: auto; }
+.proj-menu-body { width: 280px; }
 .proj-menu-body input { width: 100%; }
 
 .proj-addbar { display: flex; gap: 8px; align-items: center; }
@@ -96,19 +96,17 @@
 .proj-state-closed, .proj-state-merged { color: var(--violet); }
 
 .proj-card-tools {
-  display: flex; align-items: center; gap: 4px; padding-top: 8px; margin-top: 2px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-top: 8px; margin-top: 2px;
   border-top: 1px solid var(--border);
 }
 .proj-card-tools form { margin: 0; display: flex; align-items: center; gap: 4px; }
-.proj-card-status { flex: 1 1 auto; min-width: 0; }
-.proj-card-status select { flex: 1 1 auto; min-width: 0; height: 28px; padding: 2px 8px; font-size: 12.5px; }
-.proj-tool { width: 28px; height: 28px; }
-.proj-tool:disabled { opacity: 0.35; cursor: default; }
+.proj-card-status { flex: 1 1 120px; min-width: 0; }
+.proj-card-status select { flex: 1 1 auto; min-width: 0; }
 
 .proj-add-draft > summary { list-style: none; }
 .proj-add-draft > summary::-webkit-details-marker { display: none; }
 .proj-add-btn {
-  display: flex; align-items: center; justify-content: center; min-height: 34px;
+  display: flex; align-items: center; justify-content: center; min-height: var(--ctl-h);
   border-radius: var(--r-sm); border: 1px dashed var(--border-strong);
   color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer;
 }
@@ -133,7 +131,7 @@
 .proj-td-labels { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-left: 6px; }
 .proj-td-field { min-width: 150px; }
 .proj-inline { display: flex; align-items: center; gap: 6px; margin: 0; }
-.proj-inline select, .proj-inline input { height: 30px; padding: 3px 8px; font-size: 13px; min-width: 0; width: 100%; }
+.proj-inline select, .proj-inline input { height: var(--ctl-h-sm); padding: 0 8px; font-size: var(--ctl-fs-sm); min-width: 0; width: 100%; }
 
 /* ---------- roadmap ---------- */
 

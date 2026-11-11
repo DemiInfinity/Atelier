@@ -2,7 +2,7 @@
 
 .ws-menu-btn { color: var(--violet); border-color: #3f3863; background: #1c1a26; }
 .ws-menu-btn:hover { color: #ddd0ff; }
-.ws-menu-list { min-width: 260px; }
+.ws-menu-list { min-width: min(260px, calc(100vw - 32px)); }
 .ws-menu-list form { margin: 0; }
 .ws-menu-list button.dropdown-item {
   width: 100%;

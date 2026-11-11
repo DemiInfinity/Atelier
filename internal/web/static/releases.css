@@ -113,7 +113,7 @@
 .rel-empty-icon svg { width: 28px; height: 28px; }
 
 /* API help. */
-.rel-api summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.rel-api summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; min-height: var(--ctl-h-sm); }
 .rel-api summary::-webkit-details-marker { display: none; }
 .rel-api summary::before { content: "▸"; color: var(--muted); }
 .rel-api[open] summary::before { content: "▾"; }

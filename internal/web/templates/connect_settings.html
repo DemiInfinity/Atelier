@@ -137,8 +137,8 @@
         <h2 class="h-sm" id="cn-rules-h">Blocked and allowed studios</h2>
         <form method="post" action="/settings/connect/rules" class="row gap-sm wrap-gap">
           <input name="host" placeholder="studio.example" aria-label="Studio host" maxlength="260" class="cn-input" spellcheck="false" autocomplete="off" required>
-          <button class="btn btn-danger btn-sm" type="submit" name="kind" value="block">Block</button>
-          <button class="btn btn-sm" type="submit" name="kind" value="allow">Allow</button>
+          <button class="btn btn-danger" type="submit" name="kind" value="block">Block</button>
+          <button class="btn" type="submit" name="kind" value="allow">Allow</button>
         </form>
         <p class="hint">Blocking a studio removes its follows both ways, its feed items and stars, and refuses everything it sends.</p>
         {{if $d.Rules}}

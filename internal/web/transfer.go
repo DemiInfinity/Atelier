@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -85,39 +86,62 @@ func (a *App) repoTransfer(w http.ResponseWriter, r *http.Request) {
 		back("You can only move repositories into accounts you manage.")
 		return
 	}
-	newName := strings.TrimSpace(r.FormValue("name"))
+	repo, err := a.moveRepo(ctx, who, v.Repo, target, r.FormValue("name"))
+	var me *repoMoveError
+	if errors.As(err, &me) {
+		back(me.Msg)
+		return
+	}
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/"+repo.FullName()+"/settings?saved=1", http.StatusSeeOther)
+}
+
+// repoMoveError is a move or rename the person has to fix: Code is
+// "invalid_name", "name_taken" or "same_place", Msg a sentence for them.
+type repoMoveError struct{ Code, Msg string }
+
+func (e *repoMoveError) Error() string { return e.Msg }
+
+// moveRepo moves rp into target and/or renames it (an empty name keeps the
+// current one): the bare repository on disk, the database row with a redirect
+// from the old address, the hooks and the repo.transferred event. The caller
+// has checked that who may administer rp and manage target. Shared by the
+// settings page and the app API.
+func (a *App) moveRepo(ctx context.Context, who Actor, rp store.Repo, target store.Owner, newName string) (store.Repo, error) {
+	newName = strings.TrimSpace(newName)
 	if newName == "" {
-		newName = v.Repo.Name
+		newName = rp.Name
 	}
 	if !gitrepo.ValidName(newName) || reserved[strings.ToLower(newName)] {
-		back("Use letters, numbers, dots, dashes or underscores for the name.")
-		return
+		return store.Repo{}, &repoMoveError{"invalid_name", "Use letters, numbers, dots, dashes or underscores for the name."}
 	}
-	if target.ID == v.Repo.OwnerID && newName == v.Repo.Name {
-		back("The repository is already there.")
-		return
+	if target.ID == rp.OwnerID && newName == rp.Name {
+		return store.Repo{}, &repoMoveError{"same_place", "The repository is already there."}
 	}
 
 	// Move the bare repository on disk first; undo it if the database step fails.
-	oldPath := a.git.Path(v.Repo.Owner, v.Repo.Name)
+	oldPath := a.git.Path(rp.Owner, rp.Name)
 	newPath := a.git.Path(target.Name, newName)
 	moved := false
 	if oldPath != newPath {
-		if _, err := os.Stat(newPath); err == nil {
-			back(target.Name + " already has a repository folder called " + newName + ".")
-			return
+		if there, err := os.Stat(newPath); err == nil {
+			// On a case-insensitive disk a change of case finds the repository itself.
+			if here, err := os.Stat(oldPath); err != nil || !os.SameFile(here, there) {
+				return store.Repo{}, &repoMoveError{"name_taken", target.Name + " already has a repository folder called " + newName + "."}
+			}
 		}
 		if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
-			a.fail(w, r, err)
-			return
+			return store.Repo{}, err
 		}
 		if err := os.Rename(oldPath, newPath); err != nil {
-			a.fail(w, r, err)
-			return
+			return store.Repo{}, err
 		}
 		moved = true
 	}
-	repo, err := a.db.MoveRepo(ctx, v.Repo.ID, target.ID, newName)
+	repo, err := a.db.MoveRepo(ctx, rp.ID, target.ID, newName)
 	if err != nil {
 		if moved {
 			if rerr := os.Rename(newPath, oldPath); rerr != nil {
@@ -125,17 +149,15 @@ func (a *App) repoTransfer(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if errors.Is(err, store.ErrNameTaken) {
-			back(target.Name + " already has a repository called " + newName + ".")
-			return
+			return store.Repo{}, &repoMoveError{"name_taken", target.Name + " already has a repository called " + newName + "."}
 		}
-		a.fail(w, r, err)
-		return
+		return store.Repo{}, err
 	}
 	// Server-side hooks know the repository's name: reinstall them.
 	if err := a.git.AfterCreate(ctx, repo.Owner, repo.Name); err != nil {
 		log.Printf("transfer: reinstalling hooks for %s: %v", repo.FullName(), err)
 	}
 	a.emit(ctx, Event{Kind: "repo.transferred", RepoID: repo.ID, Repo: repo,
-		Title: "Moved " + v.Repo.FullName() + " to " + repo.FullName(), URL: "/" + repo.FullName(), Actor: who})
-	http.Redirect(w, r, "/"+repo.FullName()+"/settings?saved=1", http.StatusSeeOther)
+		Title: "Moved " + rp.FullName() + " to " + repo.FullName(), URL: "/" + repo.FullName(), Actor: who})
+	return repo, nil
 }

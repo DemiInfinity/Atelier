@@ -20,7 +20,7 @@
 .cn-handle { overflow-wrap: anywhere; }
 .cn-detail { color: var(--text-2); overflow-wrap: anywhere; }
 .cn-star-form { margin-top: 6px; }
-.btn.cn-star { padding: 2px 10px; color: var(--connect); border-color: var(--connect-border); background: transparent; }
+.btn.cn-star { color: var(--connect); border-color: var(--connect-border); background: transparent; }
 .btn.cn-star.is-on { background: var(--violet-chip); }
 
 /* Settings */

@@ -33,12 +33,14 @@
           <div class="small muted">{{if .OS}}{{.OS}}{{else}}Unknown system{{end}}{{if .Version}} · version {{.Version}}{{end}} · signed in {{ago .CreatedAt}}</div>
           <div class="small muted">{{if .LastSeen.IsZero}}Never seen{{else}}Last seen {{ago .LastSeen}}{{end}}{{if .LastIP}} from <span class="mono">{{.LastIP}}</span>{{end}}</div>
         </div>
+        <form method="post" action="/settings/devices/admin" class="row gap-sm"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="on" value="{{if .CanAdmin}}0{{else}}1{{end}}"><span class="small muted">Can rename and delete repositories: <strong>{{if .CanAdmin}}on{{else}}off{{end}}</strong></span><button class="btn btn-sm" type="submit" aria-label="{{if .CanAdmin}}Stop {{.Name}} renaming and deleting repositories{{else}}Let {{.Name}} rename and delete repositories{{end}}">{{if .CanAdmin}}Turn off{{else}}Turn on{{end}}</button></form>
         <form method="post" action="/settings/devices/revoke"><input type="hidden" name="id" value="{{.ID}}"><button class="btn btn-danger btn-sm" type="submit" aria-label="Revoke device {{.Name}}">Revoke</button></form>
       </div>
       {{else}}
       <div class="list-row muted">No devices yet. Start a sign-in from the desktop app or run <code>atl login</code>.</div>
       {{end}}
     </section>
+    <p class="small muted">A device can rename or delete your repositories from the app only while "Can rename and delete repositories" is on for it; it never unlocks any other setting.</p>
     <p class="small muted">Revoking a device stops its token at once and removes the SSH keys it added.</p>
   </div>
 </main>

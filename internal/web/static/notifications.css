@@ -19,8 +19,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
-  padding: 6px 12px;
+  min-height: var(--ctl-h);
+  padding: 4px 12px;
   border-radius: var(--r-sm);
   color: var(--text-2);
   font-weight: 500;
@@ -100,7 +100,7 @@
 @media (max-width: 860px) {
   .nf-side { gap: 12px; }
   .nf-filters { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: thin; }
-  .nf-filters a { flex-shrink: 0; white-space: nowrap; border: 1px solid var(--border); min-height: 36px; }
+  .nf-filters a { flex-shrink: 0; white-space: nowrap; border: 1px solid var(--border); }
   .nf-filters a[aria-current="page"] { box-shadow: none; border-color: var(--amber); }
   .nf-filter-label { flex: none; }
   .nf-side-head { padding: 0; }

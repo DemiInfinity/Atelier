@@ -32,21 +32,21 @@
       <form method="post" action="{{$d.URL}}/views">
         <input type="hidden" name="view" value="{{$d.Active.ID}}"><input type="hidden" name="update" value="1">
         <input type="hidden" name="layout" value="{{$d.Layout}}"><input type="hidden" name="q" value="{{$d.Q}}"><input type="hidden" name="sort" value="{{$d.Sort}}">
-        <button class="btn btn-sm" type="submit">Save changes to {{$d.Active.Name}}</button>
+        <button class="btn" type="submit">Save changes to {{$d.Active.Name}}</button>
       </form>
       {{end}}
-      <details class="dropdown proj-menu">
-        <summary class="btn btn-sm">Save as new view</summary>
-        <form class="dropdown-menu proj-menu-body stack-sm" method="post" action="{{$d.URL}}/views">
+      <details class="dropdown dropdown-end proj-menu">
+        <summary class="btn">Save as new view</summary>
+        <form class="dropdown-menu dropdown-form proj-menu-body stack-sm" method="post" action="{{$d.URL}}/views">
           <input type="hidden" name="layout" value="{{$d.Layout}}"><input type="hidden" name="q" value="{{$d.Q}}"><input type="hidden" name="sort" value="{{$d.Sort}}">
           <label class="small" for="proj-view-name">View name</label>
           <input id="proj-view-name" name="name" required maxlength="60" placeholder="Bugs in progress">
-          <button class="btn btn-sm btn-primary" type="submit">Save view</button>
+          <button class="btn btn-primary" type="submit">Save view</button>
         </form>
       </details>
       {{if $d.Active}}
       <form method="post" action="{{$d.URL}}/views/{{$d.Active.ID}}/delete" data-proj-confirm="Delete the view “{{$d.Active.Name}}”? Its items stay on the project.">
-        <button class="btn btn-sm btn-ghost" type="submit">Delete view</button>
+        <button class="btn btn-ghost" type="submit">Delete view</button>
       </form>
       {{end}}
     </div>
@@ -63,7 +63,7 @@
     <input type="hidden" name="return" value="{{$d.Self}}">
     <label class="sr-only" for="proj-add-ref">Add an issue or pull request</label>
     <input id="proj-add-ref" name="ref" placeholder="Add an issue or pull request: owner/repo#12 or paste its link" maxlength="300">
-    <button class="btn btn-sm" type="submit">Add</button>
+    <button class="btn" type="submit">Add</button>
   </form>
   {{end}}
 
@@ -109,21 +109,21 @@
           <div class="proj-card-tools">
             <form method="post" action="{{.ItemURL}}/move">
               <input type="hidden" name="return" value="{{$d.Self}}"><input type="hidden" name="before" value="{{.Prev}}">
-              <button class="icon-btn proj-tool" type="submit" {{if not .Prev}}disabled{{end}} aria-label="Move {{.Title}} up" title="Move up"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 15 L12 9 L18 15"/></svg></button>
+              <button class="icon-btn icon-btn-sm proj-tool" type="submit" {{if not .Prev}}disabled{{end}} aria-label="Move {{.Title}} up" title="Move up"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 15 L12 9 L18 15"/></svg></button>
             </form>
             <form method="post" action="{{.ItemURL}}/move">
               <input type="hidden" name="return" value="{{$d.Self}}"><input type="hidden" name="after" value="{{.Next}}">
-              <button class="icon-btn proj-tool" type="submit" {{if not .Next}}disabled{{end}} aria-label="Move {{.Title}} down" title="Move down"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></button>
+              <button class="icon-btn icon-btn-sm proj-tool" type="submit" {{if not .Next}}disabled{{end}} aria-label="Move {{.Title}} down" title="Move down"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></button>
             </form>
             <form class="proj-card-status" method="post" action="{{.ItemURL}}/move">
               <input type="hidden" name="return" value="{{$d.Self}}">
-              <select name="status" aria-label="Status of {{.Title}}" data-proj-autosubmit>
+              <select class="ctl-sm" name="status" aria-label="Status of {{.Title}}" data-proj-autosubmit>
                 <option value="">No status</option>
                 {{$v := .Status.Value}}{{range $d.Status.Options}}<option value="{{.ID}}" {{if eq (print .ID) $v}}selected{{end}}>{{.Name}}</option>{{end}}
               </select>
-              <button class="btn btn-xs" type="submit" data-proj-js-hide>Move</button>
+              <button class="btn btn-sm" type="submit" data-proj-js-hide>Move</button>
             </form>
-            <a class="icon-btn proj-tool" href="{{.ItemURL}}" aria-label="Details for {{.Title}}" title="Details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></a>
+            <a class="icon-btn icon-btn-sm proj-tool" href="{{.ItemURL}}" aria-label="Details for {{.Title}}" title="Details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></a>
           </div>
           {{end}}
         </li>
@@ -174,14 +174,14 @@
           <form class="proj-inline" method="post" action="{{$row.ItemURL}}/field">
             <input type="hidden" name="return" value="{{$d.Self}}"><input type="hidden" name="field" value="{{$cell.Field.ID}}">
             {{template "proj-field-input" $cell}}
-            <button class="btn btn-xs" type="submit" data-proj-js-hide>Save</button>
+            <button class="btn btn-sm" type="submit" data-proj-js-hide>Save</button>
           </form>
           {{else if $cell.Color}}<span class="proj-pill proj-c-{{$cell.Color}}">{{$cell.Display}}</span>
           {{else if $cell.Range}}{{template "proj-iter-pill" $cell}}
           {{else}}{{$cell.Display}}{{end}}
         </td>
         {{end}}
-        <td>{{if not $row.Hidden}}<a class="icon-btn proj-tool" href="{{$row.ItemURL}}" aria-label="Details for {{$row.Title}}" title="Details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></a>{{end}}</td>
+        <td>{{if not $row.Hidden}}<a class="icon-btn icon-btn-sm proj-tool" href="{{$row.ItemURL}}" aria-label="Details for {{$row.Title}}" title="Details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></a>{{end}}</td>
       </tr>
       {{else}}
       <tr><td colspan="{{len $d.TableCols}}" class="muted center">Nothing here{{if $d.Q}} matches the filter{{end}}.</td></tr>
@@ -194,7 +194,7 @@
   <input type="hidden" name="return" value="{{$d.Self}}">
   <label class="sr-only" for="proj-draft-table">New draft title</label>
   <input id="proj-draft-table" name="title" required maxlength="256" placeholder="+ Add a draft">
-  <button class="btn btn-sm" type="submit">Add draft</button>
+  <button class="btn" type="submit">Add draft</button>
 </form>
 {{end}}
 {{end}}

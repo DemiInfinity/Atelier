@@ -25,14 +25,14 @@ img.avatar.avatar-pic { padding: 0; object-fit: cover; background: var(--raised)
 .acct-summary:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .acct-menu[open] > .acct-summary { filter: brightness(1.15); }
 .acct-pop {
-  position: absolute; right: 0; top: calc(100% + 8px); z-index: 60;
+  position: absolute; right: 0; top: calc(100% + var(--menu-gap)); z-index: 60;
   width: min(280px, calc(100vw - 32px));
   display: flex; flex-direction: column; gap: 2px;
-  padding: 8px; border-radius: var(--r-lg);
+  padding: var(--menu-pad); border-radius: var(--r);
   background: var(--surface); border: 1px solid var(--border-strong);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
-.acct-pop-head { padding: 4px 10px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.acct-pop-head { padding: 6px 10px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .acct-row { min-height: 44px; }
 .acct-row .account-text { flex: 1; }
 

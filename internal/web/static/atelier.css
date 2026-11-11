@@ -40,6 +40,25 @@
   --r-sm: 8px;
   --r: 10px;
   --r-lg: 14px;
+
+  /* One control scale. Every button, input, select, segmented control and
+     icon button takes its height from these, so controls that share a row
+     share a height. Phones raise all of them to a 44px tap target (below). */
+  --ctl-h-xs: 24px;
+  --ctl-h-sm: 28px;
+  --ctl-h: 36px;
+  --ctl-h-lg: 44px;
+  --ctl-fs-xs: 12px;
+  --ctl-fs-sm: 13px;
+  --ctl-fs: 14px;
+
+  /* Dropdown menus and small popovers. */
+  --menu-pad: 6px;
+  --menu-gap: 6px;
+  --menu-item-h: 32px;
+  --menu-min-w: 220px;
+  --menu-max-w: 320px;
+  --pop-pad: 12px;
   color-scheme: dark;
 }
 
@@ -233,12 +252,18 @@ body:has(.topbar) .center-page { min-height: calc(100vh - 60px); }
 .icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 32px; height: 32px;
+  width: var(--ctl-h); height: var(--ctl-h);
+  padding: 0;
   border-radius: var(--r-sm);
   border: 1px solid var(--border-strong);
   background: var(--raised);
   color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
 }
+.icon-btn-sm { width: var(--ctl-h-sm); height: var(--ctl-h-sm); }
+.icon-btn:disabled { opacity: .35; cursor: default; }
 .icon-btn:hover { color: var(--text); border-color: var(--muted); text-decoration: none; }
 
 .avatar {
@@ -258,6 +283,14 @@ a.avatar:hover { text-decoration: none; filter: brightness(1.1); }
 .avatar-sm { width: 20px; height: 20px; font-size: 10.5px; border-width: 1px; vertical-align: middle; }
 
 @media (max-width: 640px) {
+  :root {
+    --ctl-h-xs: 44px;
+    --ctl-h-sm: 44px;
+    --ctl-h: 44px;
+    --ctl-h-lg: 48px;
+    --ctl-fs-xs: 13px;
+    --menu-item-h: 44px;
+  }
   .topbar { gap: 12px; padding: 0 16px; }
   .brand span { display: none; }
   .topnav a { padding: 6px 8px; }
@@ -270,8 +303,8 @@ a.avatar:hover { text-decoration: none; filter: brightness(1.1); }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 6px 14px;
+  min-height: var(--ctl-h);
+  padding: 4px 14px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border-strong);
   background: var(--raised);
@@ -293,10 +326,15 @@ a.avatar:hover { text-decoration: none; filter: brightness(1.1); }
 .btn-ghost:hover { background: var(--raised); border-color: var(--border); color: var(--text); }
 .btn-tether { background: var(--tether-surface); border-color: var(--tether-border); color: var(--tether-2); }
 .btn-tether:hover { background: #18232e; border-color: var(--tether); }
-.btn-sm { min-height: 28px; padding: 4px 10px; font-size: 13px; }
-.btn-xs { min-height: 24px; padding: 2px 8px; font-size: 12px; }
-.btn-lg { min-height: 42px; padding: 10px 18px; font-size: 15px; width: 100%; }
+.btn-sm { min-height: var(--ctl-h-sm); padding: 2px 10px; font-size: var(--ctl-fs-sm); }
+.btn-xs { min-height: var(--ctl-h-xs); padding: 2px 8px; font-size: var(--ctl-fs-xs); }
+.btn-lg { min-height: var(--ctl-h-lg); padding: 8px 18px; font-size: 15px; width: 100%; }
+.btn-icon { padding-left: 0; padding-right: 0; min-width: var(--ctl-h); }
+.btn-sm.btn-icon { min-width: var(--ctl-h-sm); }
+.btn-xs.btn-icon { min-width: var(--ctl-h-xs); }
 .btn.is-disabled, .btn[aria-disabled="true"] { opacity: .55; cursor: default; pointer-events: none; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn-primary:disabled:hover { background: var(--amber); border-color: var(--amber); }
 .btn:focus-visible { outline-offset: 2px; border-radius: var(--r-sm); }
 
 .pill {
@@ -371,10 +409,19 @@ input, select, textarea {
   border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
   padding: 8px 12px;
-  min-height: 38px;
+  min-height: var(--ctl-h);
   width: 100%;
   min-width: 0;
 }
+/* Single-line fields get an exact height (a min-height lets a date field or
+   a taller line box drift a pixel or three away from the button beside it). */
+input, select { height: var(--ctl-h); min-height: 0; padding-top: 0; padding-bottom: 0; }
+input[type="file"] { height: auto; min-height: var(--ctl-h); padding: 6px 12px; }
+input[type="color"] { width: 64px; padding: 3px; cursor: pointer; }
+/* Compact fields, for rows of small buttons: class on the field itself. */
+.ctl-sm { height: var(--ctl-h-sm); padding-left: 8px; padding-right: 8px; font-size: var(--ctl-fs-sm); }
+.ctl-xs { height: var(--ctl-h-xs); padding-left: 8px; padding-right: 8px; font-size: var(--ctl-fs-xs); }
+.ctl-auto { width: auto; }
 input::placeholder, textarea::placeholder { color: #8a847b; }
 input:hover, select:hover, textarea:hover { border-color: #4a453e; }
 input:focus-visible, select:focus-visible, textarea:focus-visible {
@@ -434,6 +481,7 @@ input[type="radio"], input[type="checkbox"] {
   overflow: hidden;
   min-width: 0;
   max-width: 100%;
+  height: var(--ctl-h);
 }
 .clone-label {
   display: inline-flex;
@@ -451,8 +499,9 @@ input[type="radio"], input[type="checkbox"] {
   background: transparent;
   font-family: var(--font-mono);
   font-size: 12.5px;
-  min-height: 32px;
-  padding: 6px 10px;
+  height: auto;
+  min-height: 0;
+  padding: 0 10px;
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
@@ -461,7 +510,9 @@ input[type="radio"], input[type="checkbox"] {
 .clone-copy {
   display: inline-grid;
   place-items: center;
-  width: 36px;
+  width: var(--ctl-h);
+  padding: 0;
+  flex-shrink: 0;
   border: 0;
   border-left: 1px solid var(--border-strong);
   background: var(--raised);
@@ -660,6 +711,8 @@ input[type="radio"], input[type="checkbox"] {
 
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
 .toolbar-clone { flex: 0 1 380px; min-width: 0; }
+/* The repo toolbar is a row of small buttons, so its clone box is small too. */
+.toolbar .clone, .snip-toolbar .clone { height: var(--ctl-h-sm); }
 @media (max-width: 640px) { .toolbar-clone { flex-basis: 100%; margin-left: 0; } }
 
 .crumbs { font-size: 15px; overflow-wrap: anywhere; min-width: 0; }
@@ -674,13 +727,13 @@ input[type="radio"], input[type="checkbox"] {
 .dropdown-menu {
   position: absolute;
   z-index: 30;
-  top: calc(100% + 6px);
+  top: calc(100% + var(--menu-gap));
   left: 0;
-  min-width: 220px;
-  max-width: min(320px, calc(100vw - 32px));
+  min-width: min(var(--menu-min-w), calc(100vw - 32px));
+  max-width: min(var(--menu-max-w), calc(100vw - 32px));
   max-height: 360px;
   overflow-y: auto;
-  padding: 6px;
+  padding: var(--menu-pad);
   background: var(--raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--r);
@@ -694,11 +747,17 @@ input[type="radio"], input[type="checkbox"] {
   text-transform: uppercase;
   color: var(--muted);
 }
+/* A menu on the right-hand side of a row opens leftwards. */
+.dropdown-end > .dropdown-menu { left: auto; right: 0; }
+/* A popover that holds a small form rather than a list of items. */
+.dropdown-menu.dropdown-form { padding: var(--pop-pad); max-height: none; }
 .dropdown-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  min-height: var(--menu-item-h);
+  width: 100%;
+  padding: 4px 8px;
   border-radius: 6px;
   color: var(--text);
   font-family: var(--font-mono);
@@ -726,7 +785,9 @@ input[type="radio"], input[type="checkbox"] {
 }
 .list-head .muted-link { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }
 
-.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* position: relative keeps visually-hidden (absolutely positioned) labels inside
+   the scroll box; without it they widen the whole page on a phone. */
+.table-scroll { position: relative; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { border-collapse: collapse; width: 100%; }
 
 .files td { padding: 9px 16px; border-top: 1px solid var(--border); vertical-align: middle; }
@@ -818,13 +879,13 @@ table { border-collapse: collapse; width: 100%; }
   border-radius: var(--r-sm);
   overflow: hidden;
 }
+.segmented { height: var(--ctl-h-sm); }
 .segmented a {
-  padding: 4px 12px;
-  font-size: 13px;
+  padding: 0 12px;
+  font-size: var(--ctl-fs-sm);
   font-weight: 500;
   color: var(--text-2);
   background: var(--raised);
-  min-height: 28px;
   display: inline-flex;
   align-items: center;
 }
@@ -932,7 +993,7 @@ table { border-collapse: collapse; width: 100%; }
 
 /* ---------- account settings side menu (shared) ---------- */
 .side-nav { display: flex; flex-direction: column; gap: 2px; }
-.side-nav a { padding: 8px 12px; border-radius: 8px; color: #c9c3ba; border-left: 2px solid transparent; text-decoration: none; }
+.side-nav a { display: flex; align-items: center; min-height: var(--ctl-h); padding: 4px 12px; border-radius: 8px; color: #c9c3ba; border-left: 2px solid transparent; text-decoration: none; }
 .side-nav a:hover { background: #1f1d1a; color: #eeeae4; }
 .side-nav a[aria-current="page"] { background: #26231f; color: #eeeae4; border-left-color: #f2b85c; }
 
