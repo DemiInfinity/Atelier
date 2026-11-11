@@ -42,6 +42,7 @@ your config or the network.
 npm run tauri build -- --debug
 scripts/try-with-mock.sh             # look around by hand
 scripts/try-with-mock.sh selftest    # scripted walk through every screen
+scripts/try-with-mock.sh selftest atl  # the same, starting as someone who signed in with atl
 ```
 
 `try-with-mock.sh` starts `examples/mock_studio.rs` (the contract's example
@@ -104,6 +105,14 @@ src/
   the studio and from git is only ever put in the page as text. Commits take
   exactly the ticked files (`git commit --only`); discard and undo are the
   only destructive actions and the window asks first.
+- **Finding working copies.** The clone folder, the watch folders and
+  picked folders are scanned for git folders. One is a working copy of a
+  studio repository when *any* of its remotes points at it, whatever the
+  remote is called (the branch's upstream remote wins, then `origin`);
+  owner and name are compared without regard to case. Git folders that
+  aren't in the studio are listed under "Other folders". Someone who signed
+  in with `atl` sees "Find your folders" once, with folders in their home
+  folder that contain git repositories suggested.
 - **State** lives where `atl` keeps it: `config.toml` (the app's own
   preferences under `[desktop]`) and the keychain.
 
@@ -111,12 +120,13 @@ src/
 
 | Area | Commands |
 | --- | --- |
-| App, first run | `app_state` `connect_start` `connect_poll` `connect_reopen` `connect_cancel` `find_folders` `add_watch_folder` `runner_probe` `disconnect` |
+| App, first run | `app_state` `connect_start` `connect_poll` `connect_reopen` `connect_cancel` `find_folders` `suggest_folders` `add_suggested_folders` `folders_done` `runner_probe` `disconnect` |
 | Today | `overview` `run_log` |
 | Repository | `repo_view` `repo_changes` `repo_diff` `repo_commit` `repo_discard` `repo_undo_commit` `repo_history` `repo_commit_detail` `repo_branches` `repo_switch` `repo_new_branch` `repo_fetch` `repo_pull` `repo_push` `repo_open` `repo_hand_over` |
 | Links | `open_web` `open_studio` `open_github` |
 | Pull requests | `pulls_list` `pull_detail` `pull_merge` `pull_cancel_merge` `pull_checkout` `agent_approve` |
 | This device | `device_view` `runner_set_taking` `runner_set_rule` `runner_tail` `job_stop` |
+| Folders | `add_watch_folder` `remove_watch_folder` `choose_clone_root` `open_folder` |
 | Add a repository | `choose_folder` `folder_plan` `folder_init` `publish` `search_repos` `clone_repo` `mirror_and_clone` `create_new` |
 | Settings | `remote_view` `remote_set` `remote_link` `set_editor` `set_git_tool` `set_notify_pref` `set_app_pref` |
 | Messages | `messages_view` `messages_set_tone` `messages_add` `messages_remove` `messages_set_rule` |

@@ -6,6 +6,10 @@
 #
 #   scripts/try-with-mock.sh            # look around by hand
 #   scripts/try-with-mock.sh selftest   # scripted walk-through, then quit
+#   scripts/try-with-mock.sh selftest atl
+#       the same, but starting as someone who already signed in with `atl`:
+#       no watch folders, an empty clone folder, the repositories in
+#       ~/Projects (one through a remote called `atelier`, one only on GitHub)
 #
 # Build first: (cd .. && cargo build -p atelier-desktop --example mock_studio)
 # and `npm run tauri build -- --debug`.
@@ -62,6 +66,20 @@ printf 'The menu shows what is running.\n' > "$copy/notes.md"
 copy="$world/home/Atelier/DemiInfinity/Marbl"
 echo one > "$copy/one.txt" && g -C "$copy" add . && g -C "$copy" commit --quiet -m "One"
 echo two > "$copy/two.txt" && g -C "$copy" add . && g -C "$copy" commit --quiet -m "Two"
+
+if [ "${2:-}" = "atl" ]; then
+  mv "$world/home/Atelier/DemiInfinity/Atelier" "$world/home/Atelier/DemiInfinity/Marbl" "$world/home/Projects/"
+  rmdir "$world/home/Atelier/DemiInfinity"
+  g -C "$world/home/Projects/Atelier" remote rename origin atelier
+  g init --quiet -b main "$world/home/Projects/loopkit"
+  echo loop > "$world/home/Projects/loopkit/README.md"
+  g -C "$world/home/Projects/loopkit" add . && g -C "$world/home/Projects/loopkit" commit --quiet -m "Start"
+  g -C "$world/home/Projects/loopkit" remote add origin https://github.com/maralind/loopkit.git
+  # What `atl login` leaves behind: the studio and the device, nothing else.
+  printf 'studio = "%s"\ndevice_id = 7\ndevice_name = "MacBook"\n' "$studio" > "$world/config/config.toml"
+  printf '{"%s": "atd_mockmockmockmockmockmockmockmockmockmock"}\n' "$studio" > "$world/config/tokens.json"
+  chmod 600 "$world/config/tokens.json"
+fi
 
 "$mock" --port "$port" --runner-socket "$sockdir/control.sock" > "$world/mock.log" 2>&1 &
 mock_pid=$!

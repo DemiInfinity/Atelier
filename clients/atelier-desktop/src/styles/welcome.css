@@ -148,3 +148,11 @@
 
 .welcome-runner { gap: 10px; }
 .welcome-caps { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Step 3: folders in the home folder that have git folders in them. */
+.welcome-suggest { display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.welcome-suggest-list { max-height: min(30vh, 240px); overflow-y: auto; }
+.welcome-suggest-row { padding: 8px 14px; cursor: pointer; }
+.welcome-suggest-row > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.welcome-suggest-path { font-size: 13px; overflow-wrap: anywhere; }
+.welcome-suggest-count { color: var(--ink3); font-size: 12px; }

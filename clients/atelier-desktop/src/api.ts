@@ -36,7 +36,7 @@ export type Target =
   | { screen: "pull"; repo: string; number: number }
   | { screen: "repo"; path: string }
   | { screen: "web"; web_path: string }
-  | { screen: "add"; tab: "publish" | "clone" | "new" }
+  | { screen: "add"; tab: "publish" | "clone" | "new" | "open" }
   | { screen: "settings" };
 
 export interface PresetInfo {
@@ -74,6 +74,8 @@ export interface Prefs {
   menu_bar: boolean;
   hide_dock: boolean;
   picked: string[];
+  /** "Find your folders" has been shown once. */
+  folders_done: boolean;
 }
 
 export interface AppState {
@@ -141,6 +143,33 @@ export interface Folders {
   folders: FoundFolder[];
   matched: number;
   studio_repos: number;
+}
+
+/** A folder in the home folder that has git repositories in it. */
+export interface Suggestion {
+  path: string;
+  /** `~/Projects` */
+  display: string;
+  repos: number;
+  /** Already looked through. */
+  watched: boolean;
+}
+
+/** What "Open a folder on this Mac…" found. */
+export interface OpenedFolder {
+  /**
+   * `opened`: in the studio, now a working copy (go to it).
+   * `elsewhere`: a git folder whose remote isn't the studio (`remote` says which).
+   * `unpublished`: a git folder with no remote.
+   * `not_repo`: not a git folder.
+   */
+  kind: "opened" | "elsewhere" | "unpublished" | "not_repo";
+  path: string;
+  full_name: string | null;
+  /** `origin → github.com/someone/thing` */
+  remote: string | null;
+  /** What publishing it would do; null for `opened`. */
+  plan: FolderPlan | null;
 }
 
 export interface RunnerProbe {
@@ -221,6 +250,11 @@ export interface RunnerBrief {
 export interface Overview {
   needs: NeedRow[];
   copies: WorkingCopy[];
+  /**
+   * Git folders found here that aren't in the studio. `owner` says where
+   * their remote is (`github.com`) or `no remote`; `full_name` is null.
+   */
+  others: WorkingCopy[];
   running: RunningRow[];
   elsewhere: string[];
   feed: FeedRow[];
@@ -592,6 +626,18 @@ export const api = {
   findFolders: () => call<Folders>("find_folders"),
   /** Opens the folder chooser; resolves to the folder as shown (`~/Code`), or null when cancelled. */
   addWatchFolder: () => call<string | null>("add_watch_folder"),
+  /** Stops looking through a watch folder (as shown, `~/Projects`). Nothing on disk changes. */
+  removeWatchFolder: (folder: string) => call<void>("remove_watch_folder", { folder }),
+  /** Opens the chooser for a new clone folder; resolves to it as shown, or null when cancelled. */
+  chooseCloneRoot: () => call<string | null>("choose_clone_root"),
+  /** Folders in the home folder that contain git repositories (quick, bounded). */
+  suggestFolders: () => call<Suggestion[]>("suggest_folders"),
+  /** Starts looking through suggested folders (`Suggestion.path`). Resolves to the ones added, as shown. */
+  addSuggestedFolders: (paths: string[]) => call<string[]>("add_suggested_folders", { paths }),
+  /** Remembers that "Find your folders" has been shown. */
+  foldersDone: () => call<void>("folders_done"),
+  /** "Open a folder on this Mac…": opens the chooser; null when cancelled. */
+  openFolder: () => call<OpenedFolder | null>("open_folder"),
   runnerProbe: () => call<RunnerProbe>("runner_probe"),
   /** Removes the token and the configuration from this machine. Ask first. */
   disconnect: () => call<void>("disconnect"),

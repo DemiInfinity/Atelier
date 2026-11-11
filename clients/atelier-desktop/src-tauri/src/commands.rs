@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, State};
 
-use crate::add::{Added, FolderPlan, Folders, SearchView};
+use crate::add::{Added, FolderPlan, Folders, OpenedFolder, SearchView, Suggestion};
 use crate::desk::{AppState, ConnectPoll, ConnectStarted, Desk};
 use crate::device::{DeviceView, LogView, RunnerProbe};
 use crate::error::{CmdError, CmdResult};
@@ -70,6 +70,44 @@ pub async fn find_folders(desk: D<'_>) -> CmdResult<Folders> {
 pub async fn add_watch_folder(app: AppHandle, desk: D<'_>) -> CmdResult<Option<String>> {
     match shell::pick_folder(&app, &desk, "Choose a folder to look through").await {
         Some(folder) => desk.add_watch_folder(&folder).map(Some),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub async fn remove_watch_folder(desk: D<'_>, folder: String) -> CmdResult<()> {
+    desk.remove_watch_folder(&folder)
+}
+
+/// Asks for a new clone folder with the chooser.
+#[tauri::command]
+pub async fn choose_clone_root(app: AppHandle, desk: D<'_>) -> CmdResult<Option<String>> {
+    match shell::pick_folder(&app, &desk, "Choose where clones go").await {
+        Some(folder) => desk.set_clone_root(&folder).map(Some),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub async fn suggest_folders(desk: D<'_>) -> CmdResult<Vec<Suggestion>> {
+    Ok(desk.suggest_folders().await)
+}
+
+#[tauri::command]
+pub async fn add_suggested_folders(desk: D<'_>, paths: Vec<String>) -> CmdResult<Vec<String>> {
+    desk.add_suggested(&paths).await
+}
+
+#[tauri::command]
+pub async fn folders_done(desk: D<'_>) -> CmdResult<()> {
+    desk.mark_folders_done()
+}
+
+/// "Open a folder on this Mac…": asks with the chooser.
+#[tauri::command]
+pub async fn open_folder(app: AppHandle, desk: D<'_>) -> CmdResult<Option<OpenedFolder>> {
+    match shell::pick_folder(&app, &desk, "Choose a folder to open").await {
+        Some(folder) => desk.open_folder(&folder).await.map(Some),
         None => Ok(None),
     }
 }

@@ -116,6 +116,9 @@ pub struct RunnerBrief {
 pub struct Overview {
     pub needs: Vec<NeedRow>,
     pub copies: Vec<WorkingCopy>,
+    /// Git folders found here that aren't in the studio: their remote is
+    /// elsewhere, or they have none. `owner` says where (`github.com`).
+    pub others: Vec<WorkingCopy>,
     pub running: Vec<RunningRow>,
     /// Jobs of yours that other runners are working on.
     pub elsewhere: Vec<String>,
@@ -434,37 +437,54 @@ pub fn roots_label(roots: &[String]) -> String {
 }
 
 impl Desk {
-    /// The working copies on this machine, matched to the studio's
-    /// repositories. Without a studio list (offline) every git folder found
-    /// is shown; with one, only folders the studio knows.
-    pub async fn working_copies(&self, repos: Option<&[Repo]>) -> Vec<WorkingCopy> {
+    /// The git folders on this machine: the ones the studio knows, and
+    /// the rest. Without a studio list (offline) every folder is in the
+    /// first list, unmatched.
+    pub async fn all_copies(&self, repos: Option<&[Repo]>) -> (Vec<WorkingCopy>, Vec<WorkingCopy>) {
         let found = self.git().scan(&self.roots(), SCAN_DEPTH).await;
-        let mut copies: Vec<WorkingCopy> = found
-            .iter()
-            .filter_map(|local| {
-                let path = local.path.to_string_lossy().into_owned();
-                match repos {
-                    Some(repos) => local.studio_repo(repos).map(|repo| {
-                        working_copy(local, Some(repo), self.account_label(&repo.owner), path)
-                    }),
-                    None => {
-                        let owner = local
-                            .remote
-                            .as_ref()
-                            .and_then(|r| r.path.split('/').next().map(str::to_string))
-                            .unwrap_or_default();
-                        Some(working_copy(local, None, owner, path))
+        let (mut copies, mut others) = (Vec::new(), Vec::new());
+        for local in &found {
+            let path = local.path.to_string_lossy().into_owned();
+            let matched = repos.and_then(|repos| local.studio_repo(repos));
+            match (matched, repos) {
+                (Some(repo), _) => copies.push(working_copy(
+                    local,
+                    Some(repo),
+                    self.account_label(&repo.owner),
+                    path,
+                )),
+                (None, known) => {
+                    // Where it lives instead, for the "Other folders" group.
+                    let place = local
+                        .remotes
+                        .iter()
+                        .find_map(|r| r.remote.as_ref())
+                        .or(local.remote.as_ref())
+                        .map(|r| r.host.clone())
+                        .unwrap_or_else(|| "no remote".to_string());
+                    let copy = working_copy(local, None, place, path);
+                    if known.is_some() {
+                        others.push(copy);
+                    } else {
+                        copies.push(copy);
                     }
                 }
-            })
-            .collect();
-        copies.sort_by(|a, b| {
+            }
+        }
+        let by_name = |a: &WorkingCopy, b: &WorkingCopy| {
             a.owner
                 .to_lowercase()
                 .cmp(&b.owner.to_lowercase())
                 .then(a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-        });
-        copies
+        };
+        copies.sort_by(by_name);
+        others.sort_by_key(|c| c.name.to_lowercase());
+        (copies, others)
+    }
+
+    /// The working copies the studio knows (see [`Desk::all_copies`]).
+    pub async fn working_copies(&self, repos: Option<&[Repo]>) -> Vec<WorkingCopy> {
+        self.all_copies(repos).await.0
     }
 
     pub async fn overview(&self) -> CmdResult<Overview> {
@@ -489,7 +509,7 @@ impl Desk {
                 self.repos_cached()
             }
         };
-        let copies = self.working_copies(repos.as_deref()).await;
+        let (copies, others) = self.all_copies(repos.as_deref()).await;
 
         let mut needs: Vec<NeedRow> = status.needs.iter().map(need_row).collect();
         // Local needs sit among the studio's, after agents and failures.
@@ -537,6 +557,7 @@ impl Desk {
                 .as_ref()
                 .map_or(0, |r| r.iter().map(|r| r.open_pulls).sum()),
             copies,
+            others,
             roots_label: roots_label(&roots),
             runner: runner_brief(runner.as_ref()),
             device_name,

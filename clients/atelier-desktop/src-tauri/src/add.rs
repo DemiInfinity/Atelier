@@ -565,3 +565,255 @@ impl Desk {
         })
     }
 }
+
+// ------------------------------------------------------------ folders
+
+/// A folder in the home folder that has git repositories in it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Suggestion {
+    pub path: String,
+    /// `~/Projects`
+    pub display: String,
+    /// How many git folders were found in it.
+    pub repos: usize,
+    /// It is already looked through.
+    pub watched: bool,
+}
+
+/// What "Open a folder on this Mac…" found.
+#[derive(Clone, Debug, Serialize)]
+pub struct OpenedFolder {
+    /// `opened`: it is in the studio and now among the working copies.
+    /// `elsewhere`: a git folder whose remote isn't the studio.
+    /// `unpublished`: a git folder with no remote.
+    /// `not_repo`: not a git folder.
+    pub kind: &'static str,
+    pub path: String,
+    pub full_name: Option<String>,
+    /// `origin → github.com/someone/thing`, for `elsewhere`.
+    pub remote: Option<String>,
+    /// What publishing it would do, for everything but `opened`.
+    pub plan: Option<FolderPlan>,
+}
+
+/// Folders in the home folder never worth looking through.
+const HOME_SKIP: [&str; 9] = [
+    "Library",
+    "Applications",
+    "Music",
+    "Movies",
+    "Pictures",
+    "Public",
+    "Downloads",
+    "Desktop",
+    "node_modules",
+];
+/// How deep under a candidate folder repositories are looked for.
+const SUGGEST_DEPTH: usize = 3;
+const MAX_SUGGESTIONS: usize = 12;
+
+/// The folders directly in `home` (and in `home/Documents`) that contain
+/// git repositories within a few levels. Hidden folders, the system's own
+/// folders and symlinks are skipped, so the walk stays inside the home
+/// folder and stays quick.
+pub fn suggest_in(home: &Path, watched: &[PathBuf]) -> Vec<Suggestion> {
+    fn children(dir: &Path) -> Vec<PathBuf> {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return Vec::new();
+        };
+        let mut found: Vec<PathBuf> = entries
+            .flatten()
+            .filter(|entry| {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                // file_type() doesn't follow symlinks.
+                !name.starts_with('.')
+                    && !HOME_SKIP.contains(&name.as_ref())
+                    && entry.file_type().is_ok_and(|t| t.is_dir())
+            })
+            .map(|entry| entry.path())
+            .collect();
+        found.sort();
+        found
+    }
+    let mut candidates = children(home);
+    candidates.extend(children(&home.join("Documents")));
+    let mut suggestions: Vec<Suggestion> = candidates
+        .into_iter()
+        .filter(|dir| dir.file_name().is_some_and(|n| n != "Documents"))
+        .filter_map(|dir| {
+            let repos =
+                atelier_core::git::discover_repos(std::slice::from_ref(&dir), SUGGEST_DEPTH).len();
+            (repos > 0).then(|| Suggestion {
+                display: paths::display(&dir, home),
+                watched: watched.iter().any(|w| dir.starts_with(w)),
+                path: dir.to_string_lossy().into_owned(),
+                repos,
+            })
+        })
+        .collect();
+    suggestions.sort_by(|a, b| b.repos.cmp(&a.repos).then(a.display.cmp(&b.display)));
+    suggestions.truncate(MAX_SUGGESTIONS);
+    suggestions
+}
+
+impl Desk {
+    /// Folders in the home folder with git repositories in them, for
+    /// "Find your folders".
+    pub async fn suggest_folders(&self) -> Vec<Suggestion> {
+        let settings = self.settings();
+        let home = settings.home.clone();
+        let watched = self.roots();
+        tokio::task::spawn_blocking(move || suggest_in(&home, &watched))
+            .await
+            .unwrap_or_default()
+    }
+
+    /// Starts looking through some of the suggested folders. Only folders
+    /// that are suggestions right now are accepted.
+    pub async fn add_suggested(&self, chosen: &[String]) -> CmdResult<Vec<String>> {
+        let suggestions = self.suggest_folders().await;
+        let mut added = Vec::new();
+        for path in chosen {
+            let Some(suggestion) = suggestions.iter().find(|s| &s.path == path) else {
+                return Err(CmdError::invalid(format!(
+                    "{path} isn’t one of the suggested folders."
+                )));
+            };
+            if !suggestion.watched {
+                added.push(self.add_watch_folder(Path::new(&suggestion.path))?);
+            }
+        }
+        self.forget_repos();
+        Ok(added)
+    }
+
+    /// Stops looking through a watch folder. Nothing on disk changes.
+    pub fn remove_watch_folder(&self, folder: &str) -> CmdResult<()> {
+        let settings = self.settings();
+        let wanted = settings.expand(folder);
+        let before = settings.config.watch.len();
+        self.update_config(|config| {
+            config.watch.retain(|w| {
+                paths::display(&settings.expand(w), &settings.home) != folder
+                    && settings.expand(w) != wanted
+            });
+        })?;
+        if self.settings().config.watch.len() == before {
+            return Err(CmdError::invalid(format!(
+                "{folder} isn’t one of the folders Atelier looks through."
+            )));
+        }
+        Ok(())
+    }
+
+    /// Changes where clones go. Existing working copies stay where they
+    /// are; the old folder is kept as a watch folder so they stay listed.
+    pub fn set_clone_root(&self, folder: &Path) -> CmdResult<String> {
+        let real = folder
+            .canonicalize()
+            .map_err(|_| CmdError::new("missing", "That folder isn’t there."))?;
+        if !real.is_dir() {
+            return Err(CmdError::invalid("Pick a folder, not a file."));
+        }
+        let settings = self.settings();
+        let old = settings.clone_root();
+        let shown = paths::display(&real, &settings.home);
+        if old == real {
+            return Ok(shown);
+        }
+        let old_shown = paths::display(&old, &settings.home);
+        let keep_old = old.is_dir()
+            && !atelier_core::git::discover_repos(
+                std::slice::from_ref(&old),
+                crate::desk::SCAN_DEPTH,
+            )
+            .is_empty();
+        self.update_config(|config| {
+            config.clone_root = Some(shown.clone());
+            config.watch.retain(|w| settings.expand(w) != real);
+            if keep_old && !config.watch.iter().any(|w| settings.expand(w) == old) {
+                config.watch.push(old_shown.clone());
+            }
+        })?;
+        Ok(shown)
+    }
+
+    /// Remembers that "Find your folders" has been shown.
+    pub fn mark_folders_done(&self) -> CmdResult<()> {
+        self.update_prefs(|prefs| prefs.folders_done = true)
+            .map(|_| ())
+    }
+
+    /// "Open a folder on this Mac…": a folder the person picked becomes a
+    /// working copy when its repository is in the studio; otherwise this
+    /// says what it is so the window can offer to publish it.
+    pub async fn open_folder(&self, folder: &Path) -> CmdResult<OpenedFolder> {
+        let real = folder
+            .canonicalize()
+            .map_err(|_| CmdError::new("missing", "That folder isn’t there."))?;
+        if !real.is_dir() {
+            return Err(CmdError::invalid("Pick a folder, not a file."));
+        }
+        let git = self.git();
+        // A folder inside a repository opens the repository.
+        let Some(top) = git.toplevel(&real).await? else {
+            let plan = self.folder_plan(&real).await?;
+            return Ok(OpenedFolder {
+                kind: "not_repo",
+                path: plan.path.clone(),
+                full_name: None,
+                remote: None,
+                plan: Some(plan),
+            });
+        };
+        let top = top.canonicalize().unwrap_or(top);
+        let local = git.inspect(&top).await?;
+        self.forget_repos();
+        let repos = self.repos(Duration::ZERO).await?;
+        if let Some(repo) = local.studio_repo(&repos) {
+            let inside = self
+                .roots()
+                .iter()
+                .any(|root| root.canonicalize().is_ok_and(|root| top.starts_with(&root)));
+            if !inside {
+                // Watch its parent so its neighbours show up too, unless
+                // that would mean looking through the whole home folder.
+                let home = self.settings().home.canonicalize().ok();
+                match top.parent() {
+                    Some(parent)
+                        if Some(parent) != home.as_deref() && parent.parent().is_some() =>
+                    {
+                        self.add_watch_folder(parent)?;
+                    }
+                    _ => {
+                        self.register_picked(&top)?;
+                    }
+                }
+            }
+            return Ok(OpenedFolder {
+                kind: "opened",
+                path: top.to_string_lossy().into_owned(),
+                full_name: Some(repo.full_name.clone()),
+                remote: None,
+                plan: None,
+            });
+        }
+        let plan = self.folder_plan(&top).await?;
+        let remote = local.remotes.first().map(|r| match &r.remote {
+            Some(parsed) => format!("{} → {}/{}", r.name, parsed.host, parsed.path),
+            None => format!("{} → {}", r.name, r.url),
+        });
+        Ok(OpenedFolder {
+            kind: if remote.is_some() {
+                "elsewhere"
+            } else {
+                "unpublished"
+            },
+            path: plan.path.clone(),
+            full_name: None,
+            remote,
+            plan: Some(plan),
+        })
+    }
+}

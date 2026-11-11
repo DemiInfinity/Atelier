@@ -1,7 +1,7 @@
 // The screens of the main window.
 
 export type RepoTab = "changes" | "history" | "branches";
-export type AddTab = "publish" | "clone" | "new";
+export type AddTab = "publish" | "clone" | "new" | "open";
 
 export type Route =
   | { screen: "today" }
@@ -9,7 +9,8 @@ export type Route =
   | { screen: "repo"; path: string; tab?: RepoTab }
   /** `approve`: scroll to and highlight this waiting agent. */
   | { screen: "device"; approve?: number }
-  | { screen: "add"; tab?: AddTab }
+  /** `path`: a folder already known to the app, to publish (skips the chooser). */
+  | { screen: "add"; tab?: AddTab; path?: string }
   | { screen: "settings" }
   | { screen: "messages" };
 

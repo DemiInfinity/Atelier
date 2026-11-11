@@ -96,6 +96,22 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
       await click("Finish");
     }
 
+    if (state.signed_in && !state.prefs.folders_done) {
+      // Signed in elsewhere (with `atl`): "Find your folders" shows once.
+      await waitFor("the folder suggestions", () => sees("Folders to look through"), 20000);
+      await sleep(400);
+      await log(`atl folders before: ${text(document.querySelector("main")).slice(0, 520)}`);
+      await shot("atl-folders-1");
+      await click("Look through these");
+      await waitFor("the matches", () => sees("In your studio as"), 20000);
+      await sleep(400);
+      await log(`atl folders after: ${text(document.querySelector("main")).slice(0, 700)}`);
+      await shot("atl-folders-2");
+      await click("Continue");
+      await waitFor("the runner step", () => button("Finish"));
+      await click("Finish");
+    }
+
     await waitFor("the sidebar", () => document.querySelector(".sidebar"));
     await waitFor("Today", () => sees("Needs you") && shell.ctx.overview() !== null, 30000);
     await sleep(500);
@@ -117,6 +133,13 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
       await log(`FAIL toast: ${String(e)}`);
     }
 
+    const toggle = document.querySelector<HTMLButtonElement>(".group-toggle");
+    if (toggle) {
+      toggle.click();
+      await sleep(300);
+      await log(`other folders: ${text(document.querySelector(".sidebar .repos"))}`);
+      await shot("sidebar-others");
+    }
     const overview = shell.ctx.overview();
     const copy = overview?.copies[0];
     await screen(shell, "pulls", () => shell.go({ screen: "pulls" }), () => sees("open across your studio") && sees("Conversation"));
@@ -130,9 +153,15 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
       await log("FAIL no working copy to open");
     }
     await screen(shell, "device", () => shell.go({ screen: "device" }), () => sees("When to work"));
-    await screen(shell, "settings", () => shell.go({ screen: "settings" }), () => sees("Who you commit as") && sees("Remote access"));
+    await screen(shell, "settings", () => shell.go({ screen: "settings" }), () => sees("Who you commit as") && sees("Remote access") && sees("Clones go to"));
+    await log(`folders card: ${text([...document.querySelectorAll(".stage section")].find((el) => text(el).startsWith("Folders")))}`);
     await screen(shell, "messages", () => shell.go({ screen: "messages" }), () => sees("After a push") && sees("Try it"));
     await screen(shell, "add", () => shell.go({ screen: "add", tab: "clone" }), () => sees("Add a repository") && sees("In your studio"));
+    await screen(shell, "add-open", () => shell.go({ screen: "add", tab: "open" }), () => sees("Open a folder on this"));
+    const other = overview?.others[0];
+    if (other) {
+      await screen(shell, "publish-other", () => shell.go({ screen: "add", tab: "publish", path: other.path }), () => sees("A git folder"));
+    }
     shell.go({ screen: "today" });
     // The menu bar popover, shown without a click on its icon.
     await api.selftestPopover().catch(() => {});

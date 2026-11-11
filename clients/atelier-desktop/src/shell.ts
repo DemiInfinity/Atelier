@@ -31,6 +31,8 @@ export class Shell {
   private readonly sidebar = h("aside", { class: "sidebar" });
   private readonly stage = h("main", { class: "stage" });
   private readonly toasts = toastLayer((target) => this.follow(target));
+  /** The sidebar's "Other folders" group starts closed. */
+  private othersOpen = false;
 
   readonly ctx: Ctx = {
     app: () => this.state,
@@ -67,10 +69,14 @@ export class Shell {
     this.state = await api.appState();
     document.body.classList.add(`os-${this.state.os}`);
     this.listen();
-    if (this.state.signed_in) {
-      this.enter();
-    } else {
+    if (!this.state.signed_in) {
       this.welcome();
+    } else if (!this.state.prefs.folders_done) {
+      // Signed in elsewhere (with `atl`, say) and never shown where the
+      // app looks: show "Find your folders" once.
+      this.welcome("folders");
+    } else {
+      this.enter();
     }
   }
 
@@ -82,15 +88,20 @@ export class Shell {
   // ------------------------------------------------------------- screens
 
   /** First run: no sidebar, just the welcome steps. */
-  private welcome(): void {
+  private welcome(startAt?: "folders"): void {
     this.screen?.dispose?.();
     this.screen = null;
     this.view = null;
     this.toasts.queue.clear();
-    const screen = welcomeScreen(this.ctx, async () => {
-      this.state = await api.appState();
-      this.enter();
-    });
+    const screen = welcomeScreen(
+      this.ctx,
+      async () => {
+        await api.foldersDone().catch(() => {});
+        this.state = await api.appState();
+        this.enter();
+      },
+      startAt,
+    );
     this.screen = screen;
     mount(this.root, screen.el);
   }
@@ -288,6 +299,18 @@ export class Shell {
     }
   }
 
+  /** "Add a folder…": the chooser, then look again. */
+  private async addFolder(button: HTMLButtonElement | null): Promise<void> {
+    await this.busy(button, async () => {
+      const added = await api.addWatchFolder();
+      if (added === null) return;
+      this.state = await api.appState();
+      await this.refresh();
+      const found = (this.view?.copies.length ?? 0) + (this.view?.others.length ?? 0);
+      this.say(`Looking through ${added}.`, found === 0 ? "No git folders were found in it." : "");
+    });
+  }
+
   // ------------------------------------------------------------- sidebar
 
   private drawSidebar(): void {
@@ -372,8 +395,63 @@ export class Shell {
             ),
           ),
         ),
-        view && view.copies.length === 0
-          ? h("span", { class: "group-name", text: "No working copies yet. Use + to add one." })
+        view && view.copies.length === 0 && view.others.length === 0
+          ? h(
+              "div",
+              { class: "side-empty" },
+              h("span", { text: `No repositories found on this ${this.state.machine} yet` }),
+              h("button", { type: "button", class: "btn sm", text: "Add a folder…", onclick: (e) => void this.addFolder(e.currentTarget as HTMLButtonElement) }),
+              h("button", { type: "button", class: "btn sm", text: "Clone…", onclick: () => this.go({ screen: "add", tab: "clone" }) }),
+            )
+          : null,
+        view && view.others.length > 0
+          ? h(
+              "div",
+              { class: "group" },
+              h(
+                "button",
+                {
+                  type: "button",
+                  class: "group-name group-toggle",
+                  "aria-expanded": this.othersOpen ? "true" : "false",
+                  onclick: () => {
+                    this.othersOpen = !this.othersOpen;
+                    this.drawSidebar();
+                  },
+                },
+                h("span", { class: ["twist", this.othersOpen && "open"], "aria-hidden": "true" }, icon("chevron", 10, 2.4)),
+                h("span", { class: "grow", text: "Other folders" }),
+                h("span", { class: "count", text: view.others.length }),
+              ),
+              this.othersOpen
+                ? view.others.map((copy) =>
+                    h(
+                      "div",
+                      { class: "side-other" },
+                      h(
+                        "button",
+                        {
+                          type: "button",
+                          class: "side-link side-repo",
+                          title: `${copy.name} · ${copy.owner} · not in your studio`,
+                          "aria-current": current(`repo:${copy.path}`),
+                          onclick: () => this.go({ screen: "repo", path: copy.path, tab: "changes" }),
+                        },
+                        h("span", { class: "sq", "aria-hidden": "true" }),
+                        h("span", { class: "grow clip", text: copy.name }),
+                      ),
+                      h("button", {
+                        type: "button",
+                        class: "side-publish",
+                        text: "Publish",
+                        title: `Publish ${copy.name} to Atelier`,
+                        "aria-label": `Publish ${copy.name} to Atelier`,
+                        onclick: () => this.go({ screen: "add", tab: "publish", path: copy.path }),
+                      }),
+                    ),
+                  )
+                : null,
+            )
           : null,
       ),
       h(

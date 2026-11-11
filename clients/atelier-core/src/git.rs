@@ -202,6 +202,33 @@ impl Git {
             remote_name = Some(first);
         }
         let remote = remote_url.as_deref().and_then(RemoteRef::parse);
+
+        // Every remote, so a working copy is recognised whatever its
+        // studio remote is called.
+        let mut remotes = Vec::new();
+        let names = self.try_run(repo, &["remote"]).await?.unwrap_or_default();
+        for name in names.lines().map(str::trim).filter(|n| !n.is_empty()) {
+            if let Some(url) = self.remote_url(repo, name).await? {
+                remotes.push(RemoteInfo {
+                    name: name.to_string(),
+                    remote: RemoteRef::parse(&url),
+                    url,
+                });
+            }
+        }
+        // `atelier/feature/x` follows the remote `atelier`; remote names
+        // may contain slashes themselves, so the longest match wins.
+        let upstream_remote = upstream.as_deref().and_then(|upstream| {
+            remotes
+                .iter()
+                .filter(|r| {
+                    upstream
+                        .strip_prefix(r.name.as_str())
+                        .is_some_and(|rest| rest.starts_with('/'))
+                })
+                .max_by_key(|r| r.name.len())
+                .map(|r| r.name.clone())
+        });
         Ok(LocalRepo {
             path: repo.to_path_buf(),
             branch,
@@ -212,6 +239,8 @@ impl Git {
             remote_name,
             remote_url,
             remote,
+            remotes,
+            upstream_remote,
         })
     }
 
@@ -466,12 +495,53 @@ pub struct LocalRepo {
     pub remote_name: Option<String>,
     pub remote_url: Option<String>,
     pub remote: Option<RemoteRef>,
+    /// Every remote of the working copy, in git's order.
+    pub remotes: Vec<RemoteInfo>,
+    /// The remote the current branch follows, when it follows one.
+    pub upstream_remote: Option<String>,
+}
+
+/// One remote of a working copy.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RemoteInfo {
+    pub name: String,
+    pub url: String,
+    /// `None` for a local path or an address this crate doesn't understand.
+    pub remote: Option<RemoteRef>,
 }
 
 impl LocalRepo {
-    /// The studio repository this working copy belongs to, if any.
+    /// The studio repository this working copy belongs to, if any: any of
+    /// its remotes may point at it, whatever the remote is called. Owner
+    /// and name are compared without regard to case.
     pub fn studio_repo<'a>(&self, repos: &'a [Repo]) -> Option<&'a Repo> {
-        self.remote.as_ref().and_then(|r| r.match_repo(repos))
+        self.studio_remote(repos)
+            .map(|(_, repo)| repo)
+            .or_else(|| self.remote.as_ref().and_then(|r| r.match_repo(repos)))
+    }
+
+    /// The remote that points at a studio repository, and that repository.
+    /// With several candidates the one the current branch follows wins,
+    /// then `origin`, then the first in git's order.
+    pub fn studio_remote<'a, 'b>(
+        &'b self,
+        repos: &'a [Repo],
+    ) -> Option<(&'b RemoteInfo, &'a Repo)> {
+        let rank = |info: &RemoteInfo| {
+            if self.upstream_remote.as_deref() == Some(info.name.as_str()) {
+                0
+            } else if info.name == "origin" {
+                1
+            } else {
+                2
+            }
+        };
+        let mut candidates: Vec<&RemoteInfo> = self.remotes.iter().collect();
+        candidates.sort_by_key(|info| rank(info));
+        candidates.into_iter().find_map(|info| {
+            let repo = info.remote.as_ref()?.match_repo(repos)?;
+            Some((info, repo))
+        })
     }
 
     /// The folder's own name.

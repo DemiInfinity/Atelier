@@ -1,13 +1,12 @@
-// Settings: six cards. The studio this app is connected to, remote access
-// (the one red switch), commit identities, editors, notifications and the
-// app's own preferences.
+// Settings: seven cards. The studio this app is connected to, remote access
+// (the one red switch), commit identities, editors, the folders the app
+// looks through, notifications and the app's own preferences.
 
 import "../styles/settings.css";
 import { api, asError, type Account, type AppState, type Events, type NotifyPrefs, type RemoteSession, type RemoteView } from "../api";
 import type { Ctx, Screen } from "../ctx";
 import { ago, checkbox, h, mount, plural, toggle, type Child } from "../dom";
 import type { Route } from "../routes";
-import { sentenceList } from "./welcome";
 
 // ------------------------------------------------------------------ logic
 
@@ -57,6 +56,8 @@ export function settingsScreen(ctx: Ctx, _route: Extract<Route, { screen: "setti
   let remoteAsk = 0;
 
   const remoteCard = h("section", { class: "card settings-card settings-remote", "aria-labelledby": "settings-remote-title" });
+  // Redrawn by itself when a folder is added, removed or changed.
+  const foldersCard = h("section", { class: "card settings-card", "aria-labelledby": "settings-folders-title" });
   const grid = h("div", { class: "settings-grid" });
 
   const el = h(
@@ -69,7 +70,6 @@ export function settingsScreen(ctx: Ctx, _route: Extract<Route, { screen: "setti
   const title = (text: string, id?: string) => h("h2", { class: "settings-title", id, text });
   const small = (...children: Child[]) => h("span", { class: "muted small" }, children);
   const card = (...children: Child[]) => h("section", { class: "card settings-card" }, children);
-  const mono = (text: string) => h("span", { class: "mono", text });
 
   /** A checkbox that saves as it is ticked, and goes back if saving fails. */
   function pref(label: string, checked: boolean, save: (on: boolean) => Promise<void>, disabled = false): { row: HTMLElement; input: HTMLInputElement } {
@@ -90,7 +90,8 @@ export function settingsScreen(ctx: Ctx, _route: Extract<Route, { screen: "setti
 
   function draw(): void {
     const app = ctx.app();
-    mount(grid, studioCard(app), remoteCard, identityCard(app), toolsCard(app), notifyCard(app), appCard(app));
+    drawFolders();
+    mount(grid, studioCard(app), remoteCard, identityCard(app), toolsCard(app), foldersCard, notifyCard(app), appCard(app));
   }
 
   // ----------------------------------------------------------- your studio
@@ -316,12 +317,69 @@ export function settingsScreen(ctx: Ctx, _route: Extract<Route, { screen: "setti
       title("Editors and tools"),
       picker("settings-editor", "Open repositories in", app.editors, app.editor.id, api.setEditor),
       picker("settings-git-tool", "For heavier git work, hand over to", app.git_tools, app.git_tool?.id ?? "none", api.setGitTool),
-      small(
-        "Clones go to ",
-        mono(app.clone_root),
-        ".",
-        app.watch.length > 0 ? [" Atelier also watches ", sentenceList(app.watch.map(mono)), " for folders you already have."] : null,
-      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- folders
+
+  /** After a change to the folders: read the app's state and the overview again. */
+  async function foldersChanged(): Promise<void> {
+    await ctx.reloadApp();
+    await ctx.refresh();
+    if (!disposed) drawFolders();
+  }
+
+  function drawFolders(): void {
+    const app = ctx.app();
+    const change = h("button", {
+      type: "button",
+      class: "btn sm",
+      text: "Change…",
+      onclick: () =>
+        void ctx.busy(change, async () => {
+          const folder = await api.chooseCloneRoot();
+          if (folder === null) return;
+          await foldersChanged();
+          ctx.say(`Clones now go to ${folder}.`);
+        }),
+    });
+    const add = h("button", {
+      type: "button",
+      class: "btn",
+      text: "Add a folder…",
+      onclick: () =>
+        void ctx.busy(add, async () => {
+          const folder = await api.addWatchFolder();
+          if (folder === null) return;
+          await foldersChanged();
+          ctx.say(`Looking through ${folder}.`);
+        }),
+    });
+    const watched = (folder: string) => {
+      const remove: HTMLButtonElement = h("button", {
+        type: "button",
+        class: "btn sm",
+        text: "Remove",
+        "aria-label": `Remove ${folder}`,
+        onclick: () =>
+          void ctx.busy(remove, async () => {
+            await api.removeWatchFolder(folder);
+            await foldersChanged();
+          }),
+      });
+      return h("li", { class: "settings-folder" }, h("span", { class: "settings-folder-path mono selectable grow", text: folder }), remove);
+    };
+    mount(
+      foldersCard,
+      title("Folders", "settings-folders-title"),
+      h("span", { class: "eyebrow", text: "Clones go to" }),
+      h("div", { class: "settings-folder" }, h("span", { class: "settings-folder-path mono selectable grow", text: app.clone_root }), change),
+      h("span", { class: "eyebrow", text: "Also looked through" }),
+      app.watch.length > 0
+        ? h("ul", { class: "settings-folders" }, app.watch.map(watched))
+        : h("span", { class: "muted", text: "No other folders yet." }),
+      h("div", { class: "settings-buttons" }, add),
+      small(`Removing a folder only stops Atelier looking there. Nothing on this ${app.machine} is deleted.`),
     );
   }
 

@@ -2,12 +2,16 @@
 // studio, approve this machine in the browser, look for git folders that
 // are already here, and see whether a runner is set up.
 //
-// Nothing on disk changes in steps 3 and 4: they only look.
+// Nothing on disk changes in steps 3 and 4: they only look. (Step 3 can add
+// folders to the app's own list of places to look, nothing more.)
+//
+// Someone who signed in another way (with `atl`, say) never saw this, so the
+// app can also open it straight on step 3.
 
 import "../styles/welcome.css";
-import { api, asError, type CmdError, type Connected, type ConnectStarted, type Folders, type FoundFolder, type RunnerProbe } from "../api";
+import { api, asError, type CmdError, type Connected, type ConnectStarted, type Folders, type FoundFolder, type RunnerProbe, type Suggestion } from "../api";
 import type { Ctx, Screen } from "../ctx";
-import { h, icon, mark, mount, pill, plural, type Child } from "../dom";
+import { checkbox, h, icon, mark, mount, pill, plural, type Child } from "../dom";
 
 // ------------------------------------------------------------------ words
 
@@ -58,9 +62,18 @@ export function sshLine(connected: Pick<Connected, "ssh" | "ssh_error">, machine
   return null;
 }
 
+/**
+ * Which suggested folders "Look through these" sends: the ticked ones that
+ * aren't looked through already (those are shown ticked, but there is
+ * nothing to add).
+ */
+export function pathsToSend(suggestions: readonly Pick<Suggestion, "path" | "watched">[], ticked: ReadonlySet<string>): string[] {
+  return suggestions.filter((s) => !s.watched && ticked.has(s.path)).map((s) => s.path);
+}
+
 // ----------------------------------------------------------------- screen
 
-export function welcomeScreen(ctx: Ctx, done: () => void): Screen {
+export function welcomeScreen(ctx: Ctx, done: () => void, startAt?: "folders"): Screen {
   const machine = ctx.app().machine;
   const names = stepNames(machine);
 
@@ -339,11 +352,19 @@ export function welcomeScreen(ctx: Ctx, done: () => void): Screen {
 
   // -------------------------------------------- 3. find your folders
 
-  function foldersStep(): void {
+  /** `already`: signed in before the app was first opened, so steps 1 and 2 never showed. */
+  function foldersStep(already = false): void {
     const mine = enter(2);
     const body = h("div", { class: "welcome-found" });
+    const suggest = h("div", { class: "welcome-suggest hidden" });
 
-    const load = async () => {
+    // What is ticked among the suggestions. A folder starts ticked the first
+    // time it is seen; after that the person's own choice is kept.
+    const ticked = new Set<string>();
+    const seen = new Set<string>();
+    let suggestions: Suggestion[] = [];
+
+    const loadFound = async () => {
       mount(body, h("span", { class: "welcome-wait", text: "Looking through your folders…" }));
       try {
         const found = await api.findFolders();
@@ -353,11 +374,45 @@ export function welcomeScreen(ctx: Ctx, done: () => void): Screen {
         mount(
           body,
           problem(asError(e)),
-          h("div", null, h("button", { type: "button", class: "btn", text: "Try again", onclick: () => void load() })),
+          h("div", null, h("button", { type: "button", class: "btn", text: "Try again", onclick: () => void loadFound() })),
         );
       }
     };
 
+    const loadSuggestions = async () => {
+      try {
+        const list = await api.suggestFolders();
+        if (!alive(mine)) return;
+        suggestions = list;
+        for (const s of list) {
+          if (!seen.has(s.path) && !s.watched) ticked.add(s.path);
+          seen.add(s.path);
+        }
+      } catch (e) {
+        if (!alive(mine)) return;
+        // The step works without suggestions; say why they are missing.
+        suggestions = [];
+        ctx.fail(e);
+      }
+      drawSuggestions();
+    };
+
+    const load = () => Promise.all([loadSuggestions(), loadFound()]);
+
+    const through = h("button", {
+      type: "button",
+      class: "btn lg",
+      text: "Look through these",
+      onclick: () =>
+        void ctx.busy(through, async () => {
+          const paths = pathsToSend(suggestions, ticked);
+          if (paths.length === 0) return;
+          await api.addSuggestedFolders(paths);
+          if (alive(mine)) await load();
+          // `busy` enables the button again when it is done; put it back in
+          // line with what is ticked (nothing new, usually).
+        }).then(syncThrough),
+    });
     const look = h("button", {
       type: "button",
       class: "btn lg",
@@ -371,18 +426,65 @@ export function welcomeScreen(ctx: Ctx, done: () => void): Screen {
     const go = () => {
       if (alive(mine)) runnerStep();
     };
+    const skipButton = skip(go);
+    const actions = h(
+      "div",
+      { class: "welcome-actions" },
+      h("button", { type: "button", class: "btn primary xl", text: "Continue", onclick: go }),
+      look,
+      skipButton,
+    );
+
+    const syncThrough = () => {
+      through.disabled = pathsToSend(suggestions, ticked).length === 0;
+    };
+
+    function drawSuggestions(): void {
+      suggest.classList.toggle("hidden", suggestions.length === 0);
+      if (suggestions.length === 0) {
+        // Nothing to suggest: the chooser stays with Continue, as before.
+        mount(suggest);
+        actions.insertBefore(look, skipButton);
+        return;
+      }
+      mount(
+        suggest,
+        h("span", { class: "welcome-box-title", text: "Folders to look through" }),
+        h("div", { class: "table welcome-suggest-list" }, suggestions.map(suggestionRow)),
+        // With suggestions on screen the chooser belongs next to them.
+        h("div", { class: "welcome-actions" }, through, look),
+      );
+      syncThrough();
+    }
+
+    function suggestionRow(s: Suggestion): HTMLElement {
+      const row = checkbox({
+        checked: s.watched || ticked.has(s.path),
+        disabled: s.watched,
+        label: [
+          h("span", { class: "welcome-suggest-path mono", text: s.display }),
+          h("span", { class: "welcome-suggest-count", text: plural(s.repos, "git folder", "git folders") }),
+          s.watched ? h("span", { class: "welcome-suggest-count", text: "· already looked through" }) : null,
+        ],
+        onchange: (next) => {
+          if (next) ticked.add(s.path);
+          else ticked.delete(s.path);
+          syncThrough();
+        },
+      });
+      row.classList.add("welcome-suggest-row");
+      return row;
+    }
 
     show(
       "Find your folders",
+      already ? lead(`You're already connected. Let's find the repositories that are on this ${machine}.`) : null,
+      suggest,
       body,
-      quiet(`This step only looks. Nothing on this ${machine} is changed.`),
-      h(
-        "div",
-        { class: "welcome-actions" },
-        h("button", { type: "button", class: "btn primary xl", text: "Continue", onclick: go }),
-        look,
-        skip(go),
+      quiet(
+        `This step only looks. Nothing inside your folders is changed; adding a folder only adds it to Atelier's own list of places to look.`,
       ),
+      actions,
     );
     void load();
   }
@@ -501,7 +603,8 @@ export function welcomeScreen(ctx: Ctx, done: () => void): Screen {
     ];
   }
 
-  connectStep();
+  if (startAt === "folders") foldersStep(true);
+  else connectStep();
 
   return {
     el,

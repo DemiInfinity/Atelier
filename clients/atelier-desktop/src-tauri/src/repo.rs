@@ -454,10 +454,20 @@ impl Desk {
         let branch = local.branch.clone().ok_or_else(|| {
             CmdError::invalid("You’re not on a branch, so there is nothing to push.")
         })?;
-        let remote = local.remote_name.clone().ok_or_else(|| {
-            CmdError::new("no_remote", "This folder isn’t in your studio yet.")
-                .hint("Publish it from “Add a repository”.")
-        })?;
+        // Without an upstream the push goes to the studio's remote, whatever
+        // it is called; a folder with no studio remote uses its only one.
+        let repos = match self.repos(Duration::from_secs(300)).await {
+            Ok(repos) => repos,
+            Err(_) => self.repos_cached().unwrap_or_default(),
+        };
+        let remote = local
+            .studio_remote(&repos)
+            .map(|(remote, _)| remote.name.clone())
+            .or_else(|| local.remote_name.clone())
+            .ok_or_else(|| {
+                CmdError::new("no_remote", "This folder isn’t in your studio yet.")
+                    .hint("Publish it from “Add a repository”.")
+            })?;
         let commits = match local.upstream {
             Some(_) => local.ahead.unwrap_or(0),
             None => git.count_commits(&repo, &["HEAD"]).await?,
@@ -566,6 +576,9 @@ impl Desk {
         let history = git.history(&repo, HISTORY_LIMIT).await?;
         let local = git.inspect(&repo).await?;
         let studio = self.studio_repo_of(&local).await;
+        let studio_remote_name = self
+            .repos_cached()
+            .and_then(|repos| local.studio_remote(&repos).map(|(r, _)| r.name.clone()));
 
         // Which remote is the studio, which is GitHub.
         let studio_hosts: Vec<String> = {
@@ -598,9 +611,7 @@ impl Desk {
                     Some("github.com") => "github",
                     Some(host) if studio_hosts.iter().any(|h| h == host) => "studio",
                     // A remote that is this repository in the studio by path.
-                    _ if studio.is_some() && local.remote_name.as_deref() == Some(remote) => {
-                        "studio"
-                    }
+                    _ if studio_remote_name.as_deref() == Some(remote) => "studio",
                     _ => "other",
                 };
                 remote_kinds.insert(remote.to_string(), kind);

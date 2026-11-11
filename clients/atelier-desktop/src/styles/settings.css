@@ -64,3 +64,17 @@
 /* A link in the middle of a sentence. */
 .btn.settings-inline { display: inline; height: auto; padding: 0; font-size: 12px; border: none; }
 .settings-version { color: var(--ink4); font-size: 12px; }
+
+/* Folders: where clones go, and where else the app looks. */
+.settings-folders { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.settings-folder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 5px 8px 5px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bar);
+}
+.settings-folder-path { font-size: 13px; overflow-wrap: anywhere; }

@@ -47,6 +47,9 @@ pub struct Prefs {
     /// Folders the person picked with the folder chooser; repositories in
     /// them may be opened like the ones in the clone root.
     pub picked: Vec<String>,
+    /// "Find your folders" was shown once (in first run, or later for
+    /// someone who signed in with `atl`).
+    pub folders_done: bool,
 }
 
 impl Default for Prefs {
@@ -57,6 +60,7 @@ impl Default for Prefs {
             menu_bar: true,
             hide_dock: false,
             picked: Vec::new(),
+            folders_done: false,
         }
     }
 }

@@ -340,6 +340,17 @@ button { font: inherit; color: inherit; }
 .side-repo .state { font: 500 11px var(--font-mono); color: var(--ink3); }
 .side-repo .state.tone-yours { color: var(--amber); }
 .side-repo .state.tone-github { color: var(--blue2); }
+.side-empty { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 8px; color: var(--ink3); font-size: 12px; }
+.side-empty > span { flex: 1 1 100%; }
+.group-toggle { display: flex; align-items: center; gap: 6px; border: none; background: transparent; font: inherit; font-size: 12px; text-align: left; cursor: pointer; border-radius: 6px; }
+.group-toggle:hover { color: var(--ink2); }
+.group-toggle .twist { display: flex; transform: rotate(-90deg); }
+.group-toggle .twist.open { transform: none; }
+.group-toggle .count { color: var(--ink3); }
+.side-other { display: flex; align-items: center; gap: 4px; }
+.side-other .side-repo { flex: 1; min-width: 0; }
+.side-publish { flex: none; height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--line2); background: transparent; color: var(--amber); font: 500 11px var(--font-text); cursor: pointer; }
+.side-publish:hover { border-color: var(--amber); }
 .sidebar .foot { padding: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 .side-device { height: auto; padding: 8px; color: var(--ink); align-items: center; }
 .side-device .dot { background: var(--violet); }

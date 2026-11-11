@@ -86,3 +86,18 @@ button.today-feed:hover { border-color: var(--tone); }
 .today-feed-top { gap: 8px; }
 .today-feed-tag { color: var(--tone); font-size: 12px; font-weight: 500; }
 .today-feed-text { overflow-wrap: anywhere; }
+
+/* No working copies yet: say why, and what to do about it. */
+.today-none {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px dashed var(--line2);
+}
+.today-none-title { font-weight: 600; font-size: 15px; }
+.today-none .muted { max-width: 46em; overflow-wrap: anywhere; }
+.today-none-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.today-none-actions .btn.primary { padding: 0 14px; }
+.today-others { font-size: 13px; }

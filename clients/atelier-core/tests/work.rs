@@ -762,3 +762,146 @@ async fn init_and_last_fetch() {
     s.git.fetch(&repo, None).await.unwrap();
     assert!(s.git.last_fetch(&repo).await.unwrap().is_some());
 }
+
+// ------------------------------------------------------- remote matching
+
+fn studio(full_name: &str) -> atelier_core::api::Repo {
+    let (owner, name) = full_name.split_once('/').unwrap();
+    atelier_core::api::Repo {
+        full_name: full_name.into(),
+        owner: owner.into(),
+        name: name.into(),
+        clone_https: format!("https://studio.example/{full_name}.git"),
+        clone_ssh: format!("ssh://git@studio.example:2223/{full_name}.git"),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn a_working_copy_matches_through_a_remote_that_is_not_origin() {
+    let s = Sandbox::new();
+    let repo = s.repo("checkout").await;
+    s.commit(&repo, "a.txt", "a\n").await;
+    let repos = [studio("DemiInfinity/Atelier"), studio("DemiInfinity/Other")];
+
+    // No remotes at all.
+    let local = s.git.inspect(&repo).await.unwrap();
+    assert!(local.remotes.is_empty());
+    assert_eq!(local.studio_repo(&repos), None);
+
+    // Only a remote called `atelier`, written in another case and form.
+    s.g(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "atelier",
+            "git@Studio.Example:deminfinity/atelier.git",
+        ],
+    )
+    .await;
+    let local = s.git.inspect(&repo).await.unwrap();
+    assert_eq!(local.remotes.len(), 1);
+    assert_eq!(
+        local.studio_repo(&repos),
+        None,
+        "a different owner is a different repository"
+    );
+    s.g(
+        &repo,
+        &[
+            "remote",
+            "set-url",
+            "atelier",
+            "git@Studio.Example:demiINFINITY/atelier.git",
+        ],
+    )
+    .await;
+    let local = s.git.inspect(&repo).await.unwrap();
+    let (remote, matched) = local.studio_remote(&repos).unwrap();
+    assert_eq!(remote.name, "atelier");
+    assert_eq!(matched.full_name, "DemiInfinity/Atelier");
+
+    // `origin` on GitHub next to it: the studio remote still matches.
+    s.g(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/someone/atelier.git",
+        ],
+    )
+    .await;
+    let local = s.git.inspect(&repo).await.unwrap();
+    assert_eq!(local.remote_name.as_deref(), Some("origin"));
+    assert_eq!(local.remotes.len(), 2);
+    assert_eq!(
+        local.studio_repo(&repos).map(|r| r.full_name.as_str()),
+        Some("DemiInfinity/Atelier")
+    );
+}
+
+#[tokio::test]
+async fn with_several_studio_remotes_the_one_the_branch_follows_wins() {
+    let s = Sandbox::new();
+    let (repo, bare) = s.repo_with_upstream("r").await;
+    // `origin` is a local bare repository (matches nothing). Two more
+    // remotes point at two studio repositories.
+    s.g(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "first",
+            "https://studio.example/DemiInfinity/Other.git",
+        ],
+    )
+    .await;
+    s.g(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "team/fork",
+            "https://studio.example/DemiInfinity/Atelier.git",
+        ],
+    )
+    .await;
+    let repos = [studio("DemiInfinity/Atelier"), studio("DemiInfinity/Other")];
+    let local = s.git.inspect(&repo).await.unwrap();
+    assert_eq!(local.upstream_remote.as_deref(), Some("origin"));
+    assert_eq!(
+        local.studio_remote(&repos).map(|(r, _)| r.name.as_str()),
+        Some("first"),
+        "no upstream among them: git's order"
+    );
+
+    // Make the branch follow `team/fork` (a remote name with a slash).
+    s.g(
+        &repo,
+        &["config", "remote.team/fork.url", bare.to_str().unwrap()],
+    )
+    .await;
+    s.g(&repo, &["fetch", "--quiet", "team/fork"]).await;
+    s.g(
+        &repo,
+        &["branch", "--quiet", "--set-upstream-to=team/fork/main"],
+    )
+    .await;
+    s.g(
+        &repo,
+        &[
+            "config",
+            "remote.team/fork.url",
+            "https://studio.example/DemiInfinity/Atelier.git",
+        ],
+    )
+    .await;
+    let local = s.git.inspect(&repo).await.unwrap();
+    assert_eq!(local.upstream.as_deref(), Some("team/fork/main"));
+    assert_eq!(local.upstream_remote.as_deref(), Some("team/fork"));
+    let (remote, matched) = local.studio_remote(&repos).unwrap();
+    assert_eq!(remote.name, "team/fork");
+    assert_eq!(matched.full_name, "DemiInfinity/Atelier");
+}

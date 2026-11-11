@@ -7,6 +7,29 @@ import { ago, dayLine, h, mount, pill, plural } from "../dom";
 import type { Route } from "../routes";
 import "../styles/today.css";
 
+// ------------------------------------------------------------------ words
+
+/** `in ~/Atelier and ~/Projects` → `~/Atelier and ~/Projects`. */
+export function rootsWords(label: string): string {
+  return label.trim().replace(/^in\s+/i, "");
+}
+
+/** The sentence under the heading when no working copies are shown. */
+export function lookingLine(rootsLabel: string): string {
+  const roots = rootsWords(rootsLabel);
+  const looks = roots ? `Atelier looks in ${roots} for git folders.` : "Atelier isn't looking in any folder yet.";
+  return `${looks} Add the folder where you keep your projects, or clone one from your studio.`;
+}
+
+/** The quiet line about git folders that aren't in the studio. */
+export function othersLine(n: number): string {
+  return n === 1
+    ? "1 other git folder here isn't in your studio. It is under Other folders in the sidebar."
+    : `${n} other git folders here aren't in your studio. They are under Other folders in the sidebar.`;
+}
+
+// ----------------------------------------------------------------- screen
+
 export function todayScreen(ctx: Ctx, _route: Extract<Route, { screen: "today" }>): Screen {
   const machine = ctx.app().machine;
   const line = h("span", { class: "muted" });
@@ -97,6 +120,42 @@ export function todayScreen(ctx: Ctx, _route: Extract<Route, { screen: "today" }
     );
   }
 
+  /** Stands where the table would be when there are no working copies. */
+  function noCopies(view: Overview): HTMLElement {
+    const some = view.others.length > 0;
+    const add: HTMLButtonElement = h("button", {
+      type: "button",
+      class: "btn primary",
+      text: "Add a folder…",
+      onclick: () =>
+        void ctx.busy(add, async () => {
+          const folder = await api.addWatchFolder();
+          if (folder === null) return;
+          await ctx.reloadApp();
+          await ctx.refresh();
+          ctx.say(`Looking through ${folder}.`);
+        }),
+    });
+    return h(
+      "div",
+      { class: "today-none" },
+      h("span", {
+        class: "today-none-title",
+        text: some ? "None of the folders here are in your studio yet" : `No repositories found on this ${machine} yet`,
+      }),
+      h("span", { class: "muted", text: lookingLine(view.roots_label) }),
+      h(
+        "div",
+        { class: "today-none-actions" },
+        add,
+        h("button", { type: "button", class: "btn", text: "Clone…", onclick: () => ctx.go({ screen: "add", tab: "clone" }) }),
+        some
+          ? h("button", { type: "button", class: "btn", text: "Publish one…", onclick: () => ctx.go({ screen: "add", tab: "publish" }) })
+          : null,
+      ),
+    );
+  }
+
   function runningCard(job: RunningRow): HTMLElement {
     return h(
       "button",
@@ -159,9 +218,8 @@ export function todayScreen(ctx: Ctx, _route: Extract<Route, { screen: "today" }
           section(
             "Working copies",
             view.roots_label,
-            view.copies.length
-              ? h("div", { class: "table" }, view.copies.map(copyRow))
-              : quiet("No working copies on this " + machine + " yet. Clone a repository, or publish a folder you already have."),
+            view.copies.length ? h("div", { class: "table" }, view.copies.map(copyRow)) : noCopies(view),
+            view.others.length ? h("span", { class: "muted today-others", text: othersLine(view.others.length) }) : null,
           ),
         ),
         h(

@@ -1,9 +1,10 @@
-// Add a repository: a card with three ways in. Publish a folder that is
+// Add a repository: a card with four ways in. Publish a folder that is
 // already on this machine, clone one from the studio (or from GitHub, by
-// mirroring it into the studio first), or start a new one from nothing.
+// mirroring it into the studio first), start a new one from nothing, or
+// open a folder that is already a working copy.
 
 import "../styles/add.css";
-import { api, asError, type Account, type Added, type FolderPlan, type Hit, type SearchView } from "../api";
+import { api, asError, type Account, type Added, type FolderPlan, type Hit, type OpenedFolder, type SearchView } from "../api";
 import type { Ctx, Screen } from "../ctx";
 import { checkbox, h, mount, type Child } from "../dom";
 import type { AddTab, Route } from "../routes";
@@ -48,6 +49,46 @@ export function nameOk(name: string): boolean {
   return trimmed.length > 0 && !/[\s/\\]/.test(trimmed);
 }
 
+/** The ways in, in the order of the tabs. */
+export const TABS: readonly { id: AddTab; label: string }[] = [
+  { id: "publish", label: "Publish a folder" },
+  { id: "clone", label: "Clone" },
+  { id: "new", label: "Start new" },
+  { id: "open", label: "Open a folder" },
+];
+
+export interface OpenedWords {
+  /** Why the picked folder wasn't simply opened. */
+  line: string;
+  /** The remote to show after the line, if there is one. */
+  remote: string | null;
+  /** The remote is on GitHub (the blue thread). */
+  github: boolean;
+  /** It is a git folder, so it can be opened as it is. */
+  canOpen: boolean;
+}
+
+/** What to say about a picked folder that isn't in the studio. Null when it was opened. */
+export function openedWords(opened: Pick<OpenedFolder, "kind" | "remote">): OpenedWords | null {
+  switch (opened.kind) {
+    case "opened":
+      return null;
+    case "elsewhere": {
+      const remote = opened.remote ?? null;
+      return {
+        line: remote ? "This folder's remote isn't your studio:" : "This folder's remote isn't your studio.",
+        remote,
+        github: remote !== null && remote.includes("github.com"),
+        canOpen: true,
+      };
+    }
+    case "unpublished":
+      return { line: "This git folder has no remote yet.", remote: null, github: false, canOpen: true };
+    case "not_repo":
+      return { line: "This isn't a git folder yet.", remote: null, github: false, canOpen: false };
+  }
+}
+
 // ----------------------------------------------------------------- screen
 
 interface TabView {
@@ -55,12 +96,6 @@ interface TabView {
   foot: HTMLElement;
   primary: HTMLButtonElement;
 }
-
-const TABS: { id: AddTab; label: string }[] = [
-  { id: "publish", label: "Publish a folder" },
-  { id: "clone", label: "Clone" },
-  { id: "new", label: "Start new" },
-];
 
 export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): Screen {
   const app = ctx.app();
@@ -72,6 +107,9 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
   // Each tab is built the first time it is opened and kept, so what was
   // typed survives a look at another tab.
   const built = new Map<AddTab, TabView>();
+  // Set by the Publish tab once it is built: shows a folder there as if it
+  // had been chosen with "Choose…".
+  let loadPlan: ((plan: FolderPlan) => void) | null = null;
 
   const tablist = h("div", { class: "add-tabs", role: "tablist", "aria-label": "How to add it" });
   const body = h("div", { class: "add-body", role: "tabpanel", id: "add-panel" });
@@ -114,7 +152,7 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
     );
     let view = built.get(current);
     if (!view) {
-      view = current === "publish" ? publishTab() : current === "clone" ? cloneTab() : newTab();
+      view = current === "publish" ? publishTab() : current === "clone" ? cloneTab() : current === "new" ? newTab() : openTab();
       built.set(current, view);
     }
     mount(body, view.panel);
@@ -124,6 +162,13 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
       h("button", { type: "button", class: "btn lg", text: "Cancel", onclick: () => ctx.go({ screen: "today" }) }),
       view.primary,
     );
+  }
+
+  /** Goes to the Publish tab with `plan` as the chosen folder. */
+  function publishThis(plan: FolderPlan): void {
+    current = "publish";
+    draw();
+    loadPlan?.(plan);
   }
 
   function accountSelect(id: string): HTMLSelectElement {
@@ -174,11 +219,16 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
         void ctx.busy(choose, async () => {
           const picked = await api.chooseFolder();
           if (!picked || disposed) return;
-          plan = picked;
-          name.value = picked.name;
-          sync();
+          take(picked);
         }),
     });
+
+    function take(picked: FolderPlan): void {
+      plan = picked;
+      name.value = picked.name;
+      sync();
+    }
+    loadPlan = take;
 
     /** Brings the folder box, the note and the button in line with the plan. */
     function sync(): void {
@@ -421,7 +471,94 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
     return { panel, foot: h("span", { class: "add-foot-note", text: "Private by default." }), primary };
   }
 
+  // --------------------------------------------------------- open a folder
+
+  function openTab(): TabView {
+    const result = h("div", { class: "add-opened hidden", "aria-live": "polite" });
+
+    const toRepo = (path: string) => ctx.go({ screen: "repo", path, tab: "changes" });
+
+    function showResult(opened: OpenedFolder, words: OpenedWords): void {
+      const plan = opened.plan;
+      const publish = plan
+        ? h("button", { type: "button", class: "btn hot", text: "Publish to Atelier…", onclick: () => publishThis(plan) })
+        : null;
+      const anyway: HTMLButtonElement | null = words.canOpen
+        ? h("button", {
+            type: "button",
+            class: "btn",
+            text: "Open it anyway",
+            onclick: () =>
+              void ctx.busy(anyway, async () => {
+                // Picking it already put it among the folders here.
+                await ctx.refresh();
+                toRepo(opened.path);
+              }),
+          })
+        : null;
+      mount(
+        result,
+        h("span", { class: "add-path mono selectable", text: plan?.display ?? opened.path }),
+        h(
+          "span",
+          { class: "add-opened-line" },
+          words.line,
+          words.remote ? [" ", h("span", { class: ["mono selectable", words.github && "add-via"], text: words.remote })] : null,
+        ),
+        plan ? h("span", { class: "muted", text: plan.summary }) : null,
+        h("div", { class: "add-opened-actions" }, publish, anyway),
+      );
+      result.classList.remove("hidden");
+    }
+
+    const pick = h("button", {
+      type: "button",
+      class: "btn",
+      text: `Open a folder on this ${machine}…`,
+      onclick: () =>
+        void ctx.busy(pick, async () => {
+          const opened = await api.openFolder();
+          if (!opened || disposed) return;
+          const words = openedWords(opened);
+          if (words) {
+            showResult(opened, words);
+            return;
+          }
+          await ctx.reloadApp();
+          await ctx.refresh();
+          ctx.say(opened.full_name ? `Added ${opened.full_name}.` : "Added.");
+          toRepo(opened.path);
+        }),
+    });
+
+    const panel = h(
+      "div",
+      { class: "add-panel" },
+      intro(`Already have it on this ${machine}? Pick the folder and Atelier adds it to your working copies.`),
+      h("div", null, pick),
+      result,
+    );
+    return {
+      panel,
+      foot: h("span", { class: "add-foot-note", text: "Your folder stays where it is." }),
+      primary: h("button", { type: "button", class: "btn lg primary", text: "Done", onclick: () => ctx.go({ screen: "today" }) }),
+    };
+  }
+
   draw();
+
+  // A folder the app already knows (from the sidebar, say): show it in the
+  // Publish tab without asking for it again.
+  if (route.path !== undefined && current === "publish") {
+    api.folderPlan(route.path).then(
+      (plan) => {
+        if (!disposed) loadPlan?.(plan);
+      },
+      (e) => {
+        if (!disposed) ctx.fail(e);
+      },
+    );
+  }
 
   return {
     el,

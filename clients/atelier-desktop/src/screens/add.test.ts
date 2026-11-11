@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FolderPlan } from "../api";
-import { accountLabel, nameOk, publishStep } from "./add";
+import { accountLabel, nameOk, openedWords, publishStep, TABS } from "./add";
 
 const plan = (over: Partial<FolderPlan> = {}): FolderPlan => ({
   path: "/home/me/thing",
@@ -59,5 +59,41 @@ describe("nameOk", () => {
     expect(nameOk("   ")).toBe(false);
     expect(nameOk("two words")).toBe(false);
     expect(nameOk("owner/name")).toBe(false);
+  });
+});
+
+describe("TABS", () => {
+  it("lists the four ways in, opening a folder last", () => {
+    expect(TABS.map((tab) => tab.id)).toEqual(["publish", "clone", "new", "open"]);
+    expect(TABS[3]?.label).toBe("Open a folder");
+  });
+});
+
+describe("openedWords", () => {
+  it("has nothing to say about a folder that was opened", () => {
+    expect(openedWords({ kind: "opened", remote: null })).toBeNull();
+  });
+
+  it("names the remote of a folder that lives elsewhere, and spots GitHub", () => {
+    expect(openedWords({ kind: "elsewhere", remote: "origin → github.com/someone/thing" })).toEqual({
+      line: "This folder's remote isn't your studio:",
+      remote: "origin → github.com/someone/thing",
+      github: true,
+      canOpen: true,
+    });
+    const other = openedWords({ kind: "elsewhere", remote: "origin → git.example.org/x/y" });
+    expect(other?.github).toBe(false);
+    expect(openedWords({ kind: "elsewhere", remote: null })?.line).toBe("This folder's remote isn't your studio.");
+  });
+
+  it("offers to open a git folder with no remote, but not a plain folder", () => {
+    expect(openedWords({ kind: "unpublished", remote: null })).toMatchObject({
+      line: "This git folder has no remote yet.",
+      canOpen: true,
+    });
+    expect(openedWords({ kind: "not_repo", remote: null })).toMatchObject({
+      line: "This isn't a git folder yet.",
+      canOpen: false,
+    });
   });
 });

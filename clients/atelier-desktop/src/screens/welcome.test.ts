@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sentenceList, sshLine, stepMark, stepNames, timeLeft } from "./welcome";
+import { pathsToSend, sentenceList, sshLine, stepMark, stepNames, timeLeft } from "./welcome";
 
 describe("welcome steps", () => {
   it("names the machine in the steps", () => {
@@ -51,5 +51,26 @@ describe("sshLine", () => {
       failed: true,
     });
     expect(sshLine({ ssh: null, ssh_error: null }, "Mac")).toBeNull();
+  });
+});
+
+describe("pathsToSend", () => {
+  const suggestions = [
+    { path: "/home/me/Projects", watched: false },
+    { path: "/home/me/Code", watched: false },
+    { path: "/home/me/Atelier", watched: true },
+  ];
+
+  it("sends the ticked folders that aren't looked through yet, in order", () => {
+    expect(pathsToSend(suggestions, new Set(["/home/me/Code", "/home/me/Projects"]))).toEqual([
+      "/home/me/Projects",
+      "/home/me/Code",
+    ]);
+    expect(pathsToSend(suggestions, new Set(["/home/me/Code"]))).toEqual(["/home/me/Code"]);
+  });
+
+  it("never sends a folder that is already looked through, or one that isn't listed", () => {
+    expect(pathsToSend(suggestions, new Set(["/home/me/Atelier", "/somewhere/else"]))).toEqual([]);
+    expect(pathsToSend(suggestions, new Set())).toEqual([]);
   });
 });

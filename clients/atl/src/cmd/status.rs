@@ -334,6 +334,8 @@ mod tests {
             remote_name: None,
             remote_url: None,
             remote: None,
+            remotes: Vec::new(),
+            upstream_remote: None,
         }
     }
 
