@@ -1,0 +1,45 @@
+name: image
+
+# Builds Atelier's Docker image on the server runner and pushes it to
+# Atelier's own container registry, so Portainer can pull it from
+# atelier.infinityhomelab.lan/demiinfinity/atelier.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: build and push image
+    runs-on: [linux, docker]
+    timeout-minutes: 30
+    env:
+      REGISTRY: atelier.infinityhomelab.lan
+      IMAGE: atelier.infinityhomelab.lan/demiinfinity/atelier
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Atelier's registry
+        env:
+          TOKEN: ${{ secrets.ATELIER_TOKEN }}
+        run: echo "$TOKEN" | docker login "$REGISTRY" -u atelier --password-stdin
+
+      - name: Build
+        run: |
+          short=$(echo "$GITHUB_SHA" | cut -c1-7)
+          docker build --build-arg VERSION="$short" -t "$IMAGE:$short" -t "$IMAGE:latest" .
+          echo "short=$short" >> "$GITHUB_ENV"
+
+      - name: Push
+        run: |
+          docker push "$IMAGE:$short"
+          docker push "$IMAGE:latest"
+
+      - name: Log out
+        if: always()
+        run: docker logout "$REGISTRY" || true
