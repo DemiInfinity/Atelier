@@ -24,6 +24,12 @@ var (
 	ErrNothingToMerge = errors.New("there is nothing to merge")
 )
 
+// MergeConflictError is ErrMergeConflict with the files that conflict.
+type MergeConflictError struct{ Files []string }
+
+func (e *MergeConflictError) Error() string { return ErrMergeConflict.Error() }
+func (e *MergeConflictError) Unwrap() error { return ErrMergeConflict }
+
 // MergeCheck is the result of a trial merge.
 type MergeCheck struct {
 	Clean     bool
@@ -84,6 +90,9 @@ type MergeRequest struct {
 	Message      string
 	Author       Signature // squash author (defaults to Committer)
 	Committer    Signature
+	// FastForward moves Base straight to Head, without a new commit, when Base
+	// is an ancestor of Head (used when updating a pull request's branch).
+	FastForward bool
 }
 
 // MergeResult is what a merge did.
@@ -117,12 +126,22 @@ func (r *Repo) MergeBranches(ctx context.Context, req MergeRequest) (*MergeResul
 	} else if done {
 		return nil, ErrNothingToMerge
 	}
+	if req.FastForward {
+		if ff, err := r.IsAncestor(ctx, baseOld, head); err != nil {
+			return nil, err
+		} else if ff {
+			if err := r.casRef(ctx, "refs/heads/"+req.Base, head, baseOld, "atelier: fast-forward to "+req.Head, req.Committer); err != nil {
+				return nil, err
+			}
+			return &MergeResult{SHA: head, BaseBefore: baseOld, Head: head}, nil
+		}
+	}
 	mc, err := r.CheckMerge(ctx, baseOld, head)
 	if err != nil {
 		return nil, err
 	}
 	if !mc.Clean {
-		return nil, ErrMergeConflict
+		return nil, &MergeConflictError{Files: mc.Conflicts}
 	}
 
 	author := req.Author

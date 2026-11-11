@@ -26,6 +26,7 @@
     </p>
   </header>
   {{template "flash" .}}
+  {{if $d.Notice}}<div class="flash flash-ok" role="status">{{$d.Notice}}</div>{{end}}
 
   {{if $p.IsOpen}}
   <section class="pr-mergebar" aria-labelledby="pr-mergebar-title" id="merge">
@@ -62,8 +63,14 @@
       <button class="btn btn-sm" type="submit" name="action" value="cancel">Cancel</button>
     </form>
     {{end}}
+    {{with $d.Update}}{{if .Behind}}
+    <form method="post" action="{{$d.URL}}/update" class="row-between wrap-gap pr-update">
+      <p class="small">{{template "pulls-branch" $p.Head}} is {{.Behind}} {{if eq .Behind 1}}commit{{else}}commits{{end}} behind {{template "pulls-branch" $p.Base}}.{{if .Reason}} <span class="muted" id="pr-update-reason">{{.Reason}}</span>{{end}}</p>
+      <button class="btn btn-sm" type="submit" title="Merge {{$p.Base}} into {{$p.Head}}" {{if not .Can}}disabled aria-describedby="pr-update-reason"{{end}}>Update branch</button>
+    </form>
+    {{end}}{{end}}
     {{if $s.Conflicts}}
-    <details class="pr-conflicts small">
+    <details class="pr-conflicts small"{{if $d.Update.Behind}} open{{end}}>
       <summary>Conflicting files</summary>
       <ul>{{range $s.Conflicts}}<li class="mono">{{.}}</li>{{end}}</ul>
       <pre class="snippet"><code>git fetch origin

@@ -153,6 +153,7 @@ read it). No paging: at most 100 pull requests per answer.
  "via":null,
  "merge":{"can_merge":false,"reason":"1 check is still running and 1 agent is waiting for you.","methods":["squash","merge"],
           "on_github":false,"auto_merge":null},
+ "ahead":2,"behind":3,"conflicts":false,"conflict_files":[],"can_update":true,
  "checks":[{"name":"ci · test","status":"success","detail":"MacBook · 1m 48s","run_id":207,"job_id":410},
            {"name":"image · build","status":"pending","detail":"Portainer host · step 3 of 5","run_id":209,"job_id":413},
            {"name":"review-helper","status":"waiting","detail":"agent · needs your approval to run","run_id":210,"job_id":414,"action":"approve_agent"}],
@@ -176,6 +177,28 @@ the person's approval is in `waiting` instead, so
   is pushed by someone else, a check fails, or the pull request closes.
   `DELETE …/pulls/{n}/merge` cancels it.
 - The same branch rules and "Merge on GitHub" behaviour as the web button.
+
+`ahead` / `behind` count the commits the head branch has that the base doesn't,
+and the other way round. `conflicts` is true when the head can't be merged into
+the base cleanly (the same trial merge as the web page; cached per pair of
+commits, so lists stay cheap); the detail also lists `conflict_files`.
+`can_update` is true when `POST …/update` would merge something right now.
+All four are `0` / `false` / `[]` unless the pull request is open. Summaries
+carry `ahead`, `behind`, `conflicts` and `can_update`, not `conflict_files`.
+
+`POST …/pulls/{n}/update` (no body) — "Update branch": merges the base branch
+into the head branch with a merge commit `Merge branch '<base>' into <head>`
+by the caller (a fast-forward when the head has no commits of its own). It
+counts as a push to the head branch: `repo.pushed` fires and checks run again.
+- updated → `200 {"updated":true,"head_sha":"…"}`
+- already up to date → `200 {"updated":false,"head_sha":"…"}`
+- conflicts (nothing is written) → `409 {"error":"conflicts","message":"…","files":["a.go"]}`
+- closed or merged → `422 not_open`; a branch rule on the head branch forbids it
+  (pull request required, or linear history) → `403 branch_protected`;
+  no write access → `403 forbidden`; unknown → `404 not_found`
+- also `422 on_github` (the repository's home is GitHub: update it there),
+  `422 branch_missing`, `422 unrelated`, `409 branch_moved` (a push landed
+  meanwhile; try again)
 
 ## 5a. Issues
 
@@ -338,7 +361,7 @@ from `SSL_CERT_FILE`), because home studios often use a private CA.
 
 **Repos:** `language`, `language_color` and `clone_ssh` can be `null`. `owner` defaults to the caller, `private` to true; 422 `invalid_name`. With `github=1`, hits carry `web_path`; without Tether `github_hits` is `[]` plus a `github_error` string. Mirror: 409 `tether_off`, 422 `mirror_failed`.
 
-**Pulls:** extra `updated_at`, `merge.green` (the when-green condition), `checks[].required`. `checks[].run_id`/`job_id` are `null` for bot checks; `action` is present only on waiting agent jobs. `comments[].kind` ∈ `person | bot | agent`. `methods` may include `rebase`. Merge takes optional `delete_branch`; errors 409 `not_open`/`not_mergeable`, 422 `invalid_method`, 502 `github_failed`. `when_green` always answers 202 and waits for all checks. `DELETE …/merge` → 200 `{"cancelled":true}` or 404 `no_auto_merge`.
+**Pulls:** `ahead`, `behind`, `conflicts`, `can_update` (and `conflict_files` on the detail) as described in section 5. Extra `updated_at`, `merge.green` (the when-green condition), `checks[].required`. `checks[].run_id`/`job_id` are `null` for bot checks; `action` is present only on waiting agent jobs. `comments[].kind` ∈ `person | bot | agent`. `methods` may include `rebase`. Merge takes optional `delete_branch`; errors 409 `not_open`/`not_mergeable`, 422 `invalid_method`, 502 `github_failed`. `when_green` always answers 202 and waits for all checks. `DELETE …/merge` → 200 `{"cancelled":true}` or 404 `no_auto_merge`.
 
 **Runs and agents:** runs carry `number` and `web_path`; run `status` ∈ `success | failure | cancelled | queued | running | waiting | pending`; job status may be `skipped`; `started_at` and `runner` can be `null`. Log `tail` max 2000. `agents/waiting` items carry `detail` and `web_path`; `reason` ∈ `first run | tools changed | outside author | environment | needs approval`. Approve: 409 `not_waiting`. Cancel: 409 `finished`.
 

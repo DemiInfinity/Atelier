@@ -160,8 +160,8 @@ func TestMCPToolsListAndRead(t *testing.T) {
 			t.Errorf("tools/list is missing %s", tl.Name)
 		}
 	}
-	if len(names) != 32 {
-		t.Errorf("got %d tools, want 32", len(names))
+	if len(names) != 33 {
+		t.Errorf("got %d tools, want 33", len(names))
 	}
 
 	// Input schemas are strict.
@@ -291,6 +291,9 @@ func TestMCPIssuesAndPulls(t *testing.T) {
 	}
 	mustErr(t, s, "pulls.note", map[string]any{"repo": "zoe/demo", "number": f.pull.Number, "path": "app/main.go",
 		"line": 400, "body": "x"}, "isn't part of the diff")
+	if up := call(t, s, "pulls.update_branch", map[string]any{"repo": "zoe/demo", "number": f.pull.Number}); up["updated"] != false || up["head_sha"] != f.head {
+		t.Errorf("pulls.update_branch = %v", up)
+	}
 	mustErr(t, s, "pulls.note", map[string]any{"repo": "zoe/demo", "number": f.pull.Number, "path": "README.md",
 		"line": 1, "body": "x"}, "isn't changed")
 	notes, _ := f.a.db.PullNotes(ctx, f.pull.ID)

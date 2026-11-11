@@ -34,6 +34,7 @@ func init() {
 			m.HandleFunc("GET /{owner}/{repo}/pulls/{number}", a.authed(a.pullOverview))
 			m.HandleFunc("GET /{owner}/{repo}/pulls/{number}/files", a.authed(a.pullFiles))
 			m.HandleFunc("POST /{owner}/{repo}/pulls/{number}/merge", a.authed(a.pullMerge))
+			m.HandleFunc("POST /{owner}/{repo}/pulls/{number}/update", a.authed(a.pullUpdateBranch))
 			m.HandleFunc("POST /{owner}/{repo}/pulls/{number}/state", a.authed(a.pullState))
 			m.HandleFunc("POST /{owner}/{repo}/pulls/{number}/edit", a.authed(a.pullEdit))
 			m.HandleFunc("POST /{owner}/{repo}/pulls/{number}/comments", a.authed(a.pullComment))
@@ -78,7 +79,7 @@ const (
 // ---------- list ----------
 
 func (a *App) pullsList(w http.ResponseWriter, r *http.Request) {
-	v, _, ok := a.loadRepo(w, r, "pulls")
+	v, g, ok := a.loadRepo(w, r, "pulls")
 	if !ok {
 		return
 	}
@@ -97,8 +98,17 @@ func (a *App) pullsList(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	// Open pull requests that can't be merged cleanly get a "Conflicts" pill.
+	conflicts := map[int64]bool{}
+	if state == "open" && g != nil {
+		for _, p := range pulls {
+			if pullConflicts(ctx, g, p) {
+				conflicts[p.Number] = true
+			}
+		}
+	}
 	a.render(w, r, "pulls_list", page{Title: "Pull requests · " + v.Repo.FullName(), Nav: "repos", Data: map[string]any{
-		"V": v, "Pulls": pulls, "State": state, "Counts": counts,
+		"V": v, "Pulls": pulls, "State": state, "Counts": counts, "Conflicts": conflicts,
 	}})
 }
 
@@ -380,6 +390,8 @@ type pullPageData struct {
 	BaseExists bool
 	Cmp        *gitrepo.Comparison
 	Status     pullMergeStatus
+	Update     pullUpdateInfo // "Update branch" (pulls_update.go)
+	Notice     string         // a short confirmation to flash
 	Protection store.Protection
 	Checks     actChecks // Actions jobs on the head commit (actions_checks.go)
 	Timeline   []pullTimelineItem
@@ -507,6 +519,13 @@ func (a *App) buildPull(r *http.Request, v *repoView, g *gitrepo.Repo, p store.P
 
 	if p.IsOpen() {
 		d.Status = pullStatus(ctx, g, d)
+		d.Update = a.pullUpdateInfoFor(ctx, v.Repo, g, d)
+		switch r.URL.Query().Get("branch") {
+		case "updated":
+			d.Notice = "Branch updated: " + d.P.Base + " was merged into " + d.P.Head + "."
+		case "current":
+			d.Notice = d.P.Head + " is already up to date with " + d.P.Base + "."
+		}
 		// Home: GitHub — the merge happens on GitHub (tether_sync.go takes the POST).
 		if l, err := a.db.TetherLink(ctx, v.Repo.ID); err == nil && l.Home == "github" {
 			for i := range d.Status.Methods {
@@ -625,7 +644,7 @@ func pullStatus(ctx context.Context, g *gitrepo.Repo, d *pullPageData) pullMerge
 		s.Steps = append(s.Steps, pullStep{Text: "Push commits to " + d.P.Head + ", or close this pull request"})
 		block(d.P.Base + " already contains every commit from " + d.P.Head + ".")
 	default:
-		mc, err := g.CheckMerge(ctx, d.BaseSHA, d.HeadSHA)
+		mc, err := pullMergeCheck(ctx, g, d.BaseSHA, d.HeadSHA)
 		switch {
 		case err != nil:
 			s.Pills = append(s.Pills, pullStatusPill{Label: "Mergeability unknown", Kind: "warn", Title: err.Error()})

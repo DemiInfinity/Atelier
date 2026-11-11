@@ -283,7 +283,7 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 - Agentic (plain-English) workflows moved to Phase 4, alongside the MCP server they need
 
 **Phase 4: done**
-- MCP server at `/mcp` (32 tools) with MCP tokens and a call log: Settings → MCP
+- MCP server at `/mcp` (33 tools) with MCP tokens and a call log: Settings → MCP
 - Agentic workflows: Markdown files in `.atelier/workflows/` run Claude on your own runners, with an approval gate, a tool allowlist and turn/token/time limits (`engine: claude` needs an `ANTHROPIC_API_KEY` secret; `engine: claude-code` runs Claude Code on a runner where you're signed in, so it uses your Claude subscription and needs no key: `atelier-runner claude-code enable`); templates in `docs/agents/`
 - Tether: connect GitHub, search and feed, popular this week, repo links (home Atelier or GitHub), issue and comment sync, checks for GitHub pull requests, Merge on GitHub, and the opt-in "I use Atelier" badge
 - Apps and bots: GitHub-style signed webhooks, bot accounts (comment, suggest, checks, push-only git access, never merge), an `/api/v3` subset, Review on GitHub through Tether

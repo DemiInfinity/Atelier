@@ -272,10 +272,19 @@ func (a *App) appPullJSON(ctx context.Context, rp store.Repo, d *pullPageData, f
 	if am, err := a.db.AppAutoMerge(ctx, rp.ID, p.Number); err == nil && p.IsOpen() {
 		auto = map[string]any{"method": am.Method, "by": am.By()}
 	}
+	// How far the branches are apart, and whether they still merge cleanly
+	// (open pull requests only; the page's own numbers).
+	ahead, behind := 0, 0
+	conflictFiles := []string{}
+	if p.IsOpen() && d.Cmp != nil && !d.Cmp.Unrelated {
+		ahead, behind = d.Cmp.Ahead, d.Cmp.Behind
+		conflictFiles = append(conflictFiles, d.Status.Conflicts...)
+	}
 	out := map[string]any{
 		"repo": rp.FullName(), "number": p.Number, "title": p.Title, "state": p.State,
 		"head": p.Head, "base": p.Base, "author": p.AuthorKind + ":" + p.AuthorName,
 		"commits": d.Commits, "files": files, "via": appVia(p.AuthorKind, p.AuthorName),
+		"ahead": ahead, "behind": behind, "conflicts": len(conflictFiles) > 0, "can_update": d.Update.Can,
 		"merge": map[string]any{"can_merge": p.IsOpen() && d.Status.CanMerge, "green": appGreen(d), "reason": reason,
 			"methods": methods, "on_github": onGitHub, "auto_merge": auto},
 		"web_path":   fmt.Sprintf("/%s/pulls/%d", rp.FullName(), p.Number),
@@ -286,6 +295,7 @@ func (a *App) appPullJSON(ctx context.Context, rp store.Repo, d *pullPageData, f
 		return out
 	}
 	out["checks"] = checks
+	out["conflict_files"] = conflictFiles
 	comments := []map[string]any{}
 	if cs, err := a.db.PullComments(ctx, p.ID); err == nil {
 		for _, c := range cs {

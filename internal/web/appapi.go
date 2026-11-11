@@ -73,6 +73,7 @@ func init() {
 			m.HandleFunc("GET "+p+"/repos/{owner}/{repo}/pulls/{n}", a.appAuthed(a.appPull))
 			m.HandleFunc("POST "+p+"/repos/{owner}/{repo}/pulls/{n}/merge", a.appAuthed(a.appPullMerge))
 			m.HandleFunc("DELETE "+p+"/repos/{owner}/{repo}/pulls/{n}/merge", a.appAuthed(a.appPullMergeCancel))
+			m.HandleFunc("POST "+p+"/repos/{owner}/{repo}/pulls/{n}/update", a.appAuthed(a.appPullUpdate))
 
 			m.HandleFunc("GET "+p+"/runs", a.appAuthed(a.appRuns))
 			m.HandleFunc("GET "+p+"/jobs/{id}/log", a.appAuthed(a.appJobLog))

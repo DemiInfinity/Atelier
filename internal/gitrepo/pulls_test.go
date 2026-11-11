@@ -207,6 +207,30 @@ func TestMergeConflicts(t *testing.T) {
 	}
 }
 
+func TestMergeFastForwardAndConflictFiles(t *testing.T) {
+	_, r, work := prRepo(t)
+	ctx := context.Background()
+	git(t, work, "checkout", "-q", "-b", "stale")
+	git(t, work, "push", "-q", "origin", "stale")
+	old, _ := r.BranchSHA(ctx, "stale")
+	tip := commitFile(t, work, "main", "app.txt", "one\nmain\nthree\n", "Main edit")
+	// stale has nothing of its own: it moves straight to main, no new commit.
+	res, err := r.MergeBranches(ctx, MergeRequest{Base: "stale", Head: "main", Method: "merge", Message: "x", Committer: prOwnerSig, FastForward: true})
+	if err != nil || res.SHA != tip || res.BaseBefore != old {
+		t.Fatalf("fast-forward = %+v, %v", res, err)
+	}
+	if got, _ := r.BranchSHA(ctx, "stale"); got != tip {
+		t.Error("stale didn't move to main")
+	}
+	commitFile(t, work, "stale", "app.txt", "one\nstale\nthree\n", "Stale edit")
+	commitFile(t, work, "main", "app.txt", "one\nmain again\nthree\n", "Main again")
+	_, err = r.MergeBranches(ctx, MergeRequest{Base: "stale", Head: "main", Method: "merge", Message: "x", Committer: prOwnerSig, FastForward: true})
+	var ce *MergeConflictError
+	if !errors.As(err, &ce) || !errors.Is(err, ErrMergeConflict) || len(ce.Files) != 1 || ce.Files[0] != "app.txt" {
+		t.Fatalf("conflict = %v", err)
+	}
+}
+
 func TestMergeCASFailsWhenBranchMoved(t *testing.T) {
 	_, r, work := prRepo(t)
 	ctx := context.Background()

@@ -23,7 +23,7 @@
     <article class="list-row pr-row">
       {{template "pulls-icon" .}}
       <div class="grow min0 stack-sm pr-row-main">
-        <a class="pr-row-title" href="{{$v.Base}}/pulls/{{.Number}}">{{.Title}}</a>
+        <a class="pr-row-title" href="{{$v.Base}}/pulls/{{.Number}}">{{.Title}}</a>{{if index $d.Conflicts .Number}} <span class="pr-status-pill is-bad" title="{{.Head}} can't be merged into {{.Base}} cleanly">Conflicts</span>{{end}}
         <p class="small muted">
           <span class="mono">#{{.Number}}</span>
           {{if .IsMerged}}merged <time datetime="{{.MergedAt.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago .MergedAt.UTC}}</time>

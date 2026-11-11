@@ -81,6 +81,9 @@ var mcpTools = sync.OnceValue(func() []*mcpTool {
 		mcpDef(mcpTool{Name: "pulls.note", Title: "Note on a line", Repo: true, Write: true,
 			Desc: "Leave an inline review note on one line of a pull request's diff. line is the line number in the new file (side new, default) or in the old file (side old, for removed lines); the line must be part of the diff."},
 			mcpPullsNote),
+		mcpDef(mcpTool{Name: "pulls.update_branch", Title: "Update a pull request's branch", Repo: true, Write: true, NoJobs: true,
+			Desc: "Merge the base branch into an open pull request's head branch when it is behind (like GitHub's Update branch). Answers updated false when it is already up to date; on conflicts nothing is written and the conflicting files are listed."},
+			mcpPullsUpdateBranch),
 
 		// ----- actions -----
 		mcpDef(mcpTool{Name: "actions.runs", Title: "List workflow runs", Repo: true,
@@ -1159,6 +1162,22 @@ func mcpPullsComment(ctx context.Context, c *mcpCall, in mcpPullsCommentIn) (any
 	anchor := fmt.Sprintf("#comment-%d", cm.ID)
 	c.a.emit(ctx, pullEvent(EventPullCommented, c.view(), p, who, body, anchor))
 	return map[string]any{"comment_id": cm.ID, "web_path": fmt.Sprintf("/%s/pulls/%d%s", c.repo.FullName(), p.Number, anchor)}, nil
+}
+
+func mcpPullsUpdateBranch(ctx context.Context, c *mcpCall, in mcpNumberIn) (any, error) {
+	p, err := c.pull(ctx, in.Number)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.a.updatePullBranch(ctx, c.repo, c.git, p, c.who)
+	var ue *pullUpdateError
+	if errors.As(err, &ue) {
+		return nil, userErr("%s", ue.Msg)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"updated": res.Updated, "head_sha": res.HeadSHA}, nil
 }
 
 type mcpPullsNoteIn struct {
