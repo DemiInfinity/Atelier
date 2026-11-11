@@ -60,3 +60,5 @@
 /* Repo card on the code page (filled by tether.js) */
 .tt-card-status[hidden] { display: none; }
 .tt-feed .feed-body a:not(.tt-studio), .tt-list a:not(.tt-studio):not(.btn) { color: var(--tether); }
+.tt-token-row { border-top: 1px solid var(--border); padding-top: 12px; }
+.tt-token-row input[name="owners"] { flex: 1 1 200px; min-width: 0; }

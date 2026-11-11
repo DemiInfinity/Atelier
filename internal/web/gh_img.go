@@ -268,8 +268,13 @@ func (a *App) ghImage(w http.ResponseWriter, r *http.Request, g *ghReq) {
 }
 
 func (a *App) ghFetchImage(ctx context.Context, g *ghReq, t ghImgTarget) (ghImgEntry, error) {
-	// A private repository's file: through the API with the person's token.
+	// A private repository's file: through the API with the person's token
+	// (the one covering that repository's owner).
 	if t.Repo != "" {
+		if c, acc, err := a.tetherLinkClient(ctx, g.who.PersonID, t.Repo); err == nil {
+			c.MaxAge, c.StaleOK = g.c.MaxAge, g.c.StaleOK
+			g = &ghReq{who: g.who, c: c, acc: acc}
+		}
 		if rp, err := g.c.Repo(ctx, t.Repo); err == nil && rp.Private {
 			return a.ghFetchPrivateImage(ctx, g, t)
 		}

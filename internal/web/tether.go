@@ -3,7 +3,7 @@ package web
 // Tether: Atelier's link to GitHub.
 //
 //	tether.go           the feature, its per-App state, GitHub clients and git plumbing
-//	tether_settings.go  Settings → Tether: connect with a token or OAuth, badge, disconnect
+//	tether_settings.go  Settings → Tether: connect with a token or OAuth, more tokens, badge, disconnect
 //	tether_search.go    /search: your studio first, then GitHub; Mirror to studio
 //	tether_feed.go      GitHub activity and "Popular this week" for the home page
 //	tether_repo.go      a repository's GitHub twin: link, home, push mirroring and fetching
@@ -158,19 +158,22 @@ func (st *tetherState) kick(repoID int64) {
 
 var errTetherNotConnected = errors.New("connect GitHub in Settings → Tether first")
 
-// tetherCache stores a person's conditional-request validators.
+// tetherCache stores a person's conditional-request validators. Answers
+// fetched with an extra token are kept apart (suffix), so what one token
+// could see is never served to a request made with another.
 type tetherCache struct {
 	db     *store.Store
 	person int64
+	suffix string
 }
 
 func (c tetherCache) Get(ctx context.Context, key string) (string, []byte, bool) {
-	etag, body, _, err := c.db.TetherCacheGet(ctx, c.person, key)
+	etag, body, _, err := c.db.TetherCacheGet(ctx, c.person, key+c.suffix)
 	return etag, body, err == nil
 }
 
 func (c tetherCache) GetAt(ctx context.Context, key string) (string, []byte, time.Time, bool) {
-	etag, body, at, err := c.db.TetherCacheGet(ctx, c.person, key)
+	etag, body, at, err := c.db.TetherCacheGet(ctx, c.person, key+c.suffix)
 	return etag, body, at, err == nil
 }
 
@@ -178,31 +181,122 @@ func (c tetherCache) Put(ctx context.Context, key, etag string, body []byte) {
 	if len(body) > 2<<20 {
 		return
 	}
-	_ = c.db.TetherCachePut(context.WithoutCancel(ctx), c.person, key, etag, body)
+	_ = c.db.TetherCachePut(context.WithoutCancel(ctx), c.person, key+c.suffix, etag, body)
 }
 
-// tetherClient returns a GitHub client with a person's token.
+// tetherClient returns a GitHub client with a person's main token: the one
+// for search, the feed, trending, profiles and badges.
 func (a *App) tetherClient(ctx context.Context, personID int64) (*tether.Client, store.TetherAccount, error) {
+	return a.tetherClientFor(ctx, personID, "")
+}
+
+// tetherPick is the token chosen for a GitHub owner: an extra token that
+// covers it, or the main token (Extra nil).
+type tetherPick struct {
+	Token string
+	Extra *store.TetherExtraToken
+}
+
+var errTetherTokenUnreadable = errors.New("the saved GitHub token can't be read (was the secret key replaced?): reconnect GitHub in Settings → Tether")
+
+// tetherTokenFor picks a person's token for repository work under ghOwner
+// (a GitHub user or organisation): the extra token whose owners include it
+// (case-insensitive), otherwise the main token. ghOwner "" means the main
+// token. Only the person's own tokens are ever considered.
+func (a *App) tetherTokenFor(ctx context.Context, personID int64, ghOwner string) (tetherPick, store.TetherAccount, error) {
 	acc, err := a.db.TetherAccount(ctx, personID)
 	if errors.Is(err, store.ErrNotFound) {
-		return nil, acc, errTetherNotConnected
+		return tetherPick{}, acc, errTetherNotConnected
 	}
 	if err != nil {
-		return nil, acc, err
+		return tetherPick{}, acc, err
+	}
+	if ghOwner != "" {
+		t, err := a.db.TetherTokenForOwner(ctx, personID, ghOwner)
+		switch {
+		case err == nil:
+			tok, err := a.db.TetherExtraTokenSecret(ctx, a.secretSealer(), personID, t.ID)
+			if err != nil {
+				return tetherPick{}, acc, errTetherTokenUnreadable
+			}
+			return tetherPick{Token: tok, Extra: &t}, acc, nil
+		case !errors.Is(err, store.ErrNotFound):
+			return tetherPick{}, acc, err
+		}
 	}
 	tok, err := a.db.TetherToken(ctx, a.secretSealer(), personID)
 	if err != nil {
-		return nil, acc, fmt.Errorf("the saved GitHub token can't be read (was the secret key replaced?): reconnect GitHub in Settings → Tether")
+		return tetherPick{}, acc, errTetherTokenUnreadable
 	}
+	return tetherPick{Token: tok}, acc, nil
+}
+
+// tetherOwnerOf is the owner half of a GitHub owner/name.
+func tetherOwnerOf(ghRepo string) string {
+	owner, _, _ := strings.Cut(ghRepo, "/")
+	return owner
+}
+
+// tetherClientFor returns a GitHub client for repository work under
+// ghOwner, with the token tetherTokenFor picks. The account is always the
+// person's main one. Rate limits are recorded against the token used.
+func (a *App) tetherClientFor(ctx context.Context, personID int64, ghOwner string) (*tether.Client, store.TetherAccount, error) {
+	pick, acc, err := a.tetherTokenFor(ctx, personID, ghOwner)
+	if err != nil {
+		return nil, acc, err
+	}
+	return a.tetherClientWith(ctx, personID, pick), acc, nil
+}
+
+func (a *App) tetherClientWith(ctx context.Context, personID int64, pick tetherPick) *tether.Client {
 	st := a.tether()
 	db := a.db
-	c := &tether.Client{API: st.api, Token: tok, HTTP: st.hc, Cache: tetherCache{db: db, person: personID},
-		OnRate: func(r tether.Rate) {
+	cache := tetherCache{db: db, person: personID}
+	onRate := func(r tether.Rate) {
+		if r.Resource == "" || r.Resource == "core" {
+			_ = db.SetTetherRate(context.WithoutCancel(ctx), personID, r.Limit, r.Remaining, r.Reset)
+		}
+	}
+	if pick.Extra != nil {
+		id := pick.Extra.ID
+		cache.suffix = store.TetherTokenCacheSuffix(id)
+		onRate = func(r tether.Rate) {
 			if r.Resource == "" || r.Resource == "core" {
-				_ = db.SetTetherRate(context.WithoutCancel(ctx), personID, r.Limit, r.Remaining, r.Reset)
+				_ = db.SetTetherExtraTokenRate(context.WithoutCancel(ctx), personID, id, r.Limit, r.Remaining, r.Reset)
 			}
-		}}
-	return c, acc, nil
+		}
+	}
+	return &tether.Client{API: st.api, Token: pick.Token, HTTP: st.hc, Cache: cache, OnRate: onRate}
+}
+
+// tetherLinkClient is the client for a GitHub repository (owner/name) worked
+// on with personID's tokens: a linked twin, a mirror, a /gh/ page.
+func (a *App) tetherLinkClient(ctx context.Context, personID int64, ghRepo string) (*tether.Client, store.TetherAccount, error) {
+	return a.tetherClientFor(ctx, personID, tetherOwnerOf(ghRepo))
+}
+
+// tetherLinkToken is the token git uses for a GitHub repository (owner/name).
+func (a *App) tetherLinkToken(ctx context.Context, personID int64, ghRepo string) (string, error) {
+	pick, _, err := a.tetherTokenFor(ctx, personID, tetherOwnerOf(ghRepo))
+	return pick.Token, err
+}
+
+// tetherIsMe reports whether a GitHub login is the person's: the main
+// account's or the login behind one of their extra tokens.
+func (a *App) tetherIsMe(ctx context.Context, personID int64, acc store.TetherAccount, login string) bool {
+	if login == "" {
+		return false
+	}
+	if strings.EqualFold(login, acc.Login) {
+		return true
+	}
+	extra, _ := a.db.TetherExtraTokens(ctx, personID)
+	for _, t := range extra {
+		if strings.EqualFold(login, t.Login) {
+			return true
+		}
+	}
+	return false
 }
 
 // tetherErrText turns an error into words for a page (never the token).

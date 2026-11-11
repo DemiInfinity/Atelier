@@ -85,7 +85,7 @@ func TestPullRequestFlow(t *testing.T) {
 	mustContain(t, body, "compare picker", "Recently pushed branches", "feature/add-greeting")
 
 	body = expectStatus(t, do(t, a, "GET", "/zoe/demo/pulls/new?base=main&head=feature/add-greeting", nil, ck), 200, "GET compare")
-	mustContain(t, body, "compare", "Open a pull request", `value="Add Hello"`, "Able to merge", "Hello()", "1 commit")
+	mustContain(t, body, "compare", "Open a pull request", `value="Add Hello"`, "Able to merge", `<span class="hl-nf">Hello</span><span class="hl-p">()</span>`, "1 commit")
 
 	// Create it.
 	rec := do(t, a, "POST", "/zoe/demo/pulls", url.Values{"base": {"main"}, "head": {"feature/add-greeting"},
@@ -112,7 +112,7 @@ func TestPullRequestFlow(t *testing.T) {
 
 	// Files changed, with the no-JS note form on a line.
 	body = expectStatus(t, do(t, a, "GET", "/zoe/demo/pulls/1/files?path=app/main.go&side=new&line=5", nil, ck), 200, "GET files")
-	mustContain(t, body, "files", "app/main.go", "func Hello()", `id="f0-n5"`, `id="note-form"`, `name="line" value="5"`, "pr-note-template", "pr-note-add")
+	mustContain(t, body, "files", "app/main.go", `<span class="hl-kd">func</span> <span class="hl-nf">Hello</span>`, `id="f0-n5"`, `id="note-form"`, `name="line" value="5"`, "pr-note-template", "pr-note-add")
 
 	rec = do(t, a, "POST", "/zoe/demo/pulls/1/notes", url.Values{"commit": {head}, "path": {"app/main.go"}, "side": {"new"},
 		"line": {"5"}, "body": {"Name this better"}}, ck)

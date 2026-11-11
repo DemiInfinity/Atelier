@@ -688,27 +688,42 @@ func (s *Store) RotateSecrets(ctx context.Context, from, to SecretSealer) (int, 
 type sealedColumn struct {
 	what, table, idCol, ctCol string
 	aad                       func(id int64) []byte
+	// personCol, when set, binds the AAD to the row's person as well (aad2).
+	personCol string
+	aad2      func(id, personID int64) []byte
+}
+
+func (c sealedColumn) aadFor(id, personID int64) []byte {
+	if c.aad2 != nil {
+		return c.aad2(id, personID)
+	}
+	return c.aad(id)
 }
 
 var sealedColumns = []sealedColumn{
 	{what: "webhook secret", table: "apps_webhooks", idCol: "id", ctCol: "secret_ct", aad: webhookAAD},
 	{what: "Tether token", table: "tether_accounts", idCol: "person_id", ctCol: "token_ct", aad: tetherAAD},
+	{what: "extra Tether token", table: "tether_tokens", idCol: "id", ctCol: "token_ct", personCol: "person_id", aad2: tetherTokenAAD},
 }
 
 func rotateSealedColumn(ctx context.Context, tx *sql.Tx, c sealedColumn, from, to SecretSealer) (int, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT `+c.idCol+`, `+c.ctCol+` FROM `+c.table+
+	person := "0"
+	if c.personCol != "" {
+		person = c.personCol
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT `+c.idCol+`, `+person+`, `+c.ctCol+` FROM `+c.table+
 		` WHERE `+c.ctCol+` IS NOT NULL AND length(`+c.ctCol+`) > 0`)
 	if err != nil {
 		return 0, err
 	}
 	type row struct {
-		id int64
-		ct []byte
+		id, person int64
+		ct         []byte
 	}
 	var all []row
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.id, &r.ct); err != nil {
+		if err := rows.Scan(&r.id, &r.person, &r.ct); err != nil {
 			rows.Close()
 			return 0, err
 		}
@@ -719,11 +734,11 @@ func rotateSealedColumn(ctx context.Context, tx *sql.Tx, c sealedColumn, from, t
 		return 0, err
 	}
 	for _, r := range all {
-		pt, err := from.Open(c.aad(r.id), r.ct)
+		pt, err := from.Open(c.aadFor(r.id, r.person), r.ct)
 		if err != nil {
 			return 0, fmt.Errorf("%s %d: %w", c.what, r.id, err)
 		}
-		fresh, err := to.Seal(c.aad(r.id), pt)
+		fresh, err := to.Seal(c.aadFor(r.id, r.person), pt)
 		if err != nil {
 			return 0, err
 		}

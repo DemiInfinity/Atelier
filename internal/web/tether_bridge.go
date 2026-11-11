@@ -96,11 +96,11 @@ func (a *App) tetherMirrorPull(ctx context.Context, repoID, number int64) (int, 
 	if _, err := g.BranchSHA(ctx, p.Base); err != nil {
 		return 0, "", fmt.Errorf("the base branch %s is gone", p.Base)
 	}
-	c, _, err := a.tetherClient(ctx, l.PersonID)
+	c, _, err := a.tetherLinkClient(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return 0, "", err
 	}
-	tok, err := a.db.TetherToken(ctx, a.secretSealer(), l.PersonID)
+	tok, err := a.tetherLinkToken(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return 0, "", errTetherNotConnected
 	}
@@ -165,7 +165,7 @@ func (a *App) tetherClosePull(ctx context.Context, repoID, number int64, merged 
 	if it.GHState != "open" {
 		return nil
 	}
-	c, _, err := a.tetherClient(ctx, l.PersonID)
+	c, _, err := a.tetherLinkClient(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return err
 	}

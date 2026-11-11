@@ -32,6 +32,7 @@
     </div>
     {{if $d.OtherPerson}}<p class="small">This link uses another person's GitHub connection.</p>{{end}}
     <dl class="tt-dl small">
+      <dt>Token</dt><dd>{{with $d.TokenLabel}}{{.}}{{else}}Your main token{{end}}</dd>
       <dt>Home</dt><dd>{{if eq .Home "github"}}GitHub owns {{$v.Default}}; Atelier fetches it, and merges happen on GitHub.{{else}}Atelier owns {{$v.Default}}; pushes are mirrored to GitHub.{{end}}</dd>
       <dt>Issues</dt><dd>{{if .SyncIssues}}New GitHub issues and comments sync in; comments made here go to GitHub.{{else}}Only comments on mirrored pull requests sync.{{end}}</dd>
       {{if eq .Home "atelier"}}<dt>Last push</dt><dd>{{with .LastPushAt}}{{ago .}}{{else}}not yet{{end}}{{with .PushError}} · <span class="tt-error">{{.}}</span>{{end}}</dd>
@@ -73,7 +74,8 @@
     <h2 class="h-sm" id="tt-new">Tether this repo</h2>
     <div class="field">
       <label for="tt-gh">GitHub repository</label>
-      <input id="tt-gh" name="gh_repo" required maxlength="140" value="{{$d.Suggest}}" placeholder="owner/name" autocomplete="off" spellcheck="false">
+      <input id="tt-gh" name="gh_repo" required maxlength="140" value="{{$d.Suggest}}" placeholder="owner/name" autocomplete="off" spellcheck="false" aria-describedby="tt-gh-hint">
+      <p class="hint" id="tt-gh-hint">Tether uses the token that covers the owner (see Settings → Tether), or your main token.</p>
     </div>
     <label class="row gap-sm small"><input type="checkbox" name="create" value="1" checked> Create it as a private repository on GitHub if it doesn't exist</label>
     <fieldset class="field">

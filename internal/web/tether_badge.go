@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -30,8 +31,10 @@ type tetherBadgeFileJSON struct {
 }
 
 // tetherStudioURL is what goes in your badge: your public profile, if known.
+// A LAN-only address (ATELIER_PUBLIC_URL pointing at a .lan name, a private
+// IP…) is never published to GitHub.
 func (a *App) tetherStudioURL(ctx context.Context, personID int64) string {
-	if a.cfg.PublicURL == "" {
+	if a.cfg.PublicURL == "" || !tetherPublicAddress(a.cfg.PublicURL) {
 		return ""
 	}
 	p, err := a.db.Person(ctx, personID)
@@ -74,6 +77,57 @@ func (a *App) tetherSetBadge(ctx context.Context, personID int64, on bool) error
 	}
 	_ = a.db.SaveTetherBadge(ctx, store.TetherBadge{Login: acc.Login, Present: on, Studio: a.tetherStudioURL(ctx, personID), CheckedAt: time.Now()})
 	return a.db.SetTetherBadge(ctx, personID, on)
+}
+
+// tetherLANSuffixes are hostname endings that only resolve on a local network.
+var tetherLANSuffixes = []string{".lan", ".local", ".localdomain", ".home", ".home.arpa", ".internal", ".intranet",
+	".corp", ".private", ".localhost", ".test", ".invalid"}
+
+// tetherPublicAddress reports whether a URL's host could be reached from the
+// internet: not localhost, not a private, loopback or link-local IP, not a
+// single-label name and not a LAN-only suffix like .lan or .local.
+func tetherPublicAddress(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "" || host == "localhost" {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return !(ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() ||
+			ip.IsLinkLocalMulticast() || ip.IsMulticast() || isCGNAT(ip))
+	}
+	if !strings.Contains(host, ".") {
+		return false
+	}
+	for _, sfx := range tetherLANSuffixes {
+		if strings.HasSuffix(host, sfx) {
+			return false
+		}
+	}
+	return true
+}
+
+// isCGNAT is 100.64.0.0/10 (Tailscale and carrier NAT): not public either.
+func isCGNAT(ip net.IP) bool {
+	v4 := ip.To4()
+	return v4 != nil && v4[0] == 100 && v4[1]&0xc0 == 64
+}
+
+// tetherBadgeStatus says, for a badge that is on, whether it carries a
+// "Visit their studio" link. stale is true when the published file's studio
+// address no longer matches (re-adding the badge updates it).
+func (a *App) tetherBadgeStatus(ctx context.Context, personID int64, login string) (msg string, stale bool) {
+	studio := a.tetherStudioURL(ctx, personID)
+	if b, err := a.db.TetherBadge(ctx, login); err == nil && b.Studio != studio {
+		stale = true
+	}
+	if studio == "" {
+		return "Badge on: no public address yet, so there's no 'Visit their studio' link.", stale
+	}
+	return "Badge on, linking to " + studio + ".", stale
 }
 
 func (a *App) tetherBadgeToggle(w http.ResponseWriter, r *http.Request) {

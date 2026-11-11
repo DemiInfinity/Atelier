@@ -19,6 +19,7 @@
     <ul class="prof-meta small">
       {{if $p.Location}}<li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21 C 12 21 5 14 5 9.5 a7 7 0 0 1 14 0 C 19 14 12 21 12 21 Z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span class="sr-only">Location: </span>{{$p.Location}}</li>{{end}}
       {{if $v.Website}}<li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 14 a4 4 0 0 0 5.7 0 l3-3 a4 4 0 0 0-5.7-5.7 l-1 1 M14 10 a4 4 0 0 0-5.7 0 l-3 3 a4 4 0 0 0 5.7 5.7 l1-1"/></svg><span class="sr-only">Website: </span><a href="{{$v.Website}}" rel="me noopener" class="break">{{$v.WebsiteLabel}}</a></li>{{end}}
+      {{if $v.GitHub}}<li class="prof-gh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19 c-4 1.5-4-2-6-2.5 M15 21 v-3.5 c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6 a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2 s-1.1-.3-3.5 1.3 a12 12 0 0 0-6.2 0 C6.5 2.8 5.4 3.1 5.4 3.1 a4.2 4.2 0 0 0-.1 3.2 A4.6 4.6 0 0 0 4 9.5 c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2 V21"/></svg><span class="prof-gh-text">On GitHub: <a class="prof-gh-out" href="{{$v.GitHubGH}}" rel="noopener noreferrer" target="_blank">{{$v.GitHub}} <span aria-hidden="true">↗</span></a> <span class="muted" aria-hidden="true">·</span> <a class="prof-gh-in" href="/gh/{{$v.GitHub}}">/gh/{{$v.GitHub}}</a></span></li>{{end}}
       <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10 H20 M9 3 V7 M15 3 V7"/></svg>Joined {{date $o.CreatedAt}}</li>
       <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 4 H15 a4 4 0 0 1 4 4 V20 H9 a4 4 0 0 1-4-4 Z"/><path d="M9 20 a4 4 0 0 1 0-8 H19"/></svg>{{$v.RepoCountLabel}}</li>
     </ul>
@@ -26,7 +27,9 @@
   </aside>
 
   <section class="col-main stack-lg">
-    <nav class="tabs prof-tabs" aria-label="{{$o.Label}}"><a href="/{{$o.Name}}" aria-current="page">Overview</a><a href="/projects?account={{$o.Name}}">Projects</a></nav>
+    {{template "account-tabs" $v.AcctTabs}}
+    <nav class="tabs prof-tabs" aria-label="{{$o.Label}}"><a href="/{{$o.Name}}" {{if not $v.Tab}}aria-current="page"{{end}}>Overview</a><a href="/{{$o.Name}}?tab=repositories" {{if eq $v.Tab "repositories"}}aria-current="page"{{end}}>Repositories <span class="pill">{{$v.RepoCount}}</span></a><a href="/projects?account={{$o.Name}}">Projects</a></nav>
+    {{if not $v.Tab}}
     {{if $v.Readme}}
     <article class="card prof-readme" aria-labelledby="prof-readme-h">
       <div class="prof-readme-head row-between">
@@ -73,10 +76,12 @@
       </div>
       <div class="embers-legend small muted" aria-hidden="true"><span>Cool</span><span class="ember l0"></span><span class="ember l1"></span><span class="ember l2"></span><span class="ember l3"></span><span class="ember l4"></span><span>Glowing</span></div>
     </section>
+    {{end}}
 
     <section class="stack-sm" aria-labelledby="prof-repos-h" id="repositories">
       <h2 class="h-sm" id="prof-repos-h">Repositories</h2>
       <form class="prof-filter" method="get" action="/{{$o.Name}}#repositories" role="search" data-prof-filter>
+        {{if $v.Tab}}<input type="hidden" name="tab" value="{{$v.Tab}}">{{end}}
         <label class="sr-only" for="prof-q">Find a repository</label>
         <input id="prof-q" name="q" type="search" value="{{$v.Query}}" placeholder="Find a repository…" autocomplete="off" data-prof-q>
         <label class="sr-only" for="prof-sort">Sort by</label>
@@ -93,7 +98,7 @@
           <div class="grow min0 stack-sm prof-repo-body">
             <p class="row gap-sm prof-repo-title"><a href="/{{.FullName}}" class="prof-repo-name">{{.Name}}</a>{{if .Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}{{if index $v.PinnedIDs .ID}}<span class="pill prof-pinned-pill">Pinned</span>{{end}}</p>
             {{if .Description}}<p class="small text-2">{{.Description}}</p>{{end}}
-            <p class="small muted">Updated {{ago .UpdatedAt}}</p>
+            <p class="small muted row gap-sm wrap-gap">{{repoLang .ID}}<span>Updated {{ago .UpdatedAt}}</span></p>
           </div>
         </li>
         {{end}}

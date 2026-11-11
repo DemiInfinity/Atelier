@@ -65,6 +65,15 @@ func (a *App) agentApprovalReason(ctx context.Context, rp store.Repo, wf *workfl
 		tools := "no tools"
 		if len(spec.Tools) > 0 {
 			tools = strings.Join(spec.Tools, ", ")
+			var writes []string
+			for _, t := range spec.Tools {
+				if workflow.AgentToolWrites(t) {
+					writes = append(writes, t)
+				}
+			}
+			if len(writes) > 0 {
+				tools += " (these change things: " + strings.Join(writes, ", ") + ")"
+			}
 		}
 		if prev, err := a.db.LatestAgentApproval(ctx, rp.ID, wf.Path); err == nil {
 			was := "no tools"

@@ -202,10 +202,12 @@ func (s *Store) TetherToken(ctx context.Context, sealer SecretSealer, personID i
 	return string(pt), nil
 }
 
-// DeleteTetherAccount unlinks GitHub and forgets everything cached for the person.
+// DeleteTetherAccount unlinks GitHub (the main token and every extra one) and
+// forgets everything cached for the person.
 func (s *Store) DeleteTetherAccount(ctx context.Context, personID int64) error {
 	return s.inTx(ctx, func(tx *sql.Tx) error {
-		for _, q := range []string{`DELETE FROM tether_accounts WHERE person_id=?`, `DELETE FROM tether_cache WHERE person_id=?`} {
+		for _, q := range []string{`DELETE FROM tether_accounts WHERE person_id=?`, `DELETE FROM tether_tokens WHERE person_id=?`,
+			`DELETE FROM tether_cache WHERE person_id=?`} {
 			if _, err := tx.ExecContext(ctx, q, personID); err != nil {
 				return err
 			}

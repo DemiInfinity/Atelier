@@ -62,6 +62,27 @@ type fakeGH struct {
 	hits        map[string]int
 	notModified int
 	nextID      int64
+
+	// More tokens (tether_tokens_test.go): each extra token sees only its
+	// owners' repositories; mainDenied hides owners (lower case) from the
+	// main token. byToken counts "token METHOD path".
+	tokens     map[string]fakeToken
+	mainDenied map[string]bool
+	byToken    map[string]int
+}
+
+type fakeToken struct {
+	login  string
+	owners []string
+}
+
+func (t fakeToken) covers(owner string) bool {
+	for _, o := range t.owners {
+		if strings.EqualFold(o, owner) {
+			return true
+		}
+	}
+	return false
 }
 
 func newFakeGH(t *testing.T) *fakeGH {
@@ -145,9 +166,19 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		f.write(w, r, 200, map[string]string{"access_token": fakeGHToken})
 		return
 	}
-	if r.Header.Get("Authorization") != "Bearer "+fakeGHToken {
-		f.write(w, r, 401, map[string]string{"message": "Bad credentials"})
-		return
+	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if f.byToken == nil {
+		f.byToken = map[string]int{}
+	}
+	f.byToken[auth+" "+r.Method+" "+p]++
+	var extraTok *fakeToken
+	if auth != fakeGHToken {
+		ft, ok := f.tokens[auth]
+		if !ok || auth == "" {
+			f.write(w, r, 401, map[string]string{"message": "Bad credentials"})
+			return
+		}
+		extraTok = &ft
 	}
 	if f.limited {
 		w.Header().Set("X-RateLimit-Remaining", "0")
@@ -166,6 +197,26 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	str := func(k string) string { s, _ := body[k].(string); return s }
 	seg := strings.Split(strings.Trim(p, "/"), "/")
+	if len(seg) >= 2 && seg[0] == "repos" {
+		if (extraTok != nil && !extraTok.covers(seg[1])) || (extraTok == nil && f.mainDenied[strings.ToLower(seg[1])]) {
+			f.write(w, r, 404, map[string]string{"message": "Not Found"})
+			return
+		}
+	}
+	if extraTok != nil && p == "/user" {
+		f.write(w, r, 200, tether.User{Login: extraTok.login})
+		return
+	}
+	if extraTok != nil && p == "/user/repos" && r.Method == http.MethodGet {
+		var out []tether.Repo
+		for _, rp := range f.repos {
+			if extraTok.covers(rp.Owner.Login) {
+				out = append(out, *rp)
+			}
+		}
+		f.write(w, r, 200, out)
+		return
+	}
 	if f.extra != nil && f.extra(w, r, seg, body) {
 		return
 	}

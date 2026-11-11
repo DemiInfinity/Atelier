@@ -34,6 +34,32 @@ func (a *App) home(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	// Only what the viewer may read: repositories, their activity and embers,
+	// and the accounts they can see (their own, or ones with a readable repo).
+	who := a.actor(r)
+	all, err := a.db.Repos(ctx)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	all = a.readableRepos(ctx, who, all)
+	if !a.isOwnerPerson(ctx, who.PersonID) {
+		seen := map[int64]bool{}
+		for _, rp := range all {
+			seen[rp.OwnerID] = true
+		}
+		kept := owners[:0:0]
+		for _, o := range owners {
+			if seen[o.ID] || strings.EqualFold(o.Name, who.Name) {
+				kept = append(kept, o)
+			}
+		}
+		owners = kept
+	}
+	if len(owners) == 0 {
+		a.notFound(w, r)
+		return
+	}
 	active := owners[0]
 	if q := r.URL.Query().Get("account"); q != "" {
 		for _, o := range owners {
@@ -47,11 +73,7 @@ func (a *App) home(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	all, err := a.db.Repos(ctx)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
+	repos = a.readableRepos(ctx, who, repos)
 
 	// Recent activity: the latest commit in each recently updated repo.
 	var acts []activity
@@ -347,7 +369,7 @@ func (a *App) showTree(w http.ResponseWriter, r *http.Request, v *repoView, g *g
 	}
 	a.render(w, r, "repo_code", page{Title: v.Repo.FullName(), Nav: "repos", Data: map[string]any{
 		"V": v, "Rows": rows, "Last": g.LastCommit(ctx, commit, v.Path),
-		"Readme": readme, "ReadmeName": readmeName,
+		"Readme": readme, "ReadmeName": readmeName, "Langs": v.overviewLangs(ctx, a, g),
 	}})
 }
 

@@ -157,7 +157,7 @@ func TestSnippetCRUDAndRevisions(t *testing.T) {
 		t.Errorf("after edit = %+v", sn)
 	}
 	rec = do(t, a, "GET", base+"/revisions", nil, e.owner)
-	if body := rec.Body.String(); !strings.Contains(body, `"dl add">&#43;echo redeploy now`) || !strings.Contains(body, `"dl del">-echo redeploy<`) ||
+	if body := rec.Body.String(); !strings.Contains(body, `"dl add">+<span class="hl-nb">echo</span> redeploy now`) || !strings.Contains(body, `"dl del">-<span class="hl-nb">echo</span> redeploy<`) ||
 		!strings.Contains(body, "created this snippet") {
 		t.Errorf("revisions page lacks the diff\n%.2000s", body)
 	}

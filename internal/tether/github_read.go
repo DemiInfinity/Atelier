@@ -477,3 +477,15 @@ func (c *Client) ReleasesPage(ctx context.Context, full string, page, perPage in
 	_, err = c.do(ctx, http.MethodGet, p+"/releases?"+pageQuery(nil, page, perPage).Encode(), nil, &out, true)
 	return out, err
 }
+
+// Languages is bytes of code per language, as GitHub's linguist counts them
+// (GET /repos/{o}/{r}/languages), through the cache.
+func (c *Client) Languages(ctx context.Context, full string) (map[string]int64, error) {
+	p, err := repoPath(full)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]int64{}
+	_, err = c.do(ctx, http.MethodGet, p+"/languages", nil, &out, true)
+	return out, err
+}

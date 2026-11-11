@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -47,7 +48,11 @@ var errProjRef = errors.New("not an issue or pull request you can see")
 // projResolveRef turns what someone typed into an issue or pull request the
 // viewer can read.
 func (a *App) projResolveRef(r *http.Request, ref string) (store.Repo, string, int64, error) {
-	ctx := r.Context()
+	return a.projResolveRefAs(r.Context(), a.actor(r), ref)
+}
+
+// projResolveRefAs is projResolveRef for any actor (the MCP tools use it too).
+func (a *App) projResolveRefAs(ctx context.Context, who Actor, ref string) (store.Repo, string, int64, error) {
 	ref = strings.TrimSpace(ref)
 	var owner, name, kind string
 	var num int64
@@ -65,16 +70,15 @@ func (a *App) projResolveRef(r *http.Request, ref string) (store.Repo, string, i
 		return store.Repo{}, "", 0, errProjRef
 	}
 	rp, err := a.db.RepoByName(ctx, owner, name)
-	if err != nil || !a.can(ctx, a.actor(r), rp, PermRead) {
+	if err != nil || !a.can(ctx, who, rp, PermRead) {
 		return store.Repo{}, "", 0, errProjRef
 	}
-	return a.projResolveNumber(r, rp, kind, num)
+	return a.projResolveNumber(ctx, rp, kind, num)
 }
 
 // projResolveNumber works out whether #num is an issue or a pull request
 // (kind may be given or "").
-func (a *App) projResolveNumber(r *http.Request, rp store.Repo, kind string, num int64) (store.Repo, string, int64, error) {
-	ctx := r.Context()
+func (a *App) projResolveNumber(ctx context.Context, rp store.Repo, kind string, num int64) (store.Repo, string, int64, error) {
 	if kind != "pull" {
 		if _, err := a.db.IssueByNumber(ctx, rp.ID, num); err == nil {
 			return rp, "issue", num, nil
@@ -126,7 +130,7 @@ func (a *App) projItemAdd(w http.ResponseWriter, r *http.Request) {
 			kind = ""
 		}
 		var rerr2 error
-		if rp, kind, num, rerr2 = a.projResolveNumber(r, rp, kind, num); rerr2 != nil {
+		if rp, kind, num, rerr2 = a.projResolveNumber(ctx, rp, kind, num); rerr2 != nil {
 			a.notFound(w, r)
 			return
 		}
@@ -205,16 +209,7 @@ func (a *App) projItemMove(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, err)
 			return
 		}
-		for k, x := range items {
-			if x.ID == after && k+1 < len(items) {
-				before = items[k+1].ID
-				if before == it.ID && k+2 < len(items) {
-					before = items[k+2].ID
-				} else if before == it.ID {
-					before = 0
-				}
-			}
-		}
+		before = projBeforeFromAfter(items, it.ID, after)
 	}
 	var statusField int64
 	status := ""
@@ -240,6 +235,23 @@ func (a *App) projItemMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, projBack(r, projURL(p))+"#item-"+strconv.FormatInt(it.ID, 10), http.StatusSeeOther)
+}
+
+// projBeforeFromAfter turns "put itemID after after" into the item it goes
+// before (0 = the end), for MoveItem.
+func projBeforeFromAfter(items []store.ProjItem, itemID, after int64) int64 {
+	var before int64
+	for k, x := range items {
+		if x.ID == after && k+1 < len(items) {
+			before = items[k+1].ID
+			if before == itemID && k+2 < len(items) {
+				before = items[k+2].ID
+			} else if before == itemID {
+				before = 0
+			}
+		}
+	}
+	return before
 }
 
 // projItemField sets one field: field=<id>&value=….

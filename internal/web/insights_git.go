@@ -534,6 +534,7 @@ func (a *App) insStart(rp store.Repo, g *gitrepo.Repo, branch, head string) <-ch
 			Data: b}); err != nil {
 			log.Printf("insights: saving %s: %v", rp.FullName(), err)
 		}
+		a.saveLangs(ctx, rp.ID, head, st) // the language bar (langbar.go) reads its own small entry
 	}()
 	return f.done
 }

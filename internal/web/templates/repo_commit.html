@@ -12,7 +12,7 @@
     </div>
     <div class="commit-meta">
       <div class="row gap-sm">
-        <span class="avatar avatar-sm" aria-hidden="true">{{initial $c.Author}}</span>
+        {{commitAvatar $c.Author $c.Email}}
         <strong>{{$c.Author}}</strong>
         <span class="muted">committed <time datetime="{{$c.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $c.When}}">{{ago $c.When}}</time></span>
       </div>
@@ -29,7 +29,7 @@
   <section class="list-card">
     <h2 class="list-head h-sm">Changes</h2>
     <div class="table-scroll">
-      <pre class="diff"><code>{{range diffLines $d.Patch}}<span class="dl {{.Class}}">{{.Text}}</span>
+      <pre class="diff"><code>{{range diffLines $d.Patch}}<span class="dl {{.Class}}">{{.Code}}</span>
 {{end}}</code></pre>
     </div>
   </section>

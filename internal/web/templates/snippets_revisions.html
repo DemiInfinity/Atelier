@@ -14,7 +14,7 @@
   <section class="list-card snip-revision">
     <div class="list-head row-between wrap-gap">
       <div class="row gap-sm min0">
-        <span class="avatar avatar-sm" aria-hidden="true">{{initial .C.Author}}</span>
+        {{commitAvatar .C.Author .C.Email}}
         <strong>{{.C.Author}}</strong>
         <span class="muted ellipsis">{{if .First}}created this snippet{{else}}revised this snippet{{end}} <time datetime="{{.C.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .C.When}}">{{ago .C.When}}</time></span>
       </div>
@@ -25,7 +25,7 @@
     </div>
     {{if .Patch}}
     <div class="table-scroll">
-      <pre class="diff"><code>{{range diffLines .Patch}}<span class="dl {{.Class}}">{{.Text}}</span>
+      <pre class="diff"><code>{{range diffLines .Patch}}<span class="dl {{.Class}}">{{.Code}}</span>
 {{end}}</code></pre>
     </div>
     {{else}}<p class="muted pad-x snip-nodiff">No file changes.</p>{{end}}

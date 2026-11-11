@@ -1,0 +1,25 @@
+{{define "head"}}<link rel="stylesheet" href="/static/accounts.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="center-page">
+  <div class="error-card stack acct-missing">
+    <h1 class="display">Nothing here</h1>
+    <p class="muted">There's no account called <span class="mono">{{$d.Name}}</span> in this studio.</p>
+    {{if $d.Suggestions}}
+    <section class="stack-sm" aria-labelledby="acct-missing-h">
+      <h2 class="h-sm" id="acct-missing-h">Did you mean {{with index $d.Suggestions 0}}<a href="/{{.Name}}">{{.Name}}</a>{{end}}?</h2>
+      <ul class="acct-missing-list">
+        {{range $d.Suggestions}}
+        <li><a class="account" href="/{{.Name}}">
+          <span class="account-chip {{if .IsCompany}}is-org{{end}}" aria-hidden="true">{{with avatarURL .Name 64}}<img src="{{.}}" alt="" width="32" height="32">{{else}}{{.Initial}}{{end}}</span>
+          <span class="account-text"><span>{{.Label}}</span><span class="small muted mono">/{{.Name}}</span></span>
+        </a></li>
+        {{end}}
+      </ul>
+    </section>
+    {{end}}
+    {{if $d.GH}}<p class="small"><span class="tt-label">Look on GitHub:</span> <a class="acct-gh" href="{{$d.GH}}">{{$d.GH}}</a></p>{{end}}
+    <p><a class="btn btn-primary" href="/">Back home</a></p>
+  </div>
+</main>
+{{end}}

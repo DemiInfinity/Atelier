@@ -1,12 +1,12 @@
 {{/* Profile avatar. Pass an avatarView. People get an amber circle, companies
      a violet rounded square; size comes from the surrounding class. */}}
-{{define "prof-avatar"}}<span class="prof-avatar{{if .Company}} is-company{{end}}" aria-hidden="true">{{if .Spark}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 L13.8 9.2 L20 11 L13.8 12.8 L12 19 L10.2 12.8 L4 11 L10.2 9.2 Z"/><path d="M19 3.5 V6.5 M17.5 5 H20.5"/></svg>{{else}}{{.Text}}{{end}}</span>{{end}}
+{{define "prof-avatar"}}<span class="prof-avatar{{if .Company}} is-company{{end}}{{if .Image}} has-pic{{end}}" aria-hidden="true">{{if .Image}}<img class="prof-pic" src="{{.Image}}" srcset="{{.Image}} 1x, {{.Image2x}} 3x" alt="" width="160" height="160">{{else if .Spark}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 L13.8 9.2 L20 11 L13.8 12.8 L12 19 L10.2 12.8 L4 11 L10.2 9.2 Z"/><path d="M19 3.5 V6.5 M17.5 5 H20.5"/></svg>{{else}}{{.Text}}{{end}}</span>{{end}}
 
 {{/* A repository card for the Pinned grid. */}}
 {{define "prof-repo-card"}}
 <a class="repo-card prof-card" href="/{{.FullName}}">
   <span class="row-between"><span class="repo-card-name">{{.Name}}</span>{{if .Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}</span>
   <span class="small text-2 prof-card-desc">{{if .Description}}{{.Description}}{{else}}<span class="muted">No description</span>{{end}}</span>
-  <span class="small muted">Updated {{ago .UpdatedAt}}</span>
+  <span class="small muted row gap-sm wrap-gap">{{repoLang .ID}}<span>Updated {{ago .UpdatedAt}}</span></span>
 </a>
 {{end}}

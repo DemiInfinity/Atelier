@@ -1,4 +1,4 @@
-{{define "head"}}<link rel="stylesheet" href="/static/profiles.css"><script src="/static/profiles.js" defer></script>{{end}}
+{{define "head"}}<link rel="stylesheet" href="/static/profiles.css"><script src="/static/profiles.js" defer></script><link rel="stylesheet" href="/static/accounts.css">{{end}}
 {{define "content"}}
 {{$v := .Data}}{{$o := $v.Account}}
 <main class="wrap layout-2 {{if $o.IsCompany}}prof-company{{end}}">
@@ -8,7 +8,7 @@
       <h2 class="eyebrow">Editing</h2>
       {{range $v.Accounts}}
       <a href="/settings/profile?account={{.Name}}" class="account {{if eq .ID $o.ID}}is-active{{end}}" {{if eq .ID $o.ID}}aria-current="page"{{end}}>
-        <span class="account-chip {{if .IsCompany}}is-company{{end}}" aria-hidden="true">{{.Initial}}</span>
+        {{template "account-chip" .}}
         <span class="account-text"><span>{{.Label}}</span><span class="small muted">{{if .IsCompany}}Company{{else}}Personal{{end}}</span></span>
       </a>
       {{end}}
@@ -74,6 +74,9 @@
       </fieldset>
       <div class="row-end"><button class="btn btn-primary" type="submit">Save profile</button></div>
     </form>
+
+    {{template "prof-picture-section" $v}}
+    {{template "prof-links-section" $v}}
 
     <form method="post" action="/settings/profile/pins" class="card stack" id="pins" aria-labelledby="prof-pins-h" data-prof-pins data-max="{{$v.MaxPins}}">
       <input type="hidden" name="account" value="{{$o.Name}}">

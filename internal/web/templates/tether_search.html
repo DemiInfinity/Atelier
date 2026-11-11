@@ -25,7 +25,7 @@
     {{if $d.Repos}}
     <div class="list-card">
       <div class="list-head">Repositories</div>
-      {{range $d.Repos}}<div class="list-row srch-hit"><a href="/{{.Repo.FullName}}"><strong>{{.Repo.FullName}}</strong></a>{{with .Repo.Description}}<span class="small muted">{{.}}</span>{{end}}</div>{{end}}
+      {{range $d.Repos}}<div class="list-row srch-hit"><a href="/{{.Repo.FullName}}"><strong>{{.Repo.FullName}}</strong></a>{{with repoLang .Repo.ID}}<span class="small muted">{{.}}</span>{{end}}{{with .Repo.Description}}<span class="small muted">{{.}}</span>{{end}}</div>{{end}}
     </div>
     {{end}}
     {{if $d.Items}}
@@ -64,7 +64,7 @@
       <li>
         <div class="row-between wrap-gap">
           <span class="row gap-sm min0">{{template "tether-person" .Person}}<span class="slash">/</span><a class="tt-repo" href="{{.URL}}">{{.Name}}</a>{{if .Private}}<span class="pill">Private</span>{{end}}</span>
-          <span class="tt-stars">★ {{.Stars}}{{with .Language}} · {{.}}{{end}}</span>
+          <span class="tt-stars">★ {{.Stars}}{{with .Language}} · {{langDot .}} {{.}}{{end}}</span>
         </div>
         {{with .Desc}}<p class="small">{{.}}</p>{{end}}
         <div class="srch-actions">

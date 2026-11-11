@@ -25,12 +25,23 @@
           <a href="#edit-preview" role="tab" aria-selected="false" id="edit-tab-preview" data-edit-tab="preview" data-preview-url="{{$v.Base}}/edit-preview">Preview</a>
         </div>
         <p class="hint edit-keys" id="edit-keys">Tab indents · Shift+Tab outdents · Esc, then Tab, leaves the editor</p>
+        <div class="edit-lang" data-edit-lang-field hidden>
+          <label for="edit-lang" class="sr-only">Highlight as</label>
+          <select id="edit-lang" class="edit-lang-select" data-edit-lang>
+            <option value="">Auto{{with codeLang $f.Path nil}} ({{.}}){{end}}</option>
+            {{range editLangs}}<option value="{{.}}">{{.}}</option>{{end}}
+            <option value="text">Plain text</option>
+          </select>
+        </div>
       </div>
       <div class="edit-surface" id="edit-code" role="tabpanel" aria-labelledby="edit-tab-code" data-edit-surface>
         <pre class="edit-gutter" aria-hidden="true" data-edit-gutter></pre>
-        <label for="edit-content" class="sr-only">File contents</label>
-        <textarea id="edit-content" name="content" class="edit-text" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off"
-          aria-describedby="edit-keys" data-edit-text>{{$f.Content}}</textarea>
+        <div class="edit-stack" data-edit-stack data-hl-url="{{$v.Base}}/edit-highlight">
+          <pre class="edit-hl" aria-hidden="true" data-edit-hl><code></code></pre>
+          <label for="edit-content" class="sr-only">File contents</label>
+          <textarea id="edit-content" name="content" class="edit-text" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off"
+            aria-describedby="edit-keys" data-edit-text>{{$f.Content}}</textarea>
+        </div>
       </div>
       <div class="markdown edit-preview" id="edit-preview" role="tabpanel" aria-labelledby="edit-tab-preview" aria-live="polite" hidden data-edit-preview></div>
       {{else}}

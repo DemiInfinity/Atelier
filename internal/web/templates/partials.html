@@ -5,7 +5,7 @@
   <a href="/" class="brand">{{template "logo"}}<span>Atelier</span></a>
   <nav class="topnav" aria-label="Primary">
     <a href="/" {{if eq .Nav "home"}}aria-current="page"{{end}}>Home</a>
-    <a href="/{{.Me.Name}}" {{if eq .Nav "repos"}}aria-current="page"{{end}}>Repositories</a>
+    <a href="/{{.Me.Name}}?tab=repositories" {{if eq .Nav "repos"}}aria-current="page"{{end}}>Repositories</a>
     <a href="/packages" {{if eq .Nav "packages"}}aria-current="page"{{end}}>Packages</a>
     <a href="/projects" {{if eq .Nav "projects"}}aria-current="page"{{end}}>Projects</a>
     <a href="/snippets" {{if eq .Nav "snippets"}}aria-current="page"{{end}}>Snippets</a>
@@ -18,7 +18,7 @@
     <a href="/notifications" class="icon-btn nf-bell" data-nf-bell aria-label="Notifications" {{if eq .Nav "notifications"}}aria-current="page"{{end}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 16 V11 a6 6 0 0 1 12 0 v5 l2 2 H4 Z M10 21 h4"/></svg><span class="nf-bell-count" data-nf-count aria-hidden="true" hidden></span></a>
     <link rel="stylesheet" href="/static/notifications_bell.css"><script src="/static/notifications_bell.js" defer></script>
     <a href="/new"class="icon-btn" aria-label="New repository"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5 V19 M5 12 H19"/></svg></a>
-    <a href="/{{.Me.Name}}" class="avatar" aria-label="Your profile">{{.Me.Initial}}</a>
+    {{template "account-menu" .}}
     <form method="post" action="/signout"><button class="btn btn-ghost btn-sm" type="submit">Sign out</button></form>
   </div>
 </header>
@@ -77,7 +77,7 @@
 
 {{define "lastcommit"}}
 {{if .}}<div class="lastcommit">
-  <span class="avatar avatar-sm" aria-hidden="true">{{initial .Author}}</span>
+  {{commitAvatar .Author .Email}}
   <strong>{{.Author}}</strong>
   <span class="lastcommit-msg">{{.Subject}}</span>
   <span class="mono muted">{{.Short}}</span>

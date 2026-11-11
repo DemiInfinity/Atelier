@@ -58,7 +58,7 @@ Modelled on GitHub's new pull request overview: merge status and next steps sit 
 
 ## MCP
 
-Atelier is an MCP server at `https://<your-domain>/mcp`. Claude, or any other MCP client, can read and manage repos, code, issues, pull requests and Actions. Each token has its own tool scopes, and agentic workflows use the same tools.
+Atelier is an MCP server at `https://<your-domain>/mcp`. Claude, or any other MCP client, can read and manage repos, code, issues, pull requests, projects and Actions. Each token has its own tool scopes, and agentic workflows use the same tools.
 
 ## Apps and bots
 
@@ -261,7 +261,7 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 - Agentic (plain-English) workflows moved to Phase 4, alongside the MCP server they need
 
 **Phase 4: done**
-- MCP server at `/mcp` (24 tools) with MCP tokens and a call log: Settings → MCP
+- MCP server at `/mcp` (32 tools) with MCP tokens and a call log: Settings → MCP
 - Agentic workflows: Markdown files in `.atelier/workflows/` run Claude on your own runners, with an approval gate, a tool allowlist and turn/token/time limits (needs an `ANTHROPIC_API_KEY` secret); templates in `docs/agents/`
 - Tether: connect GitHub, search and feed, popular this week, repo links (home Atelier or GitHub), issue and comment sync, checks for GitHub pull requests, Merge on GitHub, and the opt-in "I use Atelier" badge
 - Apps and bots: GitHub-style signed webhooks, bot accounts (comment, suggest, checks, push-only git access, never merge), an `/api/v3` subset, Review on GitHub through Tether

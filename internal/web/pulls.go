@@ -346,6 +346,7 @@ type pullLineView struct {
 	ID    string
 	Notes []*pullNoteView
 	Form  *pullNoteForm // the no-JS note form, rendered after this line
+	Code  template.HTML // Text, syntax highlighted
 }
 
 type pullFileView struct {
@@ -735,6 +736,7 @@ func pullFileViews(diff *gitrepo.Diff, notes []*pullNoteView, headSHA string, fo
 			}
 			fv.LineViews = append(fv.LineViews, lv)
 		}
+		highlightPullFile(f.Path, fv.LineViews)
 		out[i] = fv
 	}
 	return out

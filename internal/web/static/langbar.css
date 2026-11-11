@@ -1,0 +1,11 @@
+/* The language bar (langbar.go, partials_langs.html). Colours are SVG fill
+   attributes; CSP forbids style attributes. */
+.langbar { display: block; width: 100%; height: 8px; border-radius: 4px; overflow: hidden; }
+.langbar-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; }
+.langbar-legend a { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); text-decoration: none; min-height: 24px; }
+.langbar-legend a:hover .langbar-name, .langbar-legend a:focus-visible .langbar-name { color: var(--text); text-decoration: underline; }
+.langbar-name { font-weight: 600; color: var(--text); }
+.langbar-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (forced-colors: active) {
+  .langbar rect, .lang-dot circle { forced-color-adjust: none; }
+}

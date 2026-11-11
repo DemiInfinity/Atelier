@@ -24,6 +24,9 @@ FROM alpine:3.22 AS runner
 RUN apk add --no-cache git ca-certificates tzdata bash nodejs docker-cli docker-cli-buildx \
  && git config --system safe.directory '*' \
  && mkdir -p /runner
+# Extra trusted CA roots (deploy/ca/*.crt, e.g. a homelab mkcert root).
+COPY deploy/ca/ /usr/local/share/ca-certificates/extra/
+RUN find /usr/local/share/ca-certificates/extra -type f ! -name '*.crt' -delete && update-ca-certificates 2>/dev/null; true
 COPY --from=runner-build /out/atelier-runner /usr/local/bin/atelier-runner
 # The config (with the runner token) and the action cache live in /runner.
 # Job workspaces go to the --work-dir chosen at register time; when jobs use
@@ -45,6 +48,9 @@ RUN apk add --no-cache git git-daemon ca-certificates tzdata \
  && mkdir -p /data /backups \
  && chown atelier:atelier /data /backups
 
+# Extra trusted CA roots (deploy/ca/*.crt), as in the runner image.
+COPY deploy/ca/ /usr/local/share/ca-certificates/extra/
+RUN find /usr/local/share/ca-certificates/extra -type f ! -name '*.crt' -delete && update-ca-certificates 2>/dev/null; true
 COPY --from=build /out/atelier /usr/local/bin/atelier
 
 ENV ATELIER_LISTEN=:3000 \

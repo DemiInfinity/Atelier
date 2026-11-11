@@ -15,6 +15,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 
 	"atelier/internal/gitrepo"
+	"atelier/internal/highlight"
 	"atelier/internal/store"
 )
 
@@ -27,7 +28,16 @@ type page struct {
 	Notice string
 	Me     store.Owner
 	Data   any
+	// Accounts are the ones the viewer may switch between (their own, then
+	// companies), for the top bar's account menu. Filled in by render.
+	Accounts []store.Owner
 }
+
+// templateFuncs lets a feature add template functions without editing
+// loadTemplates: call registerTemplateFuncs from an init() function.
+var templateFuncs []func(a *App) template.FuncMap
+
+func registerTemplateFuncs(f func(a *App) template.FuncMap) { templateFuncs = append(templateFuncs, f) }
 
 // pageNames lists every page template: each templates/*.html file except the
 // layout and partials files is a page named after its file.
@@ -50,7 +60,7 @@ func pageNames() ([]string, []string, error) {
 	return pages, partials, nil
 }
 
-var md = goldmark.New(goldmark.WithExtensions(extension.GFM)) // raw HTML stays escaped (safe default)
+var md = goldmark.New(goldmark.WithExtensions(extension.GFM, highlight.Markdown)) // raw HTML stays escaped (safe default); fenced code is coloured
 
 func (a *App) loadTemplates() error {
 	funcs := template.FuncMap{
@@ -67,6 +77,9 @@ func (a *App) loadTemplates() error {
 		"isMarkdown": isMarkdown,
 		"lines":      codeLines,
 		"diffLines":  diffLines,
+		"highlight":  highlightFile,
+		"codeLang":   codeLang,
+		"editLangs":  editLanguages,
 		"join":       path.Join,
 		"short": func(s string) string {
 			if len(s) > 7 {
@@ -82,6 +95,14 @@ func (a *App) loadTemplates() error {
 			}
 			return strings.ToUpper(s[:1])
 		},
+	}
+	for k, f := range a.langFuncs() { // repoLang, langDot (langbar.go)
+		funcs[k] = f
+	}
+	for _, more := range templateFuncs {
+		for k, f := range more(a) {
+			funcs[k] = f
+		}
 	}
 	a.pages = map[string]*template.Template{}
 	names, partials, err := pageNames()
@@ -102,9 +123,14 @@ func (a *App) loadTemplates() error {
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, name string, p page) {
 	if !p.Bare {
-		if me, err := a.db.PersonalOwner(r.Context()); err == nil {
+		// Me is the signed-in person (the personal owner when nobody is).
+		who := a.actor(r)
+		if me, err := a.db.Person(r.Context(), who.PersonID); who.Kind == ActorOwner && who.PersonID != 0 && err == nil {
+			p.Me = me
+		} else if me, err := a.db.PersonalOwner(r.Context()); err == nil {
 			p.Me = me
 		}
+		p.Accounts = a.switchAccounts(r.Context(), who)
 	}
 	var buf bytes.Buffer
 	if err := a.pages[name].Execute(&buf, p); err != nil {
@@ -205,9 +231,12 @@ func codeLines(data []byte) []codeLine {
 
 type diffLine struct {
 	Class, Text string
+	Code        template.HTML // Text, syntax highlighted (see highlightDiff)
 }
 
-func diffLines(patch string) []diffLine {
+// diffLines splits a unified diff into lines. name is the file for a
+// single-file patch without "diff --git" headers.
+func diffLines(patch string, name ...string) []diffLine {
 	var out []diffLine
 	for _, l := range strings.Split(patch, "\n") {
 		c := ""
@@ -227,5 +256,10 @@ func diffLines(patch string) []diffLine {
 		}
 		out = append(out, diffLine{Class: c, Text: l})
 	}
+	file := ""
+	if len(name) > 0 {
+		file = name[0]
+	}
+	highlightDiff(out, file)
 	return out
 }

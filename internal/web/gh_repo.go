@@ -279,6 +279,9 @@ func (a *App) ghShowTree(w http.ResponseWriter, r *http.Request, g *ghReq, v *gh
 		return strings.ToLower(rows[i].Name) < strings.ToLower(rows[j].Name)
 	})
 	data := map[string]any{"V": v, "Rows": rows}
+	if v.Path == "" {
+		data["Langs"] = a.ghLangBar(ctx, g, v) // langbar.go
+	}
 	// Latest commit touching this folder.
 	if cs, err := g.c.Commits(ctx, v.Full, v.Ref, v.Path, 1, 1); err == nil && len(cs) > 0 {
 		row := a.ghCommitRow(v, cs[0], a.ghBadges(ctx, g, ghCommitLogins(cs)))
@@ -375,11 +378,12 @@ func (a *App) ghBlob(w http.ResponseWriter, r *http.Request, g *ghReq) {
 			data["Binary"] = true
 		default:
 			data["Lines"] = len(codeLines(b))
+			data["Lang"] = codeLang(name, b)
 			if isMarkdown(name) && r.URL.Query().Get("plain") != "1" {
 				data["Markdown"] = a.ghMarkdown(string(b), ghMD{Repo: v.Full, Ref: v.Ref, Dir: path.Dir(v.Path)})
 				data["IsMarkdown"] = true
 			} else {
-				data["Code"] = codeLines(b)
+				data["Code"] = highlightFile(name, b)
 				data["IsMarkdown"] = isMarkdown(name)
 			}
 		}

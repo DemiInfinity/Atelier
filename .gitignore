@@ -20,3 +20,6 @@
 
 # go test -c output
 *.test
+
+# Private CA roots for the Docker images (deploy/ca/README.md)
+/deploy/ca/*.crt

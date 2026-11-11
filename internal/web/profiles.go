@@ -138,6 +138,8 @@ type avatarView struct {
 	Text    string
 	Spark   bool
 	Company bool
+	Image   string // the profile picture's URL (avatars.go), when there is one
+	Image2x string
 }
 
 func profileAvatar(o store.Owner, p store.Profile) avatarView {
@@ -322,6 +324,17 @@ type profileView struct {
 	EmberTotal int
 
 	RepoCountLabel, EmberLabel, ResultLabel string
+
+	Tab      string // "" (overview) or "repositories"
+	AcctTabs acctTabs
+	GitHub   string // the GitHub login this account is linked to
+	GitHubGH string // and its github.com address
+}
+
+// acctTabs is what the account-tabs partial needs.
+type acctTabs struct {
+	Accounts []store.Owner
+	Current  store.Owner
 }
 
 // showProfile renders /{owner}. Called from ownerPage.
@@ -329,8 +342,20 @@ func (a *App) showProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	who := a.actor(r)
 	o, err := a.db.OwnerByName(ctx, r.PathValue("owner"))
+	if ownerNotFound(err) {
+		a.ownerMissing(w, r, r.PathValue("owner"))
+		return
+	}
 	if err != nil {
 		a.fail(w, r, err)
+		return
+	}
+	if o.Name != r.PathValue("owner") { // /ZOE → /zoe: one address per account
+		target := "/" + url.PathEscape(o.Name)
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
 	prof, err := a.db.Profile(ctx, o.ID)
@@ -356,7 +381,7 @@ func (a *App) showProfile(w http.ResponseWriter, r *http.Request) {
 		by = "updated"
 	}
 	v := profileView{
-		Owner: o, Profile: prof, Avatar: profileAvatar(o, prof),
+		Owner: o, Profile: prof, Avatar: a.pictureAvatar(o, prof),
 		CanEdit: a.canEditAccount(ctx, who, o), EditURL: "/settings/profile?account=" + url.QueryEscape(o.Name),
 		Readme: readme, ReadmeRepo: readmeRepo, ReadmeHint: o.Name,
 		Pinned: pins, Fallback: fallback, PinnedIDs: map[int64]bool{},
@@ -375,15 +400,30 @@ func (a *App) showProfile(w http.ResponseWriter, r *http.Request) {
 	v.RepoCountLabel = countLabel(len(readable), "repository", "repositories")
 	v.EmberLabel = countLabel(v.EmberTotal, "commit", "commits")
 	v.ResultLabel = countLabel(len(v.Repos), "result", "results")
-	a.render(w, r, "owner", page{Title: o.Label(), Nav: navFor(who, o), Data: v})
+	if q.Get("tab") == "repositories" {
+		v.Tab = "repositories"
+	}
+	v.AcctTabs = acctTabs{Accounts: a.switchAccounts(ctx, who), Current: o}
+	if gh := a.profileGitHub(ctx, who, o, v.CanEdit); gh != "" {
+		v.GitHub, v.GitHubGH = gh, a.ghWebURL(gh)
+	}
+	a.render(w, r, "owner", page{Title: o.Label(), Nav: a.navFor(ctx, who, o), Data: v})
 }
 
-// navFor highlights "Repositories" in the top bar on your own profile.
-func navFor(who Actor, o store.Owner) string {
-	if who.Kind == ActorOwner && who.PersonID == o.ID {
+// navFor highlights "Repositories" in the top bar on your own profile and on
+// the company accounts you can switch to.
+func (a *App) navFor(ctx context.Context, who Actor, o store.Owner) string {
+	if who.Kind == ActorOwner && (who.PersonID == o.ID || a.canEditAccount(ctx, who, o)) {
 		return "repos"
 	}
 	return ""
+}
+
+// pictureAvatar is profileAvatar plus the account's picture, if it has one.
+func (a *App) pictureAvatar(o store.Owner, p store.Profile) avatarView {
+	v := profileAvatar(o, p)
+	v.Image, v.Image2x = a.avatarURLFor(o.Name, 160), a.avatarURLFor(o.Name, 460)
+	return v
 }
 
 // ---------- edit page ----------
@@ -412,6 +452,21 @@ type profileEditView struct {
 	MaxBio      int
 	ProfileURL  string
 	PinsError   string
+
+	// Picture and links (avatars.go).
+	PictureError    string
+	LinksError      string
+	Picture         store.AccountAvatar
+	HasPicture      bool
+	GitHub          string // the GitHub login the account is linked to
+	GitHubFromLinks bool   // a company's organisation guessed from its linked repositories
+	GitHubOrg       string // a company's explicit organisation (the form field)
+	TetherOn        bool   // the signed-in person has Tether
+	TetherLogin     string
+	SignInGitHub    string // "Continue with GitHub" is locked to this login
+	Emails          []string
+	EmailsText      string
+	AtelierEmail    string
 }
 
 // editAccount works out which account /settings/profile is editing:
@@ -452,7 +507,7 @@ func (a *App) profileEditPage(w http.ResponseWriter, r *http.Request) {
 		Pronouns: prof.Pronouns, AvatarStyle: prof.Avatar,
 	}
 	notice := ""
-	if q := r.URL.Query(); q.Get("saved") != "" || q.Get("pins") != "" {
+	if q := r.URL.Query(); q.Get("saved") != "" || q.Get("pins") != "" || q.Get("picture") != "" {
 		notice = "1"
 	}
 	a.renderProfileEdit(w, r, o, prof, v, "", notice, nil)
@@ -499,8 +554,9 @@ func (a *App) renderProfileEdit(w http.ResponseWriter, r *http.Request, o store.
 	v.ProfileURL = "/" + o.Name
 	shown := prof
 	shown.Avatar = v.AvatarStyle
-	v.Avatar = profileAvatar(o, shown)
-	if errMsg != "" || v.PinsError != "" {
+	v.Avatar = a.pictureAvatar(o, shown)
+	a.fillPictureAndLinks(ctx, who, o, &v)
+	if errMsg != "" || v.PinsError != "" || v.PictureError != "" || v.LinksError != "" {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 	}
 	a.render(w, r, "profiles_edit", page{Title: "Profile · " + o.Label(), Nav: "tokens", Error: errMsg, Notice: notice, Data: v})

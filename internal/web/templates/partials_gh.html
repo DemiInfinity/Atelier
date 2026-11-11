@@ -118,7 +118,7 @@
     <span class="small row gap-sm"><span class="gh-add">+{{.Add}}</span><span class="gh-del">−{{.Del}}</span>{{if .URL}}<a class="btn btn-xs btn-ghost" href="{{.URL}}">View file</a>{{end}}</span>
   </div>
   {{if .NoPatch}}<p class="small muted gh-nopatch">{{if eq .Status "renamed"}}File renamed without changes.{{else}}No text diff (binary or too large).{{end}}</p>
-  {{else}}<div class="table-scroll"><pre class="diff"><code>{{range diffLines .Patch}}<span class="dl {{.Class}}">{{.Text}}</span>
+  {{else}}<div class="table-scroll"><pre class="diff"><code>{{range diffLines .Patch .Name}}<span class="dl {{.Class}}">{{.Code}}</span>
 {{end}}</code></pre></div>{{end}}
 </section>
 {{else}}

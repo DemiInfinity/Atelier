@@ -938,3 +938,7 @@ table { border-collapse: collapse; width: 100%; }
 
 /* things that arrived from GitHub / Gitea (imports, later Tether) */
 .pill-tether { background: #172331; border-color: #2f5677; color: #9fd0ff; }
+
+/* Primary language in repository lists (langbar.go; the bar itself is in langbar.css). */
+.lang-tag { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.lang-dot { flex: none; display: inline-block; vertical-align: -1px; }

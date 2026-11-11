@@ -16,7 +16,7 @@
         {{if $d.Avatar}}<img class="tt-avatar tt-avatar-lg" src="{{$d.Avatar}}" alt="" width="40" height="40" referrerpolicy="no-referrer">{{end}}
         <div class="grow min0">
           <h2 class="h-sm" id="tt-linked">Linked to <a href="{{$d.Profile}}" rel="noopener noreferrer" target="_blank">{{.Login}}</a>{{if .Name}} <span class="muted">({{.Name}})</span>{{end}}</h2>
-          <p class="small">{{if eq .Method "oauth"}}Through the GitHub app{{else}}With a personal access token{{end}}{{if .Scopes}} · scopes: {{.Scopes}}{{end}}{{if .PrivateMirror}} · private mirroring on{{end}} · linked {{ago .CreatedAt}}</p>
+          <p class="small"><strong>Main token</strong> · {{if eq .Method "oauth"}}Through the GitHub app{{else}}With a personal access token{{end}}{{if .Scopes}} · scopes: {{.Scopes}}{{end}}{{if .PrivateMirror}} · private mirroring on{{end}} · linked {{ago .CreatedAt}}</p>
         </div>
         <form method="post" action="/settings/tether/disconnect"><button class="btn btn-danger btn-sm" type="submit">Disconnect</button></form>
       </div>
@@ -26,16 +26,71 @@
         {{with .LastError}}<dt>Last problem</dt><dd class="tt-error">{{.}}</dd>{{end}}
         {{with $d.KeyProblem}}<dt>Token</dt><dd class="tt-error">{{.}}</dd>{{end}}
       </dl>
-      <p class="hint">The token is encrypted on this server and only sent to GitHub. Disconnecting deletes it and everything Tether cached for you; linked repositories stay linked but pause until you connect again.</p>
+      <p class="hint">The main token serves search, your feed, profiles and badges, and any GitHub owner no other token covers. It is encrypted on this server and only sent to GitHub. Disconnecting deletes it{{if $d.Tokens}}, every other token below{{end}} and everything Tether cached for you; linked repositories stay linked but pause until you connect again.</p>
+    </section>
+
+    <section class="tt-card stack" aria-labelledby="tt-tokens">
+      <div>
+        <h2 class="h-sm" id="tt-tokens">More tokens</h2>
+        <p class="small">A fine-grained token covers one GitHub owner. Add one for each organisation (or other account) whose repositories you link; Tether uses it for those owners and your main token for the rest.</p>
+      </div>
+      {{range $d.Tokens}}
+      <div class="tt-token-row stack-sm">
+        <div class="row-between wrap-gap">
+          <div class="min0">
+            <strong>{{.Name}}</strong>
+            <p class="small">{{if .Profile}}<a href="{{.Profile}}" rel="noopener noreferrer" target="_blank">{{.T.Login}}</a>{{else}}{{.T.Login}}{{end}}{{if .T.Scopes}} · scopes: {{.T.Scopes}}{{end}} · added {{ago .T.CreatedAt}}</p>
+          </div>
+          <form method="post" action="/settings/tether/tokens/{{.T.ID}}/delete"><button class="btn btn-danger btn-sm" type="submit" aria-label="Disconnect {{.Name}}">Disconnect</button></form>
+        </div>
+        <dl class="tt-dl small">
+          <dt>Covers</dt><dd>{{.Owners}}</dd>
+          <dt>Rate limit</dt><dd>{{if .Rate}}{{.Rate}}{{with .RateReset}}, {{.}}{{end}}{{else}}Not known yet{{end}}</dd>
+          {{with .Blocked}}<dt>Status</dt><dd>{{.}}</dd>{{end}}
+          {{with .T.LastError}}<dt>Last problem</dt><dd class="tt-error">{{.}}</dd>{{end}}
+          {{with .Problem}}<dt>Token</dt><dd class="tt-error">{{.}}</dd>{{end}}
+        </dl>
+        <form method="post" action="/settings/tether/tokens/{{.T.ID}}/owners" class="row gap-sm wrap-gap">
+          <label class="small" for="tt-owners-{{.T.ID}}">Owners it covers</label>
+          <input id="tt-owners-{{.T.ID}}" name="owners" value="{{.Owners}}" required maxlength="400" autocomplete="off" spellcheck="false">
+          <button class="btn btn-sm" type="submit">Save</button>
+        </form>
+      </div>
+      {{end}}
+      <details{{if not $d.Tokens}} open{{end}}>
+        <summary class="small">Add another token</summary>
+        <form method="post" action="/settings/tether/tokens" class="stack-sm">
+          <div class="field">
+            <label for="tt-extra-label">Label <span class="muted">(optional)</span></label>
+            <input id="tt-extra-label" name="label" maxlength="80" autocomplete="off" placeholder="Elyndra Studios">
+          </div>
+          <div class="field">
+            <label for="tt-extra-token">Token</label>
+            <input id="tt-extra-token" name="token" type="password" class="tt-token" required maxlength="255" autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-describedby="tt-extra-token-hint">
+            <p class="hint" id="tt-extra-token-hint">Checked with GitHub, then stored encrypted. Atelier never shows it again.</p>
+          </div>
+          <div class="field">
+            <label for="tt-extra-owners">GitHub owners it covers <span class="muted">(optional)</span></label>
+            <input id="tt-extra-owners" name="owners" maxlength="400" autocomplete="off" spellcheck="false" placeholder="Elyndra-Studios" aria-describedby="tt-extra-owners-hint">
+            <p class="hint" id="tt-extra-owners-hint">Users or organisations, separated by commas. Leave empty to use the owners whose repositories the token can see.</p>
+          </div>
+          <div class="row-end"><button class="btn btn-tether" type="submit">Add token</button></div>
+        </form>
+      </details>
     </section>
 
     <section class="tt-card stack-sm" aria-labelledby="tt-badge">
       <h2 class="h-sm" id="tt-badge">“I use Atelier” badge</h2>
       <p class="small">Adds a small <code>.atelier</code> file to your GitHub profile repository ({{$d.ProfileRepo}}), so other Atelier people see an amber mark next to you and a link to your studio. Off by default.</p>
-      <form method="post" action="/settings/tether/badge" class="row gap-sm">
-        {{if .Badge}}<input type="hidden" name="on" value="0"><span class="small">The badge is on.</span><button class="btn btn-sm" type="submit">Remove the badge</button>
+      <form method="post" action="/settings/tether/badge" class="row gap-sm wrap-gap">
+        {{if .Badge}}<input type="hidden" name="on" value="0"><span class="small">{{with $d.BadgeStatus}}{{.}}{{else}}The badge is on.{{end}}</span><button class="btn btn-sm" type="submit">Remove the badge</button>
         {{else}}<input type="hidden" name="on" value="1"><button class="btn btn-tether btn-sm" type="submit">Add the badge</button>{{end}}
       </form>
+      {{if and .Badge $d.BadgeStale}}
+      <form method="post" action="/settings/tether/badge" class="row gap-sm wrap-gap">
+        <input type="hidden" name="on" value="1"><span class="small">Your studio address has changed since the badge was written.</span><button class="btn btn-sm" type="submit">Update the badge</button>
+      </form>
+      {{end}}
     </section>
     {{else}}
     <section class="tt-card stack" aria-labelledby="tt-connect">

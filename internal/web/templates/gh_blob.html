@@ -22,7 +22,7 @@
     <div class="list-head row-between wrap-gap">
       <div class="row gap-sm min0">
         <h1 class="h-sm mono gh-file-name">{{$d.Name}}</h1>
-        <span class="small muted nowrap">{{bytes $d.Size}}{{with $d.Lines}} · {{.}} lines{{end}}</span>
+        <span class="small muted nowrap">{{with $d.Lang}}<span class="hl-lang">{{.}}</span> · {{end}}{{with $d.Lines}}{{.}} lines · {{end}}{{bytes $d.Size}}</span>
       </div>
       <div class="row gap-sm">
         {{if $d.IsMarkdown}}
@@ -45,11 +45,12 @@
     {{else if $d.Markdown}}
       <div class="markdown gh-markdown">{{$d.Markdown}}</div>
     {{else}}
+      {{with $d.Code.Note}}<p class="hl-note small muted">{{.}}</p>{{end}}
       <div class="table-scroll">
         <table class="code">
           <caption class="sr-only">Contents of {{$d.Name}}</caption>
           <tbody>
-          {{range $d.Code}}<tr id="L{{.N}}"><td class="ln"><a href="#L{{.N}}">{{.N}}</a></td><td class="lc">{{.Text}}</td></tr>
+          {{range $d.Code.Lines}}<tr id="L{{.N}}"><td class="ln"><a href="#L{{.N}}">{{.N}}</a></td><td class="lc">{{.HTML}}</td></tr>
           {{end}}
           </tbody>
         </table>

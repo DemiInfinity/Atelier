@@ -116,7 +116,7 @@ git push</code></pre>
     <div class="pr-timeline stack">
       <article class="pr-comment">
         <header class="pr-comment-head small">
-          <span class="avatar avatar-sm" aria-hidden="true">{{initial $p.AuthorName}}</span>
+          {{personAvatar $p.AuthorName}}
           <strong>{{$p.AuthorName}}</strong>{{template "pulls-actor" (actorKind $p.AuthorKind $p.AuthorName)}}
           <span class="muted">opened this <time datetime="{{$p.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $p.CreatedAt}}">{{ago $p.CreatedAt}}</time></span>
         </header>
@@ -132,7 +132,7 @@ git push</code></pre>
       {{else if eq .Kind "comment"}}
       <article class="pr-comment" id="comment-{{.Comment.ID}}">
         <header class="pr-comment-head small">
-          <span class="avatar avatar-sm" aria-hidden="true">{{initial .Comment.AuthorName}}</span>
+          {{personAvatar .Comment.AuthorName}}
           <strong>{{.Comment.AuthorName}}</strong>{{template "pulls-actor" (actorKind .Comment.AuthorKind .Comment.AuthorName)}}
           <span class="muted">commented <time datetime="{{.Comment.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .Comment.CreatedAt}}">{{ago .Comment.CreatedAt}}</time></span>
         </header>

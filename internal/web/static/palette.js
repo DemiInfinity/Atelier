@@ -166,7 +166,13 @@
       opt.setAttribute("role", "option");
       opt.setAttribute("aria-selected", "false");
       opt.setAttribute("data-i", i);
-      opt.appendChild(el("span", "pal-glyph", GLYPHS[it.kind] || "•")).setAttribute("aria-hidden", "true");
+      var glyph = opt.appendChild(el("span", "pal-glyph", it.avatar ? "" : (GLYPHS[it.kind] || "•")));
+      glyph.setAttribute("aria-hidden", "true");
+      if (it.avatar && it.avatar.indexOf("/-/avatar/") === 0) {
+        var pic = document.createElement("img");
+        pic.src = it.avatar; pic.alt = ""; pic.width = 18; pic.height = 18; pic.className = "pal-pic";
+        glyph.appendChild(pic);
+      }
       opt.appendChild(el("span", "pal-title", it.title));
       if (it.hint) opt.appendChild(el("span", "pal-hint", it.hint));
       box.appendChild(opt);

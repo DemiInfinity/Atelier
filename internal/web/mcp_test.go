@@ -160,8 +160,8 @@ func TestMCPToolsListAndRead(t *testing.T) {
 			t.Errorf("tools/list is missing %s", tl.Name)
 		}
 	}
-	if len(names) != 24 {
-		t.Errorf("got %d tools, want 24", len(names))
+	if len(names) != 32 {
+		t.Errorf("got %d tools, want 32", len(names))
 	}
 
 	// Input schemas are strict.

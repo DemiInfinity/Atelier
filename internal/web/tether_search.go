@@ -274,7 +274,7 @@ func (a *App) tetherMirrorToStudio(w http.ResponseWriter, r *http.Request) {
 		fail("That isn't a GitHub repository.")
 		return
 	}
-	c, _, err := a.tetherClient(ctx, who.PersonID)
+	c, _, err := a.tetherLinkClient(ctx, who.PersonID, full)
 	if err != nil {
 		fail(tetherErrText(err))
 		return
@@ -305,7 +305,7 @@ func (a *App) tetherMirrorToStudio(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings/import", http.StatusSeeOther)
 		return
 	}
-	tok, err := a.db.TetherToken(ctx, a.secretSealer(), who.PersonID)
+	tok, err := a.tetherLinkToken(ctx, who.PersonID, full)
 	if err != nil {
 		fail(tetherErrText(err))
 		return

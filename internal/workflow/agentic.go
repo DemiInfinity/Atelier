@@ -63,7 +63,24 @@ var AgentTools = []string{
 	"issues.list", "issues.get", "issues.create", "issues.comment", "issues.close", "issues.label",
 	"pulls.list", "pulls.get", "pulls.diff", "pulls.comment", "pulls.note",
 	"actions.runs", "actions.logs", "actions.dispatch", "releases.list", "releases.draft", "notifications.list",
+	"projects.list", "projects.get", "projects.items", "projects.add_item", "projects.add_draft", "projects.set_field",
+	"projects.move_item", "projects.remove_item",
 }
+
+// agentWriteTools are the AgentTools that change something. Each tool list is
+// approved by the owner as a whole (ToolsKey), so adding any of these to a
+// workflow makes its next run wait; AgentToolWrites lets the approval prompt
+// and the MCP server agree on which tools write. The projects tools only
+// reach projects that link the job's repository.
+var agentWriteTools = map[string]bool{
+	"issues.create": true, "issues.comment": true, "issues.close": true, "issues.label": true,
+	"pulls.comment": true, "pulls.note": true, "actions.dispatch": true, "releases.draft": true,
+	"projects.add_item": true, "projects.add_draft": true, "projects.set_field": true,
+	"projects.move_item": true, "projects.remove_item": true,
+}
+
+// AgentToolWrites reports whether an agent tool changes something.
+func AgentToolWrites(name string) bool { return agentWriteTools[name] }
 
 // agentForbiddenTools exist on the MCP server but are never given to agents.
 var agentForbiddenTools = map[string]string{

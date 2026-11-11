@@ -99,7 +99,7 @@
         {{range $d.Authors}}
         <li class="card ins-person">
           <div class="ins-person-head">
-            <span class="avatar avatar-sm" aria-hidden="true">{{initial .Name}}</span>
+            {{commitAvatar .Name .Email}}
             <div class="min0 grow"><strong class="ellipsis">{{.Name}}</strong><span class="small muted ellipsis">{{.Email}}</span></div>
             <span class="ins-rank muted">#{{.Rank}}</span>
           </div>

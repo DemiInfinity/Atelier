@@ -98,6 +98,7 @@ git push -u origin {{$v.Default}}</code></pre>
       {{else}}<p class="muted">No description. <a href="{{$v.Base}}/settings">Add one in settings</a>.</p>{{end}}
       <p class="small muted">{{if $v.Repo.Private}}Private{{else}}Public{{end}} · created {{date $v.Repo.CreatedAt}}</p>
     </section>
+    {{template "lang-bar" $d.Langs}}
     <section class="card card-tether stack-sm" data-tether-card data-src="{{$v.Base}}/tether/status">
       <div class="row gap-sm">
         {{template "tether-icon" 20}}

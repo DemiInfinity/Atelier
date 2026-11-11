@@ -55,7 +55,7 @@
   <p class="small">{{if .Paths}}{{range $i, $p := .Paths}}{{if $i}}, {{end}}<span class="mono">{{$p}}</span>{{end}} changed{{else}}The branch moved{{end}} after you opened the editor{{with .Last}}: <span class="mono">{{short .Hash}}</span> “{{.Subject}}” by {{.Author}}, {{ago .When}}{{end}}. Nothing was committed, and nothing was overwritten.</p>
   <p class="small">Your changes are still below. To keep both: copy your edit, open the latest version{{with .URL}} (<a href="{{.}}">history</a>){{end}} and reapply it there. Or choose <strong>Create a new branch</strong> and commit: the pull request shows both versions and lets you merge them.</p>
   {{with .Diff}}<details class="edit-diff" open><summary class="small">What changed on {{$.Branch}}</summary>
-    <div class="table-scroll"><pre class="diff"><code>{{range diffLines .}}<span class="dl {{.Class}}">{{.Text}}</span>
+    <div class="table-scroll"><pre class="diff"><code>{{range diffLines .}}<span class="dl {{.Class}}">{{.Code}}</span>
 {{end}}</code></pre></div></details>{{end}}
 </section>
 {{end}}

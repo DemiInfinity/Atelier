@@ -1,0 +1,75 @@
+/* Accounts: the top bar's account menu, account tabs on profiles, the
+   not-found page's suggestions, and profile pictures wherever an initial used
+   to be (avatars.go). Loaded by the top bar on every page. */
+
+/* ---------- pictures in place of initials ---------- */
+
+/* A company's chip (is-org mirrors .account-chip.is-company in atelier.css). */
+.account-chip.is-org { background: var(--violet-chip); color: var(--violet); }
+
+img.avatar.avatar-pic { padding: 0; object-fit: cover; background: var(--raised); }
+.account-chip img, .acct-summary img, .prof-avatar img, .pal-glyph img {
+  display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit;
+}
+.account-chip:has(img) { background: var(--raised); overflow: hidden; }
+.prof-avatar.has-pic { overflow: hidden; background: var(--raised); }
+.pal-glyph:has(img) { overflow: hidden; padding: 0; }
+.avatar-wrap { display: inline-flex; }
+.avatar-wrap + .avatar-wrap { margin-left: -4px; }
+
+/* ---------- top bar: account menu ---------- */
+
+.acct-menu { position: relative; }
+.acct-summary { list-style: none; cursor: pointer; overflow: hidden; }
+.acct-summary::-webkit-details-marker { display: none; }
+.acct-summary:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.acct-menu[open] > .acct-summary { filter: brightness(1.15); }
+.acct-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 60;
+  width: min(280px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px; border-radius: var(--r-lg);
+  background: var(--surface); border: 1px solid var(--border-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+.acct-pop-head { padding: 4px 10px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.acct-row { min-height: 44px; }
+.acct-row .account-text { flex: 1; }
+
+/* ---------- account tabs on a profile ---------- */
+
+.acct-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.acct-tabs-label { margin-right: 2px; }
+.acct-tabs-sep { color: var(--muted); }
+.acct-tab {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px;
+  padding: 3px 12px 3px 4px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-2); background: var(--surface);
+}
+.acct-tab:hover { text-decoration: none; border-color: var(--border-strong); color: var(--text); }
+.acct-tab.is-active { border-color: var(--amber); color: var(--text); background: var(--raised); }
+.acct-tab .account-chip { width: 26px; height: 26px; font-size: 12px; border-radius: 50%; }
+.acct-tab .account-chip.is-org { border-radius: 7px; }
+.acct-tab:has(.is-org).is-active { border-color: var(--violet); }
+
+/* ---------- profile: GitHub link ---------- */
+
+.prof-gh { align-items: flex-start; }
+.prof-gh svg { color: var(--tether); }
+.prof-gh-text { min-width: 0; overflow-wrap: anywhere; }
+.prof-gh-out, .prof-gh-in { color: var(--tether-2); }
+.prof-links { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.prof-links dt { color: var(--muted); }
+.prof-links dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.prof-pic-actions form { margin: 0; }
+
+/* ---------- /gh/<you> ---------- */
+
+.gh-self { padding: 8px 12px; border-radius: var(--r); border: 1px solid var(--tether-border); background: var(--tether-surface); }
+.gh-self a { color: var(--amber); }
+
+/* ---------- not found: did you mean ---------- */
+
+.acct-missing { max-width: 520px; text-align: left; }
+.acct-missing-list { display: flex; flex-direction: column; gap: 4px; list-style: none; padding: 0; margin: 0; }
+.acct-gh { color: var(--tether-2); overflow-wrap: anywhere; }

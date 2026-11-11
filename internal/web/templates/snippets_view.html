@@ -44,7 +44,7 @@
     <div class="list-head row-between wrap-gap">
       <div class="row gap-sm min0">
         <h2 class="h-sm mono snip-view-name"><a href="#{{.Anchor}}">{{.Name}}</a></h2>
-        <span class="small muted nowrap">{{bytes .Blob.Size}}{{if and (not .Blob.Binary) (not .Blob.TooLarge)}} · {{len (lines .Blob.Data)}} lines{{end}}</span>
+        <span class="small muted nowrap">{{if and (not .Blob.Binary) (not .Blob.TooLarge)}}{{with codeLang .Name .Blob.Data}}<span class="hl-lang">{{.}}</span> · {{end}}{{len (lines .Blob.Data)}} lines · {{end}}{{bytes .Blob.Size}}</span>
       </div>
       <a class="btn btn-sm" href="{{.RawURL}}">Raw</a>
     </div>
@@ -55,11 +55,12 @@
     {{else if .Markdown}}
       <div class="markdown">{{markdown .Blob.Data}}</div>
     {{else}}
+      {{$h := highlight .Name .Blob.Data}}{{with $h.Note}}<p class="hl-note small muted">{{.}}</p>{{end}}
       <div class="table-scroll">
         <table class="code">
           <caption class="sr-only">Contents of {{.Name}}</caption>
           <tbody>
-          {{$a := .Anchor}}{{range lines .Blob.Data}}<tr id="{{$a}}-L{{.N}}"><td class="ln"><a href="#{{$a}}-L{{.N}}">{{.N}}</a></td><td class="lc">{{.Text}}</td></tr>
+          {{$a := .Anchor}}{{range $h.Lines}}<tr id="{{$a}}-L{{.N}}"><td class="ln"><a href="#{{$a}}-L{{.N}}">{{.N}}</a></td><td class="lc">{{.HTML}}</td></tr>
           {{end}}
           </tbody>
         </table>

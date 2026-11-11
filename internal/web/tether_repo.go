@@ -65,6 +65,11 @@ func (a *App) renderTetherRepo(w http.ResponseWriter, r *http.Request, v *repoVi
 		d["GHURL"] = a.tetherWebURL(l.GHRepo)
 		d["ProtectURL"] = a.tetherWebURL(l.GHRepo + "/settings/branches")
 		d["OtherPerson"] = l.PersonID != who.PersonID
+		if l.PersonID == who.PersonID {
+			if t, err := a.db.TetherTokenForOwner(ctx, who.PersonID, tetherOwnerOf(l.GHRepo)); err == nil {
+				d["TokenLabel"] = tetherTokenName(t)
+			}
+		}
 	}
 	if code != http.StatusOK {
 		w.WriteHeader(code)
@@ -118,11 +123,18 @@ func (a *App) tetherRepoLink(w http.ResponseWriter, r *http.Request) {
 		a.renderTetherRepo(w, r, v, "Enter the GitHub repository as owner/name.", http.StatusUnprocessableEntity)
 		return
 	}
-	c, acc, err := a.tetherClient(ctx, who.PersonID)
+	// The token that covers the GitHub owner, or the main token.
+	owner := tetherOwnerOf(gh)
+	pick, acc, err := a.tetherTokenFor(ctx, who.PersonID, owner)
 	if err != nil {
 		a.renderTetherRepo(w, r, v, tetherErrText(err), http.StatusUnprocessableEntity)
 		return
 	}
+	c := a.tetherClientWith(ctx, who.PersonID, pick)
+	// Only the main token is left and the owner isn't its account: when
+	// GitHub refuses, say plainly that a token for that owner is missing.
+	uncovered := pick.Extra == nil && !strings.EqualFold(owner, acc.Login)
+	noToken := "No token covers " + owner + ". Add one in Settings → Tether."
 	rp, err := c.Repo(ctx, gh)
 	if tether.IsStatus(err, http.StatusNotFound) && r.FormValue("create") != "" {
 		owner, name, _ := strings.Cut(gh, "/")
@@ -133,10 +145,19 @@ func (a *App) tetherRepoLink(w http.ResponseWriter, r *http.Request) {
 		rp, err = c.CreateRepo(ctx, name, eventExcerpt(v.Repo.Description, 300), true)
 	}
 	if err != nil {
+		if uncovered && (tether.IsStatus(err, http.StatusNotFound) || tether.IsStatus(err, http.StatusForbidden) ||
+			tether.IsStatus(err, http.StatusUnauthorized)) {
+			a.renderTetherRepo(w, r, v, noToken, http.StatusUnprocessableEntity)
+			return
+		}
 		a.renderTetherRepo(w, r, v, "Couldn't use "+gh+": "+tetherErrText(err), http.StatusUnprocessableEntity)
 		return
 	}
 	if rp.Permissions != nil && !rp.Permissions.Push {
+		if uncovered {
+			a.renderTetherRepo(w, r, v, noToken, http.StatusUnprocessableEntity)
+			return
+		}
 		a.renderTetherRepo(w, r, v, "Your token can't push to "+gh+". Give it Contents: read and write on that repository.", http.StatusUnprocessableEntity)
 		return
 	}
@@ -242,7 +263,7 @@ func (a *App) tetherSwitchHome(ctx context.Context, rp store.Repo, home string) 
 	if l.Home == home {
 		return nil
 	}
-	tok, err := a.db.TetherToken(ctx, a.secretSealer(), l.PersonID)
+	tok, err := a.tetherLinkToken(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return errTetherNotConnected
 	}
@@ -321,7 +342,7 @@ func (a *App) tetherReconcile(ctx context.Context, rp store.Repo, keep string) e
 	if err != nil {
 		return err
 	}
-	tok, err := a.db.TetherToken(ctx, a.secretSealer(), l.PersonID)
+	tok, err := a.tetherLinkToken(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return errTetherNotConnected
 	}
@@ -407,7 +428,7 @@ func (a *App) tetherSyncRepo(ctx context.Context, repoID int64, full bool) {
 		_ = a.db.SaveTetherLink(ctx, l)
 		return
 	}
-	c, acc, cerr := a.tetherClient(ctx, l.PersonID)
+	c, acc, cerr := a.tetherLinkClient(ctx, l.PersonID, l.GHRepo)
 	if cerr != nil {
 		l.SyncError = tetherErrText(cerr)
 		_ = a.db.SaveTetherLink(ctx, l)
@@ -421,6 +442,7 @@ func (a *App) tetherSyncRepo(ctx context.Context, repoID int64, full bool) {
 	var pullsErr error
 	if l.Home == store.TetherHomeGitHub || l.SyncIssues {
 		ghPulls, pullsErr = c.OpenPulls(ctx, l.GHRepo)
+		a.tetherNoteToken(ctx, l.PersonID, l.GHRepo, pullsErr)
 	}
 	if l.Home == store.TetherHomeGitHub {
 		heads := map[string]bool{}
@@ -487,7 +509,7 @@ func (a *App) tetherPush(ctx context.Context, rp store.Repo, l *store.TetherLink
 	if len(specs) == 0 {
 		return
 	}
-	tok, err := a.db.TetherToken(ctx, a.secretSealer(), l.PersonID)
+	tok, err := a.tetherLinkToken(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		l.PushError = errTetherNotConnected.Error()
 		return
@@ -537,7 +559,7 @@ func (a *App) tetherFetch(ctx context.Context, rp store.Repo, l *store.TetherLin
 		return
 	}
 	dir := a.git.Path(rp.Owner, rp.Name)
-	tok, err := a.db.TetherToken(ctx, a.secretSealer(), l.PersonID)
+	tok, err := a.tetherLinkToken(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		l.FetchError = errTetherNotConnected.Error()
 		return
@@ -624,7 +646,7 @@ func (a *App) tetherUpdateRefDelete(ctx context.Context, dir, ref, old string) e
 
 // tetherDefaultBranch asks GitHub for the twin's default branch.
 func (a *App) tetherDefaultBranch(ctx context.Context, l *store.TetherLink) (string, error) {
-	c, _, err := a.tetherClient(ctx, l.PersonID)
+	c, _, err := a.tetherLinkClient(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return "", err
 	}

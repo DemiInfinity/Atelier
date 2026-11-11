@@ -47,7 +47,10 @@ type palItem struct {
 	Title string `json:"title"`
 	Hint  string `json:"hint,omitempty"`
 	URL   string `json:"url"`
-	score int
+	// Avatar is an account's picture (avatars.go); the palette draws it in
+	// place of the glyph.
+	Avatar string `json:"avatar,omitempty"`
+	score  int
 }
 
 type palResponse struct {
@@ -403,7 +406,8 @@ func (a *App) palAccounts(ctx context.Context, who Actor, readable []store.Repo,
 		if o.DisplayName != "" && o.DisplayName != o.Name {
 			title = o.DisplayName + " (" + o.Name + ")"
 		}
-		out = append(out, palItem{Kind: "account", Group: "Accounts", Title: title, Hint: hint, URL: "/" + o.Name, score: s})
+		out = append(out, palItem{Kind: "account", Group: "Accounts", Title: title, Hint: hint, URL: "/" + o.Name, score: s,
+			Avatar: a.avatarURLFor(o.Name, 64)})
 	}
 	sortItems(out)
 	return out

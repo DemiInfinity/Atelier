@@ -1,0 +1,12 @@
+{{/* The language bar (langbar.go): pass a *langBar; nil draws nothing. The
+     SVG is decorative; the list is its text equivalent. */}}
+{{define "lang-bar"}}{{with .}}
+<section class="stack-sm langbar-section" aria-labelledby="langbar-h">
+  <link rel="stylesheet" href="/static/langbar.css">
+  <h2 class="h-sm" id="langbar-h">Languages</h2>
+  {{.SVG}}
+  <ul class="langbar-legend" aria-label="{{.Label}}">
+    {{range .Entries}}<li><a href="{{.URL}}"{{if .External}} rel="noopener noreferrer nofollow" target="_blank"{{end}}>{{.Dot}}<span class="langbar-name">{{.Name}}</span> <span class="langbar-pct">{{.Pct}}</span></a></li>{{end}}
+  </ul>
+</section>
+{{end}}{{end}}

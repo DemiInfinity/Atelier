@@ -505,7 +505,7 @@ func TestGHRepoPages(t *testing.T) {
 	mustContain(t, tree, "tree", "guide.md", `href="/gh/dave/rocket/blob/main/docs/guide.md"`)
 
 	blob := f.get(t, "/gh/dave/rocket/blob/main/main.go", 200)
-	mustContain(t, blob, "blob", "main.go", "package main", "&lt;script&gt;alert(1)&lt;/script&gt;", "View on GitHub", "lines")
+	mustContain(t, blob, "blob", "main.go", `<span class="hl-kn">package</span> <span class="hl-nx">main</span>`, "&lt;script&gt;alert(1)&lt;/script&gt;", "View on GitHub", "lines")
 	ghNoXSS(t, blob, "blob")
 	guide := f.get(t, "/gh/dave/rocket/blob/main/docs/guide.md", 200)
 	mustContain(t, guide, "guide", "The guide", url.QueryEscape("https://raw.githubusercontent.com/dave/rocket/main/img/logo.png"))
@@ -561,7 +561,7 @@ func TestGHIssuesAndPulls(t *testing.T) {
 		"feat/&lt;script&gt;alert(4)&lt;/script&gt;")
 	ghNoXSS(t, pull, "pull")
 	files := f.get(t, "/gh/dave/rocket/pull/5/files", 200)
-	mustContain(t, files, "pull files", "thrust.go", "package thrust", `class="dl add"`)
+	mustContain(t, files, "pull files", "thrust.go", `<span class="hl-kn">package</span> <span class="hl-nx">thrust</span>`, `class="dl add"`)
 	ghNoXSS(t, files, "pull files")
 }
 

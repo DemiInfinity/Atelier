@@ -51,6 +51,29 @@
   overflow: auto;
   resize: vertical;
 }
+/* Live highlighting: the textarea's text turns transparent over a <pre> with
+   the same text, coloured (editor.js adds .is-hl; without JS nothing changes). */
+.edit-stack { position: relative; flex: 1; min-width: 0; display: flex; }
+.edit-stack .edit-text { position: relative; z-index: 1; }
+.edit-hl {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 12px 56px 56px 16px; /* extra room so it scrolls as far as the textarea */
+  font: 13px/1.7 var(--font-mono);
+  tab-size: 4;
+  white-space: pre;
+  color: var(--text);
+  overflow: hidden;
+  pointer-events: none;
+  display: none;
+}
+.edit-hl code { font: inherit; background: none; border: 0; padding: 0; }
+.edit-stack.is-hl .edit-hl { display: block; }
+.edit-stack.is-hl .edit-text { color: transparent; caret-color: var(--text); }
+.edit-stack.is-hl .edit-text::selection { color: transparent; background: rgba(242, 184, 92, 0.28); }
+.edit-lang-select { font-size: 12px; padding: 4px 8px; max-width: 180px; }
+.edit-lang[hidden] { display: none; }
 .edit-text:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; border-radius: 0; }
 .edit-tabs a { cursor: pointer; }
 .edit-preview { padding: 20px 24px; min-height: 200px; }

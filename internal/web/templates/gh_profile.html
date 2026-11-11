@@ -15,6 +15,7 @@
           <span class="gh-via">On GitHub · via Tether</span>
         </div>
       </div>
+      {{if $d.Self}}<p class="gh-self small"><strong>This is you.</strong> <a href="/{{$.Me.Name}}">Your Atelier profile</a></p>{{end}}
       {{if $d.Atelier}}
       <section class="gh-atelier stack-sm" aria-label="Atelier">
         <p class="row gap-sm">{{template "gh-badge" $d.Person}}<span class="small">{{$d.Person.Login}} has a studio of their own.</span></p>

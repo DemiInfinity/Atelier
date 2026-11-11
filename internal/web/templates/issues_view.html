@@ -31,7 +31,7 @@
     <div class="col-main stack timeline">
       <article class="tl-comment" id="issue-body">
         <header class="tl-comment-head">
-          <span class="avatar avatar-sm" aria-hidden="true">{{initial $is.AuthorName}}</span>
+          {{personAvatar $is.AuthorName}}
           <strong>{{$is.AuthorName}}</strong> {{template "actor-chip" (actorKind $is.AuthorKind $is.AuthorName)}}
           <span class="muted small">opened <time datetime="{{$is.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $is.CreatedAt}}">{{ago $is.CreatedAt}}</time></span>
           <span class="pill push-right">Author</span>
@@ -53,7 +53,7 @@
       {{if .Comment}}{{$c := .Comment}}
       <article class="tl-comment" id="comment-{{$c.ID}}">
         <header class="tl-comment-head">
-          <span class="avatar avatar-sm" aria-hidden="true">{{initial $c.AuthorName}}</span>
+          {{personAvatar $c.AuthorName}}
           <strong>{{$c.AuthorName}}</strong> {{template "actor-chip" (actorKind $c.AuthorKind $c.AuthorName)}}
           <a class="muted-link small" href="#comment-{{$c.ID}}"><time datetime="{{$c.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $c.CreatedAt}}">{{ago $c.CreatedAt}}</time></a>
           {{if $c.Edited}}<span class="small muted" title="Edited {{datetime $c.UpdatedAt}}">· edited</span>{{end}}
@@ -170,7 +170,7 @@
       <section class="side-section">
         <h2 class="side-title">Participants</h2>
         <div class="side-value row gap-sm wrap-gap">
-          {{range $d.Participants}}<span class="avatar avatar-sm" title="{{.}}" aria-label="{{.}}">{{initial .}}</span>{{end}}
+          {{range $d.Participants}}<span class="avatar-wrap" title="{{.}}" role="img" aria-label="{{.}}">{{personAvatar .}}</span>{{end}}
         </div>
       </section>
     </aside>

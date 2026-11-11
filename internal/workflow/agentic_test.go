@@ -194,3 +194,28 @@ func TestAgentTemplatesParse(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentProjectsTools(t *testing.T) {
+	src := "---\non: push\ntools: [projects.items, projects.set_field, projects.add_item, projects.move_item, projects.list, projects.get, projects.add_draft, projects.remove_item]\n---\nTidy the board."
+	w, spec := ParseAgentic("board.md", []byte(src))
+	if len(w.Errors) > 0 || spec == nil || len(spec.Tools) != 8 {
+		t.Fatalf("errors = %v spec = %+v", w.Errors, spec)
+	}
+	for _, tool := range spec.Tools {
+		if !AgentToolAllowed(tool) {
+			t.Errorf("%s not allowed", tool)
+		}
+	}
+	for tool, want := range map[string]bool{"projects.list": false, "projects.get": false, "projects.items": false,
+		"projects.add_item": true, "projects.add_draft": true, "projects.set_field": true, "projects.move_item": true,
+		"projects.remove_item": true, "issues.get": false, "issues.create": true} {
+		if AgentToolWrites(tool) != want {
+			t.Errorf("AgentToolWrites(%s) = %v", tool, !want)
+		}
+	}
+	// Project settings, fields, links and deletion are never tools.
+	w, _ = ParseAgentic("x.md", []byte("---\non: push\ntools: [projects.delete]\n---\nx"))
+	if len(w.Errors) == 0 {
+		t.Error("projects.delete accepted")
+	}
+}

@@ -1,0 +1,108 @@
+{{/* The top bar's account menu: your picture (or initial), then your personal
+     account and every company you can edit. A <details> element, so it works
+     without JavaScript; static/accounts.js closes it on Escape or an outside
+     click. Pass the page. */}}
+{{define "account-menu"}}
+<link rel="stylesheet" href="/static/accounts.css"><script src="/static/accounts.js" defer></script>
+<details class="acct-menu" data-acct-menu>
+  <summary class="avatar acct-summary" aria-label="Your accounts" title="Your accounts">{{with avatarURL .Me.Name 64}}<img class="acct-pic" src="{{.}}" alt="" width="32" height="32">{{else}}{{.Me.Initial}}{{end}}</summary>
+  <nav class="acct-pop" aria-label="Your accounts">
+    <p class="acct-pop-head small muted">Signed in as <strong class="text-2">{{.Me.Name}}</strong></p>
+    {{range .Accounts}}{{template "account-row" .}}{{else}}{{template "account-row" .Me}}{{end}}
+  </nav>
+</details>
+{{end}}
+
+{{/* One account in a list: picture or initial, name, Personal / Company. Pass a store.Owner. */}}
+{{define "account-row"}}
+<a class="account acct-row" href="/{{.Name}}">
+  {{template "account-chip" .}}
+  <span class="account-text"><span class="ellipsis">{{.Label}}</span><span class="small muted">{{if .IsCompany}}Company{{else}}Personal{{end}}</span></span>
+</a>
+{{end}}
+
+{{/* The square account chip, with the picture when there is one. Pass a store.Owner. */}}
+{{define "account-chip"}}<span class="account-chip {{if .IsCompany}}is-org{{end}}" aria-hidden="true">{{with avatarURL .Name 64}}<img class="acct-pic" src="{{.}}" alt="" width="32" height="32" loading="lazy">{{else}}{{.Initial}}{{end}}</span>{{end}}
+
+{{/* Account tabs on a profile: "Repositories: Personal · Elyndra Studios".
+     Pass a map with .Accounts (store.Owner list) and .Current (the shown account). */}}
+{{define "account-tabs"}}
+{{if gt (len .Accounts) 1}}
+<nav class="acct-tabs" aria-label="Switch account">
+  <span class="acct-tabs-label small muted">Repositories:</span>
+  {{$cur := .Current}}
+  {{range $i, $o := .Accounts}}{{if $i}}<span class="acct-tabs-sep" aria-hidden="true">·</span>{{end}}<a class="acct-tab{{if eq $o.ID $cur.ID}} is-active{{end}}" href="/{{$o.Name}}?tab=repositories" {{if eq $o.ID $cur.ID}}aria-current="page"{{end}}>{{template "account-chip" $o}}<span>{{if $o.IsCompany}}{{$o.Label}}{{else}}Personal{{end}}</span></a>{{end}}
+</nav>
+{{end}}
+{{end}}
+
+{{/* Settings → Profile → Picture. Pass the profileEditView. */}}
+{{define "prof-picture-section"}}{{$o := .Account}}
+<section class="card stack" id="picture" aria-labelledby="prof-pic-h">
+  <div class="row gap-sm prof-edit-head">
+    <div class="prof-avatar-md">{{template "prof-avatar" .Avatar}}</div>
+    <div class="min0">
+      <h2 class="h-sm" id="prof-pic-h">Picture</h2>
+      <p class="small muted">{{if .HasPicture}}{{if eq .Picture.Source "github"}}From GitHub ({{.Picture.SourceLogin}}), saved {{ago .Picture.UpdatedAt}}.{{else}}Uploaded {{ago .Picture.UpdatedAt}}.{{end}} Shown in the top bar, on the profile, and beside comments, pull requests and commits.{{else}}No picture yet, so the {{if $o.IsCompany}}square{{else}}circle{{end}} shows the initial.{{end}}</p>
+    </div>
+  </div>
+  {{if .PictureError}}<div class="flash flash-error" role="alert">{{.PictureError}}</div>{{end}}
+  <form method="post" action="/settings/profile/picture?account={{$o.Name}}" enctype="multipart/form-data" class="stack-sm">
+    <input type="hidden" name="account" value="{{$o.Name}}">
+    <input type="hidden" name="action" value="upload">
+    <div class="field">
+      <label for="prof-pic-file">Upload a picture</label>
+      <input id="prof-pic-file" type="file" name="picture" accept="image/png,image/jpeg,image/webp" required aria-describedby="prof-pic-hint">
+      <p class="hint" id="prof-pic-hint">PNG, JPEG or WebP, up to 5 MB. It's cropped to a square and resized. The file you upload and its metadata (such as location) aren't kept.</p>
+    </div>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Upload picture</button></div>
+  </form>
+  {{if or (and .GitHub .TetherOn) .HasPicture}}
+  <div class="row gap-sm wrap-gap prof-pic-actions">
+    {{if and .GitHub .TetherOn}}
+    <form method="post" action="/settings/profile/picture">
+      <input type="hidden" name="account" value="{{$o.Name}}"><input type="hidden" name="action" value="github">
+      <button class="btn btn-tether" type="submit">{{if and .HasPicture (eq .Picture.Source "github")}}Refresh from GitHub{{else if $o.IsCompany}}Use {{.GitHub}}'s GitHub avatar{{else}}Use my GitHub avatar{{end}}</button>
+    </form>
+    {{end}}
+    {{if .HasPicture}}
+    <form method="post" action="/settings/profile/picture">
+      <input type="hidden" name="account" value="{{$o.Name}}"><input type="hidden" name="action" value="remove">
+      <button class="btn btn-ghost" type="submit">Remove picture</button>
+    </form>
+    {{end}}
+  </div>
+  {{end}}
+  {{if not .TetherOn}}<p class="small muted">Connect GitHub in <a href="/settings/tether">Settings → Tether</a> to use {{if $o.IsCompany}}the organisation's{{else}}your{{end}} GitHub avatar.</p>
+  {{else if not .GitHub}}<p class="small muted">Link this company to its GitHub organisation under Linked accounts to use the organisation's avatar.</p>{{end}}
+</section>
+{{end}}
+
+{{/* Settings → Profile → Linked accounts. Pass the profileEditView. */}}
+{{define "prof-links-section"}}{{$o := .Account}}
+<form method="post" action="/settings/profile/links" class="card stack" id="links" aria-labelledby="prof-links-h">
+  <input type="hidden" name="account" value="{{$o.Name}}">
+  <h2 class="h-sm" id="prof-links-h">Linked accounts</h2>
+  {{if .LinksError}}<div class="flash flash-error" role="alert">{{.LinksError}}</div>{{end}}
+  {{if not $o.IsCompany}}
+  <dl class="prof-links small">
+    <dt>Tether</dt>
+    <dd>{{if .GitHub}}Connected as <a class="prof-gh-in" href="/gh/{{.GitHub}}">{{.GitHub}}</a>{{else}}<span class="muted">Not connected.</span> <a href="/settings/tether">Connect GitHub</a>{{end}}</dd>
+    <dt>Sign-in</dt>
+    <dd>{{if .SignInGitHub}}“Continue with GitHub” signs in as <span class="mono">{{.SignInGitHub}}</span>{{else}}<span class="muted">“Continue with GitHub” isn't set up.</span>{{end}}</dd>
+  </dl>
+  {{else}}
+  <div class="field">
+    <label for="prof-gh-org">GitHub organisation</label>
+    <input id="prof-gh-org" name="github" value="{{.GitHubOrg}}" placeholder="{{if .GitHubFromLinks}}{{.GitHub}}{{else}}e.g. Elyndra-Studios{{end}}" maxlength="39" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="prof-gh-org-hint">
+    <p class="hint" id="prof-gh-org-hint">{{if .GitHubFromLinks}}Leave it empty to keep using <span class="mono">{{.GitHub}}</span>, guessed from this company's Tether-linked repositories. {{end}}It's shown on the profile, its avatar can be used as the picture, and /{{if .GitHub}}{{.GitHub}}{{else}}Org-Name{{end}} finds this company.</p>
+  </div>
+  {{end}}
+  <div class="field">
+    <label for="prof-emails">Commit emails</label>
+    <textarea id="prof-emails" name="emails" rows="3" spellcheck="false" autocapitalize="off" aria-describedby="prof-emails-hint">{{.EmailsText}}</textarea>
+    <p class="hint" id="prof-emails-hint">One per line. Commits by these addresses show this account's picture. <span class="mono">{{.AtelierEmail}}</span>{{if and .GitHub (not $o.IsCompany)}} and GitHub's noreply address for {{.GitHub}}{{end}} already count.</p>
+  </div>
+  <div class="row-end"><button class="btn btn-primary" type="submit">Save links</button></div>
+</form>
+{{end}}

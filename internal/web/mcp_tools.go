@@ -21,7 +21,7 @@ import (
 // The MCP tools. Names are a fixed contract shared with agentic workflows.
 
 var mcpTools = sync.OnceValue(func() []*mcpTool {
-	return []*mcpTool{
+	return append([]*mcpTool{
 		// ----- repositories and code -----
 		mcpDef(mcpTool{Name: "repo.info", Title: "Repository details", Repo: true,
 			Desc: "Get a repository's description, visibility, default branch, branches, tags and open issue / pull request counts."},
@@ -105,7 +105,7 @@ var mcpTools = sync.OnceValue(func() []*mcpTool {
 		mcpDef(mcpTool{Name: "notifications.list", Title: "List notifications", NoJobs: true,
 			Desc: "List your Atelier notifications (newest first): issue and pull request activity, Actions results, releases and more."},
 			mcpNotificationsList),
-	}
+	}, mcpProjectTools()...) // projects (mcp_projects.go)
 })
 
 // ---------- repositories ----------

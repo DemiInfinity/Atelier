@@ -58,7 +58,7 @@
   <div class="grow min0 stack-sm">
     <p class="row gap-sm wrap-gap"><a href="{{.URL}}"><strong>{{.P.Title}}</strong></a>
       {{if .P.Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
-      {{if eq .P.OwnerKind "company"}}<span class="pill pill-violet">{{.P.Owner}}</span>{{else}}<span class="small muted mono">{{.P.Owner}}</span>{{end}}
+      {{with avatarURL .P.Owner 64}}<img class="avatar avatar-sm avatar-pic" src="{{.}}" alt="" width="20" height="20" loading="lazy">{{end}}{{if eq .P.OwnerKind "company"}}<span class="pill pill-violet">{{.P.Owner}}</span>{{else}}<span class="small muted mono">{{.P.Owner}}</span>{{end}}
     </p>
     {{if .P.Description}}<p class="small text-2">{{.P.Description}}</p>{{end}}
     <p class="small muted">{{.P.Items}} {{if eq .P.Items 1}}item{{else}}items{{end}} · Updated {{ago .P.UpdatedAt}}</p>

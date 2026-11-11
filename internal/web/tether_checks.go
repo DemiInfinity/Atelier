@@ -23,7 +23,7 @@ func (a *App) tetherReportStatuses(ctx context.Context, l store.TetherLink) {
 	if err != nil {
 		return
 	}
-	c, _, err := a.tetherClient(ctx, l.PersonID)
+	c, _, err := a.tetherLinkClient(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return
 	}

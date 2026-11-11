@@ -18,7 +18,7 @@
 
 {{define "pulls-note-inner"}}
   <header class="pr-note-head small">
-    <span class="avatar avatar-sm" aria-hidden="true">{{initial .AuthorName}}</span>
+    {{personAvatar .AuthorName}}
     <strong class="text-2">{{.AuthorName}}</strong>{{template "pulls-actor" (actorKind .AuthorKind .AuthorName)}}
     <span class="muted"><time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time></span>
     {{if .Resolved}}<span class="pill pr-pill-ok">Resolved</span>{{end}}
@@ -69,7 +69,7 @@
       {{else if eq .Kind "meta"}}<tr class="pr-l is-meta"><td class="pr-ln" colspan="2"></td><td class="pr-code">{{.Text}}</td></tr>
       {{else}}<tr class="pr-l is-{{.Kind}}" id="{{.ID}}">
         <td class="pr-ln">{{if .Old}}{{.Old}}{{end}}</td><td class="pr-ln">{{if .New}}{{.New}}{{end}}</td>
-        <td class="pr-code">{{if $c.URL}}<a class="pr-note-add" href="{{$c.URL}}/files?path={{$f.Path}}&amp;side={{.Side}}&amp;line={{.Num}}#{{.ID}}" data-path="{{$f.Path}}" data-side="{{.Side}}" data-line="{{.Num}}" aria-label="Add a note on {{if eq .Side "old"}}old{{else}}new{{end}} line {{.Num}} of {{$f.Path}}">+</a>{{end}}<span class="pr-mark" aria-hidden="true">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}-{{else}} {{end}}</span>{{.Text}}</td>
+        <td class="pr-code">{{if $c.URL}}<a class="pr-note-add" href="{{$c.URL}}/files?path={{$f.Path}}&amp;side={{.Side}}&amp;line={{.Num}}#{{.ID}}" data-path="{{$f.Path}}" data-side="{{.Side}}" data-line="{{.Num}}" aria-label="Add a note on {{if eq .Side "old"}}old{{else}}new{{end}} line {{.Num}} of {{$f.Path}}">+</a>{{end}}<span class="pr-mark" aria-hidden="true">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}-{{else}} {{end}}</span>{{.Code}}</td>
       </tr>
       {{if .Notes}}<tr class="pr-notes-row"><td colspan="3"><div class="pr-inline-notes">{{range .Notes}}{{template "pulls-note" .}}{{end}}</div></td></tr>{{end}}
       {{if .Form}}<tr class="pr-notes-row" id="note-form"><td colspan="3">{{template "pulls-note-form" .Form}}</td></tr>{{end}}
@@ -87,7 +87,7 @@
 <ol class="pr-commits">
   {{range .Commits}}<li class="pr-commit">
     <svg class="pr-commit-dot" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2 V8 M12 16 V22"/></svg>
-    <span class="avatar avatar-sm" aria-hidden="true">{{initial .Author}}</span>
+    {{commitAvatar .Author .Email}}
     <a class="pr-commit-subject" href="{{$.Base}}/commit/{{.Hash}}">{{.Subject}}</a>
     <a class="mono small muted-link" href="{{$.Base}}/commit/{{.Hash}}" aria-label="Commit {{.Short}}">{{.Short}}</a>
     <time class="small muted nowrap" datetime="{{.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .When}}">{{ago .When}}</time>

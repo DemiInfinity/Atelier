@@ -152,7 +152,7 @@ func (a *App) tetherSyncPulls(ctx context.Context, c *tether.Client, acc store.T
 		return err
 	}
 	dir := a.git.Path(rp.Owner, rp.Name)
-	tok, err := a.db.TetherToken(ctx, a.secretSealer(), l.PersonID)
+	tok, err := a.tetherLinkToken(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return errTetherNotConnected
 	}
@@ -198,7 +198,7 @@ func (a *App) tetherSyncPulls(ctx context.Context, c *tether.Client, acc store.T
 		}
 		author := Actor{Kind: "bot", Name: tetherAuthor(p.User.Login)}
 		authorKind, authorName := importer.AuthorImport, tetherAuthor(p.User.Login)
-		if sameRepo && strings.EqualFold(p.User.Login, acc.Login) {
+		if sameRepo && a.tetherIsMe(ctx, l.PersonID, acc, p.User.Login) {
 			// Your own pull request from your own repository: no approval gate.
 			if me, err := a.db.Person(ctx, l.PersonID); err == nil {
 				authorKind, authorName = ActorOwner, me.Name
@@ -465,7 +465,7 @@ func (a *App) tetherPostComment(ctx context.Context, rp store.Repo, l store.Teth
 	if who.Kind != ActorOwner {
 		body += "\n\n_(" + who.Name + " via Atelier)_"
 	}
-	c, _, err := a.tetherClient(ctx, l.PersonID)
+	c, _, err := a.tetherLinkClient(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		return err
 	}
@@ -551,7 +551,7 @@ func (a *App) tetherMergeOnGitHub(ctx context.Context, rp store.Repo, p store.Pu
 		unlock()
 		return "", err
 	}
-	c, acc, err := a.tetherClient(ctx, l.PersonID)
+	c, acc, err := a.tetherLinkClient(ctx, l.PersonID, l.GHRepo)
 	if err != nil {
 		unlock()
 		return "", err

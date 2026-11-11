@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"atelier/internal/store"
 	"atelier/internal/tether"
@@ -23,6 +22,9 @@ func tetherSettingsRoutes(a *App, m *http.ServeMux) {
 	m.HandleFunc("GET /settings/tether", a.authed(a.tetherSettingsPage))
 	m.HandleFunc("POST /settings/tether/token", a.authed(a.tetherConnectToken))
 	m.HandleFunc("POST /settings/tether/disconnect", a.authed(a.tetherDisconnect))
+	m.HandleFunc("POST /settings/tether/tokens", a.authed(a.tetherAddTokenPost))
+	m.HandleFunc("POST /settings/tether/tokens/{id}/owners", a.authed(a.tetherTokenOwnersPost))
+	m.HandleFunc("POST /settings/tether/tokens/{id}/delete", a.authed(a.tetherTokenDeletePost))
 	m.HandleFunc("POST /settings/tether/badge", a.authed(a.tetherBadgeToggle))
 	m.HandleFunc("GET /settings/tether/oauth", a.authed(a.tetherOAuthStart))
 	// A subpath of the OAuth app's registered callback, which GitHub accepts.
@@ -59,11 +61,15 @@ func (a *App) renderTetherSettings(w http.ResponseWriter, r *http.Request, errMs
 		d["Avatar"] = tetherAvatar(acc.AvatarURL)
 		d["Profile"] = a.tetherWebURL(acc.Login)
 		d["ProfileRepo"] = acc.Login + "/" + acc.Login
-		if acc.RateRemaining >= 0 && acc.RateLimit > 0 {
-			d["Rate"] = fmt.Sprintf("%d of %d requests left this hour", acc.RateRemaining, acc.RateLimit)
-			if !acc.RateReset.IsZero() && acc.RateReset.After(time.Now()) {
-				d["RateReset"] = "resets at " + acc.RateReset.UTC().Format("15:04") + " UTC"
+		if rate, reset := tetherRateText(acc.RateLimit, acc.RateRemaining, acc.RateReset); rate != "" {
+			d["Rate"] = rate
+			if reset != "" {
+				d["RateReset"] = reset
 			}
+		}
+		d["Tokens"] = a.tetherTokenRows(ctx, who.PersonID)
+		if acc.Badge {
+			d["BadgeStatus"], d["BadgeStale"] = a.tetherBadgeStatus(ctx, who.PersonID, acc.Login)
 		}
 		if c, _, err := a.tetherClient(ctx, who.PersonID); err == nil {
 			if until, blocked := c.BlockedUntil(); blocked {

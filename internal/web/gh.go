@@ -179,11 +179,17 @@ func (g *ghReq) base() ghBase {
 
 // ghWith checks the person has Tether and builds their client. People
 // without a connection get a friendly page; nobody's token is ever used for
-// anyone else (tetherClient reads the signed-in person's own).
+// anyone else (tetherClientFor reads the signed-in person's own). Repository
+// pages (/gh/{owner}/{repo}/…) use the token that covers {owner}; profiles
+// and everything else use the main token.
 func (a *App) ghWith(h ghHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		who := a.actor(r)
-		c, acc, err := a.tetherClient(r.Context(), who.PersonID)
+		owner := ""
+		if r.PathValue("repo") != "" {
+			owner = r.PathValue("owner")
+		}
+		c, acc, err := a.tetherClientFor(r.Context(), who.PersonID, owner)
 		if err != nil {
 			if !errors.Is(err, errTetherNotConnected) {
 				log.Printf("gh: %s", tetherErrText(err))
