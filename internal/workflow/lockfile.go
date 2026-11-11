@@ -111,7 +111,7 @@ func (r ActionRef) Pinned(sha string) string {
 
 // NeedsPin reports whether this reference has to be pinned to a commit.
 func (r ActionRef) NeedsPin() bool {
-	return (r.Kind == UsesRemote || r.Kind == UsesAtelier) && !IsSHA(r.Ref)
+	return (r.Kind == UsesRemote || r.Kind == UsesAtelier) && !IsSHA(r.Ref) && !r.IsBuiltin()
 }
 
 // Lockfile maps "owner/repo@tag" to a full commit sha.

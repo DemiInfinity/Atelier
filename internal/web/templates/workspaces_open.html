@@ -1,0 +1,54 @@
+{{define "head"}}<link rel="stylesheet" href="/static/workspaces.css"><script src="/static/workspaces.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap stack-lg ws-page">
+  <div>
+    <h1 class="display">Open on a device</h1>
+    <p class="muted">The runner on the device clones <span class="mono">{{$v.Repo.FullName}}</span> into its workspaces folder (or fetches, if it's already there), checks out the branch and, if you pick one, opens it with one of that device's own presets.</p>
+  </div>
+  {{template "flash" .}}
+
+  {{with $d.Request}}
+  <section class="card stack-sm ws-status{{if .Failed}} card-danger{{else if .Done}} card-ok{{end}}" role="status" aria-live="polite"
+    data-ws-status="{{$v.Base}}/workspaces/requests/{{.ID}}" {{if .Done}}data-done{{end}}>
+    <h2 class="h-sm"><span data-ws-label>{{.Label}}</span> <span class="muted small">on {{.Device}} · <span class="mono">{{.Branch}}</span>{{if .Preset}} · {{.Preset}}{{end}}</span></h2>
+    <p class="small" data-ws-message>{{.Message}}</p>
+    <p class="small mono ws-path" data-ws-path {{if not .Path}}hidden{{end}}>{{.Path}}</p>
+    <p class="small ws-dirty" data-ws-dirty {{if not .Dirty}}hidden{{end}}>The workspace has uncommitted changes.</p>
+  </section>
+  {{end}}
+
+  <form method="post" action="{{$v.Base}}/workspaces" class="card stack">
+    <div class="field">
+      <label for="ws-branch">Branch</label>
+      <select id="ws-branch" name="branch">
+        {{range $v.Branches}}<option value="{{.}}" {{if eq . $d.Branch}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </div>
+    <fieldset class="field">
+      <legend>Device</legend>
+      {{range $i, $dev := $d.Devices}}
+      <label class="choice">
+        <input type="radio" name="runner" value="{{$dev.ID}}" {{if not $dev.Online}}disabled{{else if eq $i 0}}checked{{end}}>
+        <span><strong><span class="ws-dot {{if $dev.Online}}is-on{{end}}" aria-hidden="true"></span>{{$dev.Name}}</strong>
+          <span class="small muted">{{if $dev.Online}}Online{{else}}Offline · seen {{$dev.Seen}}{{end}}{{if $dev.Root}} · <span class="mono">{{$dev.Root}}</span>{{end}}</span></span>
+      </label>
+      {{else}}
+      <p class="muted">None of your runners has workspaces switched on. On the device, run <span class="mono">atelier-runner workspaces enable</span>, then restart the runner.</p>
+      {{end}}
+    </fieldset>
+    {{if $d.Devices}}
+    <div class="field">
+      <label for="ws-preset">Then</label>
+      <select id="ws-preset" name="preset">
+        <option value="">Just clone or update</option>
+        {{range $d.Devices}}{{$dev := .}}{{range .Presets}}<option value="{{.}}">Open with {{.}} ({{$dev.Name}})</option>{{end}}{{end}}
+      </select>
+      <p class="hint">Presets are the commands set in each device's runner config. Atelier only picks one by name.</p>
+    </div>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Open workspace</button></div>
+    {{end}}
+  </form>
+</main>
+{{end}}

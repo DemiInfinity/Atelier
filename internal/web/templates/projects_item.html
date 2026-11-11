@@ -1,0 +1,72 @@
+{{define "head"}}{{template "proj-head-assets"}}<link rel="stylesheet" href="/static/issues.css">{{if .Data.Card.Labels}}<link rel="stylesheet" href="/{{.Data.Card.Repo}}/labels.css">{{end}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Card}}{{$it := $d.Item}}
+<main class="wrap proj-narrow stack-lg proj-page">
+  {{template "proj-title" $d}}
+  {{template "flash" .}}
+  <p><a class="small muted-link" href="{{$d.Back}}">← Back to the board</a></p>
+
+  <article class="card stack" aria-labelledby="proj-item-h">
+    <p class="small muted row gap-sm">{{template "proj-kind-icon" $c.Kind}}{{if $c.Repo}}<span class="mono">{{$c.Repo}}#{{$c.Number}}</span> · {{end}}{{$c.StateLabel}}</p>
+    <h2 class="h-display-sm" id="proj-item-h">{{if $c.Repo}}<a href="{{$c.URL}}">{{$c.Title}}</a>{{else}}{{$c.Title}}{{end}}</h2>
+    {{if $c.Labels}}<p class="row gap-sm wrap-gap">{{range $c.Labels}}{{template "label-pill" .}}{{end}}</p>{{end}}
+    {{with $d.BodyHTML}}<div class="markdown">{{.}}</div>{{end}}
+    <p class="small muted">Added {{ago $it.CreatedAt}}{{if $it.AddedBy}} by {{$it.AddedBy}}{{end}}.</p>
+  </article>
+
+  <section class="card stack" aria-labelledby="proj-item-fields-h">
+    <h2 class="h-sm" id="proj-item-fields-h">Fields</h2>
+    <dl class="proj-item-fields">
+      {{range $cell := $c.AllCells}}
+      <div class="proj-item-field">
+        <dt>{{$cell.Field.Name}}</dt>
+        <dd>
+          {{if $d.CanWrite}}
+          <form class="proj-inline" method="post" action="{{$c.ItemURL}}/field">
+            <input type="hidden" name="return" value="{{$c.ItemURL}}"><input type="hidden" name="field" value="{{$cell.Field.ID}}">
+            {{template "proj-field-input" $cell}}
+            <button class="btn btn-xs" type="submit" data-proj-js-hide>Save</button>
+          </form>
+          {{else if $cell.Color}}<span class="proj-pill proj-c-{{$cell.Color}}">{{$cell.Display}}</span>
+          {{else if $cell.Display}}{{$cell.Display}}{{else}}<span class="muted">Empty</span>{{end}}
+        </dd>
+      </div>
+      {{end}}
+    </dl>
+  </section>
+
+  {{if and $it.IsDraft $d.CanWrite}}
+  <form class="card stack" method="post" action="{{$c.ItemURL}}/draft" aria-labelledby="proj-draft-h">
+    <h2 class="h-sm" id="proj-draft-h">Draft</h2>
+    <div class="field">
+      <label for="proj-draft-title">Title</label>
+      <input id="proj-draft-title" name="title" value="{{$it.Title}}" required maxlength="256">
+    </div>
+    <div class="field">
+      <label for="proj-draft-body">Body <span class="small muted">(Markdown)</span></label>
+      <textarea id="proj-draft-body" name="body" rows="6">{{$it.Body}}</textarea>
+    </div>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Save draft</button></div>
+  </form>
+
+  <form class="card stack-sm" method="post" action="{{$c.ItemURL}}/convert" aria-labelledby="proj-convert-h">
+    <h2 class="h-sm" id="proj-convert-h">Convert to issue</h2>
+    {{if $d.Repos}}
+    <p class="small muted">Opens an issue with this title and body. The card keeps its place and fields.</p>
+    <div class="row gap-sm wrap-gap">
+      <label class="sr-only" for="proj-convert-repo">Repository</label>
+      <select id="proj-convert-repo" name="repo" required>{{range $d.Repos}}<option value="{{.ID}}">{{.FullName}}</option>{{end}}</select>
+      <button class="btn" type="submit">Convert to issue</button>
+    </div>
+    {{else}}<p class="small muted">You don’t have a repository you can open issues in.</p>{{end}}
+  </form>
+  {{end}}
+
+  {{if $d.CanWrite}}
+  <form class="row-end" method="post" action="{{$c.ItemURL}}/remove" data-proj-confirm="Remove this item from the project?{{if not $it.IsDraft}} The {{if eq $it.Kind "pull"}}pull request{{else}}issue{{end}} itself stays.{{end}}">
+    <input type="hidden" name="return" value="{{$d.Back}}">
+    <button class="btn btn-danger btn-sm" type="submit">{{if $it.IsDraft}}Delete draft{{else}}Remove from project{{end}}</button>
+  </form>
+  {{end}}
+</main>
+{{end}}

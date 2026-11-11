@@ -192,7 +192,7 @@ func (a *App) tetherRefreshFeed(ctx context.Context, personID int64) error {
 		}
 	}
 	// Releases of recently active starred repositories.
-	if starred, err := c.Starred(ctx, 30); err == nil {
+	if starred, err := c.Starred(ctx, acc.Login, 30); err == nil {
 		sort.SliceStable(starred, func(i, j int) bool { return starred[i].PushedAt.After(starred[j].PushedAt) })
 		cutoff := time.Now().AddDate(0, 0, -30)
 		for i, rp := range starred {

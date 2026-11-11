@@ -35,6 +35,13 @@ type Config struct {
 
 	SSHListen     string // address for the git SSH server, e.g. ":2222"; empty disables SSH
 	SSHPublicPort int    // port shown in SSH clone URLs (the host side of a Docker port mapping)
+
+	// Pages (internal/web/pages_site*.go). Sites are served only on the host
+	// of PagesURL, which must differ from the app's; empty turns Pages off.
+	PagesURL      string // e.g. http://pages.example.lan
+	PagesMaxBytes int64  // per deploy; ATELIER_PAGES_MAX_MB, default 1024
+	PagesMaxFiles int    // per deploy; ATELIER_PAGES_MAX_FILES, default 50000
+	PagesKeep     int    // deploys kept per site; ATELIER_PAGES_KEEP, default 5
 }
 
 func FromEnv() Config {
@@ -59,6 +66,10 @@ func FromEnv() Config {
 		BackupS3AccessKey:  os.Getenv("ATELIER_BACKUP_S3_ACCESS_KEY"),
 		BackupS3SecretKey:  os.Getenv("ATELIER_BACKUP_S3_SECRET_KEY"),
 		MirrorIntervalMins: envInt("ATELIER_MIRROR_INTERVAL", 30),
+		PagesURL:           strings.TrimRight(strings.TrimSpace(os.Getenv("ATELIER_PAGES_URL")), "/"),
+		PagesMaxBytes:      int64(envInt("ATELIER_PAGES_MAX_MB", 1024)) << 20,
+		PagesMaxFiles:      envInt("ATELIER_PAGES_MAX_FILES", 50000),
+		PagesKeep:          envInt("ATELIER_PAGES_KEEP", 5),
 		SSHListen:          ":2222",
 	}
 	// ATELIER_SSH_LISTEN set to an empty string turns the SSH server off.

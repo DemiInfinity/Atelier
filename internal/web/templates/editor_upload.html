@@ -1,0 +1,28 @@
+{{define "head"}}<link rel="stylesheet" href="/static/editor.css"><script src="/static/editor.js" defer></script>{{end}}
+{{define "content"}}
+{{$f := .Data}}{{$v := $f.V}}
+{{template "repohead" $v}}
+<main class="wrap stack edit-page">
+  <form method="post" action="{{$f.Action}}" enctype="multipart/form-data" class="stack" data-edit-upload
+    data-max-file="{{$f.MaxUploadMB}}" data-max-total="{{$f.MaxTotalMB}}" data-max-files="{{$f.MaxFiles}}">
+    <div class="edit-bar">
+      <a class="muted-link small" href="{{$f.CancelURL}}">← {{$v.Repo.Name}}</a>
+      <span class="pill mono" title="Branch">{{$f.Branch}}</span>
+      <h1 class="h-sm">Upload to <span class="mono">/{{$f.Dir}}</span></h1>
+    </div>
+
+    {{template "edit-problems" $f}}
+
+    <label class="edit-drop" for="edit-files" data-edit-drop>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16 V4 M7 9 L12 4 L17 9 M4 16 V20 H20 V16"/></svg>
+      <strong>Drag files here</strong>
+      <span class="muted small">or choose them. Up to {{$f.MaxFiles}} files, {{$f.MaxUploadMB}} MB each, {{$f.MaxTotalMB}} MB in all. A file with the same name is replaced.</span>
+      <input id="edit-files" type="file" name="files" multiple required class="edit-file-input" data-edit-files>
+    </label>
+    <ul class="list-card edit-file-list" aria-live="polite" data-edit-list hidden></ul>
+    <p class="flash flash-error" role="alert" data-edit-upload-error hidden></p>
+
+    {{template "edit-commit" $f}}
+  </form>
+</main>
+{{end}}

@@ -1,0 +1,43 @@
+{{define "head"}}<link rel="stylesheet" href="/static/snippets.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+{{if $d.Anon}}{{template "snippetanonbar"}}{{end}}
+<main class="wrap stack">
+  {{template "snippethead" $d}}
+  <div class="snip-toolbar">
+    <nav class="segmented" aria-label="Snippet">
+      <a href="{{$d.Base}}">Code</a>
+      <a href="{{$d.Base}}/revisions" aria-current="page">Revisions</a>
+    </nav>
+  </div>
+  {{range $d.Revisions}}
+  <section class="list-card snip-revision">
+    <div class="list-head row-between wrap-gap">
+      <div class="row gap-sm min0">
+        <span class="avatar avatar-sm" aria-hidden="true">{{initial .C.Author}}</span>
+        <strong>{{.C.Author}}</strong>
+        <span class="muted ellipsis">{{if .First}}created this snippet{{else}}revised this snippet{{end}} <time datetime="{{.C.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .C.When}}">{{ago .C.When}}</time></span>
+      </div>
+      <div class="row gap-sm">
+        <span class="mono small muted">{{.C.Short}}</span>
+        <a class="btn btn-sm" href="{{$d.Base}}?rev={{.C.Hash}}">View</a>
+      </div>
+    </div>
+    {{if .Patch}}
+    <div class="table-scroll">
+      <pre class="diff"><code>{{range diffLines .Patch}}<span class="dl {{.Class}}">{{.Text}}</span>
+{{end}}</code></pre>
+    </div>
+    {{else}}<p class="muted pad-x snip-nodiff">No file changes.</p>{{end}}
+  </section>
+  {{else}}
+  <div class="card empty"><p class="muted">No revisions yet.</p></div>
+  {{end}}
+  {{if or $d.More (gt $d.Page 1)}}
+  <nav class="pager" aria-label="Pages">
+    {{if gt $d.Page 1}}<a class="btn btn-sm" href="?page={{$d.Prev}}">Newer</a>{{end}}
+    {{if $d.More}}<a class="btn btn-sm" href="?page={{$d.Next}}">Older</a>{{end}}
+  </nav>
+  {{end}}
+</main>
+{{end}}

@@ -409,6 +409,14 @@ func tetherEventHandler(ctx context.Context, a *App, ev Event) {
 		return
 	}
 	switch ev.Kind {
+	case EventRepoPushed:
+		// Mirror right away instead of waiting for the 30-second tick. Updates
+		// Tether itself fetched from GitHub (pusher bot:github) need no echo.
+		if ev.Push != nil && ev.Push.Pusher != "bot:github" {
+			if _, err := a.db.TetherLink(ctx, ev.RepoID); err == nil {
+				a.tether().kick(ev.RepoID)
+			}
+		}
 	case EventIssueCommented, EventPullCommented:
 		a.tetherCommentOut(ctx, ev)
 	case EventPullMerged, EventPullClosed:

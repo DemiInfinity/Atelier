@@ -331,12 +331,23 @@ func (a *App) drainActionsPushes(ctx context.Context) {
 			return
 		}
 		for _, p := range pushes {
+			a.emitPushed(ctx, p)
 			a.handlePush(ctx, p)
 		}
 		if len(pushes) < 50 {
 			return
 		}
 	}
+}
+
+// emitPushed announces a ref update as repo.pushed (see events.go).
+func (a *App) emitPushed(ctx context.Context, p store.ActionsPush) {
+	rp, err := a.db.RepoByName(ctx, p.Owner, p.Repo)
+	if err != nil {
+		return
+	}
+	a.emit(ctx, Event{Kind: EventRepoPushed, RepoID: rp.ID, Repo: rp, URL: "/" + rp.FullName(),
+		Actor: a.pusherActor(ctx, p.Pusher), Push: &EventPush{Ref: p.Ref, Old: p.Old, New: p.New, Pusher: p.Pusher}})
 }
 
 // handlePush starts push workflows and pull_request synchronize runs.
@@ -577,8 +588,10 @@ func actionsEventHandler(ctx context.Context, a *App, ev Event) {
 			if err != nil || pr.MergedSHA == "" {
 				return
 			}
-			a.handlePush(ctx, store.ActionsPush{Owner: rp.Owner, Repo: rp.Name, Old: pr.BaseSHA, New: pr.MergedSHA,
-				Ref: "refs/heads/" + pr.Base, Pusher: ev.Actor.Kind + ":" + ev.Actor.Name})
+			push := store.ActionsPush{Owner: rp.Owner, Repo: rp.Name, Old: pr.BaseSHA, New: pr.MergedSHA,
+				Ref: "refs/heads/" + pr.Base, Pusher: ev.Actor.Kind + ":" + ev.Actor.Name}
+			a.emitPushed(ctx, push)
+			a.handlePush(ctx, push)
 		case EventReleasePublished:
 			a.triggerRelease(ctx, rp, g, ev)
 		}

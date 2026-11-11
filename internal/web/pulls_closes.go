@@ -46,5 +46,11 @@ func (a *App) closeReferencedIssues(ctx context.Context, repoID int64, p store.P
 			continue
 		}
 		_ = a.db.AddPullEvent(ctx, p.ID, "closed_issue", who.Kind, who.Name, "#"+strconv.FormatInt(n, 10))
+		// Tell everyone else too (notifications, webhooks, projects).
+		if rp, err := a.repoByID(ctx, repoID); err == nil {
+			if closed, err := a.db.IssueByNumber(ctx, repoID, n); err == nil {
+				a.emit(ctx, issueEvent(EventIssueClosed, appsView(rp), closed, who, "closed by #"+strconv.FormatInt(p.Number, 10)))
+			}
+		}
 	}
 }

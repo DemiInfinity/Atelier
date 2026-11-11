@@ -1,0 +1,58 @@
+{{define "head"}}<link rel="stylesheet" href="/static/snippets.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap stack-lg snip-editor">
+  <div>
+    {{if $d.Edit}}<h1 class="display">Edit snippet</h1>
+    <p class="muted">Saving makes a new revision. <a href="/snippets/{{$d.S.UID}}">Back to the snippet</a></p>
+    {{else}}<h1 class="display">New snippet</h1>
+    <p class="muted">One or more files with history. Clone it, push to it, or keep it here.</p>{{end}}
+  </div>
+  {{template "flash" .}}
+  <form method="post" action="{{$d.Action}}" class="stack">
+    {{/* Enter in a text field saves rather than pressing the first file's Remove button. */}}
+    <button class="sr-only" type="submit" tabindex="-1" aria-hidden="true">Save</button>
+    <input type="hidden" name="parent" value="{{$d.Parent}}">
+    <div class="snip-meta card">
+      {{if not $d.Edit}}
+      <div class="field snip-owner">
+        <label for="snip-owner">Account</label>
+        <select id="snip-owner" name="owner">
+          {{range $d.Owners}}<option value="{{.Name}}" {{if eq .Name $d.Owner}}selected{{end}}>{{.Label}} ({{if .IsCompany}}Company{{else}}Personal{{end}})</option>{{end}}
+        </select>
+      </div>
+      {{end}}
+      <div class="field grow">
+        <label for="snip-desc">Description <span class="muted">(optional)</span></label>
+        <input id="snip-desc" name="description" maxlength="300" value="{{$d.Description}}" placeholder="What is this for?">
+      </div>
+      <fieldset class="field snip-visibility">
+        <legend>Visibility</legend>
+        <label class="choice"><input type="radio" name="visibility" value="private" {{if $d.Private}}checked{{end}}><span><strong>Private</strong><span class="small muted">Only you, or a token, can see and clone it.</span></span></label>
+        <label class="choice"><input type="radio" name="visibility" value="public" {{if not $d.Private}}checked{{end}}><span><strong>Public</strong><span class="small muted">Anyone who can reach your server can see and clone it.</span></span></label>
+      </fieldset>
+    </div>
+
+    {{range $i, $f := $d.Files}}
+    <section class="snip-file list-card"{{if eq $i $d.LastIndex}} id="snip-last"{{end}}>
+      <div class="list-head snip-file-head">
+        <label class="sr-only" for="snip-name-{{$i}}">File name</label>
+        <input class="snip-file-name mono" id="snip-name-{{$i}}" name="name" value="{{$f.Name}}" placeholder="Filename including extension…" maxlength="100" autocomplete="off" spellcheck="false" {{if eq $i $d.Focus}}autofocus{{end}}>
+        {{if gt (len $d.Files) 1}}<button class="btn btn-ghost btn-sm" type="submit" name="op" value="remove:{{$i}}" formnovalidate aria-label="Remove file {{if $f.Name}}{{$f.Name}}{{else}}{{$i}}{{end}}">Remove</button>{{end}}
+      </div>
+      <label class="sr-only" for="snip-content-{{$i}}">Contents{{if $f.Name}} of {{$f.Name}}{{end}}</label>
+      <textarea class="snip-textarea" id="snip-content-{{$i}}" name="content" rows="14" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off">{{$f.Content}}</textarea>
+    </section>
+    {{end}}
+
+    <div class="snip-actions">
+      <button class="btn" type="submit" name="op" value="add" formaction="{{$d.Action}}#snip-last" formnovalidate>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5 V19 M5 12 H19"/></svg>
+        Add file</button>
+      <span class="grow"></span>
+      {{if $d.Edit}}<a class="btn btn-ghost" href="/snippets/{{$d.S.UID}}">Cancel</a>{{end}}
+      <button class="btn btn-primary" type="submit">{{if $d.Edit}}Save changes{{else}}Create snippet{{end}}</button>
+    </div>
+  </form>
+</main>
+{{end}}

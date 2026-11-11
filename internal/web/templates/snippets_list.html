@@ -1,0 +1,46 @@
+{{define "head"}}<link rel="stylesheet" href="/static/snippets.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap stack">
+  <div class="snip-pagehead">
+    <h1 class="display">Snippets</h1>
+    <span class="muted">Small bits of code, each its own tiny git repo</span>
+    <a class="btn btn-primary snip-new" href="/snippets/new">New snippet</a>
+  </div>
+  <div class="snip-filters">
+    <nav class="segmented" aria-label="Which snippets">
+      <a href="{{index $d.TabURLs "yours"}}" {{if eq $d.Tab "yours"}}aria-current="page"{{end}}>Yours <span class="snip-count">{{index $d.Counts "yours"}}</span></a>
+      <a href="{{index $d.TabURLs "starred"}}" {{if eq $d.Tab "starred"}}aria-current="page"{{end}}>Starred <span class="snip-count">{{index $d.Counts "starred"}}</span></a>
+    </nav>
+    <form class="snip-search" method="get" action="/snippets" role="search">
+      {{if eq $d.Tab "starred"}}<input type="hidden" name="tab" value="starred">{{end}}
+      <label class="sr-only" for="snip-q">Search snippets</label>
+      <input id="snip-q" type="search" name="q" value="{{$d.Q}}" placeholder="Search file names and descriptions" maxlength="200">
+    </form>
+  </div>
+  {{if $d.Cards}}
+  <div class="snip-grid">
+    {{range $d.Cards}}
+    <article class="snip-card">
+      <div class="snip-card-head">
+        <a class="snip-card-file" href="/snippets/{{.S.UID}}">{{.File}}</a>
+        {{with .Extra}}<span class="small muted nowrap">+{{.}} more</span>{{end}}
+        {{if .S.Private}}<span class="pill snip-vis">Private</span>{{else}}<span class="pill pill-amber snip-vis">Public</span>{{end}}
+      </div>
+      {{if .S.Description}}<p class="snip-card-desc">{{.S.Description}}</p>{{end}}
+      <a class="snip-card-code" href="/snippets/{{.S.UID}}" tabindex="-1" aria-hidden="true"><pre>{{.Preview}}{{if .More}}
+…{{end}}</pre></a>
+      <p class="snip-card-meta small muted">{{.S.Owner}} · updated {{ago .S.UpdatedAt}}</p>
+    </article>
+    {{end}}
+  </div>
+  {{else}}
+  <div class="card empty">
+    {{if $d.Q}}<p><strong>No snippets match “{{$d.Q}}”.</strong></p>
+    {{else if eq $d.Tab "starred"}}<p><strong>No starred snippets yet.</strong></p><p class="muted">Star a snippet to keep it here.</p>
+    {{else}}<p><strong>No snippets yet.</strong></p><p class="muted">A snippet is a few files with history, private or public, that you can clone like a repository.</p>
+    <a class="btn btn-primary" href="/snippets/new">New snippet</a>{{end}}
+  </div>
+  {{end}}
+</main>
+{{end}}

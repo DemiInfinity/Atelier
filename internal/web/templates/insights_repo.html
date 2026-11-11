@@ -1,0 +1,163 @@
+{{define "head"}}<link rel="stylesheet" href="/static/insights.css">{{if .Data.Refresh}}
+<meta http-equiv="refresh" content="4">{{end}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap ins-layout">
+  <nav class="ins-nav" aria-label="Insights">
+    {{range $d.Nav}}<a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+  </nav>
+
+  <section class="ins-main stack-lg">
+    <div class="row-between wrap-gap">
+      <h1 class="h-display">{{$d.Heading}}</h1>
+      {{with $d.Pulse}}
+      <nav class="ins-seg" aria-label="Period">{{range .Periods}}<a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>{{.Label}}</a>{{end}}</nav>
+      {{end}}
+    </div>
+
+    {{if $d.Pulse}}{{with $d.Pulse}}
+    <div class="ins-stats">
+      <div class="ins-stat"><span class="ins-stat-label">Commits</span><span class="ins-stat-value ins-ink-commits">{{.Commits}}{{if .Truncated}}+{{end}}</span><span class="ins-stat-hint">by {{.Authors}} {{if eq .Authors 1}}author{{else}}authors{{end}} on {{$v.Default}}</span></div>
+      <div class="ins-stat"><span class="ins-stat-label">Merged pull requests</span><span class="ins-stat-value ins-ink-merged">{{len .Pulse.Merged}}{{if .MergedMore}}+{{end}}</span><span class="ins-stat-hint">{{.Pulse.OpenedPulls}} opened</span></div>
+      <div class="ins-stat"><span class="ins-stat-label">Issues opened</span><span class="ins-stat-value">{{len .Pulse.OpenedIssues}}{{if .OpenedMore}}+{{end}}</span><span class="ins-stat-hint">{{len .Pulse.ClosedIssues}}{{if .ClosedMore}}+{{end}} closed</span></div>
+      <div class="ins-stat"><span class="ins-stat-label">Releases</span><span class="ins-stat-value">{{len .Pulse.Releases}}{{if .ReleaseMore}}+{{end}}</span><span class="ins-stat-hint"><span class="ins-ink-add">+{{.Adds}}</span> <span class="ins-ink-del">−{{.Dels}}</span> lines</span></div>
+    </div>
+
+    <div class="ins-pulse-grid">
+      <section class="card stack-sm" aria-labelledby="ins-merged">
+        <h2 class="h-sm" id="ins-merged">Merged pull requests</h2>
+        {{if .Pulse.Merged}}<ul class="ins-list">{{range .Pulse.Merged}}
+          <li><a href="{{$v.Base}}/pulls/{{.Number}}"><span class="ins-num">#{{.Number}}</span> {{.Title}}</a><span class="small muted">{{ago .At}}{{with .AuthorName}} · {{.}}{{end}}</span></li>{{end}}
+        </ul>{{else}}<p class="small muted">No pull requests merged in the last {{.Days}} days.</p>{{end}}
+      </section>
+      <section class="card stack-sm" aria-labelledby="ins-closed">
+        <h2 class="h-sm" id="ins-closed">Issues closed</h2>
+        {{if .Pulse.ClosedIssues}}<ul class="ins-list">{{range .Pulse.ClosedIssues}}
+          <li><a href="{{$v.Base}}/issues/{{.Number}}"><span class="ins-num">#{{.Number}}</span> {{.Title}}</a><span class="small muted">{{ago .At}}</span></li>{{end}}
+        </ul>{{else}}<p class="small muted">No issues closed in the last {{.Days}} days.</p>{{end}}
+      </section>
+      <section class="card stack-sm" aria-labelledby="ins-opened">
+        <h2 class="h-sm" id="ins-opened">Issues opened</h2>
+        {{if .Pulse.OpenedIssues}}<ul class="ins-list">{{range .Pulse.OpenedIssues}}
+          <li><a href="{{$v.Base}}/issues/{{.Number}}"><span class="ins-num">#{{.Number}}</span> {{.Title}}</a><span class="small muted">{{ago .At}}{{with .AuthorName}} · {{.}}{{end}}</span></li>{{end}}
+        </ul>{{else}}<p class="small muted">No new issues in the last {{.Days}} days.</p>{{end}}
+      </section>
+      <section class="card stack-sm" aria-labelledby="ins-releases">
+        <h2 class="h-sm" id="ins-releases">Releases</h2>
+        {{if .Pulse.Releases}}<ul class="ins-list">{{range .Pulse.Releases}}
+          <li><a href="{{$v.Base}}/releases/tag/{{.Tag}}"><span class="ins-num">{{.Tag}}</span> {{.Title}}</a><span class="small muted">{{ago .At}}</span></li>{{end}}
+        </ul>{{else}}<p class="small muted">No releases in the last {{.Days}} days.</p>{{end}}
+      </section>
+    </div>
+    {{end}}
+
+    {{else if $d.Actions}}{{with $d.Actions}}
+    <div class="ins-stats">
+      <div class="ins-stat"><span class="ins-stat-label">Run time, {{.Days}} days</span><span class="ins-stat-value ins-ink-commits">{{.Minutes}}</span><span class="ins-stat-hint">{{.Jobs}} jobs on your runners</span></div>
+      <div class="ins-stat"><span class="ins-stat-label">Workflow runs</span><span class="ins-stat-value">{{.Runs}}</span><span class="ins-stat-hint">completed</span></div>
+      <div class="ins-stat"><span class="ins-stat-label">Success rate</span><span class="ins-stat-value ins-ink-merged">{{.Success}}</span><span class="ins-stat-hint">cancelled runs not counted</span></div>
+      <div class="ins-stat ins-stat-agent"><span class="ins-stat-label">Agent runs</span><span class="ins-stat-value ins-ink-agent">{{.AgentRuns}}</span><span class="ins-stat-hint">{{if .AgentRuns}}{{.AgentTokens}}{{with .AgentCost}} · {{.}} (estimate){{end}}{{else}}no agentic workflows ran{{end}}</span></div>
+    </div>
+    {{template "ins-actions-body" .}}
+    {{end}}
+
+    {{else}}
+    {{if $d.Res.Empty}}
+    <div class="card empty"><p><strong>Nothing to chart yet.</strong> Push some commits to {{$v.Repo.FullName}} and its insights appear here.</p></div>
+    {{else}}
+    {{if $d.Res.Updating}}<p class="ins-updating" role="status"><span class="ins-dot" aria-hidden="true"></span>Updating… {{if $d.Res.Stats}}These numbers are from an earlier commit ({{short $d.Res.Stats.Head}}); the page refreshes when the new ones are ready.{{else}}Counting commits on {{$v.Default}} in the background. This page refreshes by itself.{{end}}</p>{{end}}
+    {{if $d.Res.Failed}}<div class="flash flash-error" role="alert">Couldn't compute insights for the latest commit. The error has been logged on the server.</div>{{end}}
+    {{with $d.Res.Stats}}
+    {{if $d.Stats}}<div class="ins-stats">{{range $d.Stats}}<div class="ins-stat"><span class="ins-stat-label">{{.Label}}</span><span class="ins-stat-value {{.Class}}">{{.Value}}</span>{{with .Hint}}<span class="ins-stat-hint">{{.}}</span>{{end}}</div>{{end}}</div>{{end}}
+
+    {{if eq $d.Section "languages"}}
+    <section class="card stack" aria-labelledby="ins-lang-h">
+      <h2 class="h-sm" id="ins-lang-h">Languages on {{.Branch}}</h2>
+      {{if $d.Langs}}
+      {{$d.LangBar}}
+      <ul class="ins-lang-legend">{{range $d.Langs}}<li>{{.Swatch}}<strong>{{.Name}}</strong> <span class="muted">{{printf "%.1f" .Pct}}%</span></li>{{end}}</ul>
+      <details class="ins-data"><summary>Show data table</summary><div class="ins-table-scroll"><table class="ins-table">
+        <caption class="sr-only">Languages by size</caption>
+        <thead><tr><th scope="col">Language</th><th scope="col" class="right">Files</th><th scope="col" class="right">Size</th><th scope="col" class="right">Share</th></tr></thead>
+        <tbody>{{range $d.Langs}}<tr><th scope="row">{{.Name}}</th><td class="right">{{.Files}}</td><td class="right">{{.Text}}</td><td class="right">{{printf "%.1f" .Pct}}%</td></tr>{{end}}</tbody>
+      </table></div></details>
+      <p class="hint">Bytes per language in the files at {{short .Head}}, by file extension. Vendored, generated and documentation folders, prose (Markdown) and data files (JSON, YAML) aren't counted.{{with $d.LangHint}} {{.}}{{end}}</p>
+      {{else}}<p class="small muted">No source files in a language Atelier recognises.</p>{{end}}
+    </section>
+    {{else}}
+    <section class="card stack" aria-labelledby="ins-chart-h">
+      <div class="row-between wrap-gap"><h2 class="h-sm" id="ins-chart-h">{{if eq $d.Section "code-frequency"}}Additions and deletions per week{{else}}Commits per week{{end}}</h2><span class="small muted">{{.Branch}} · since {{$d.Since}}</span></div>
+      {{$d.Chart}}
+    </section>
+    {{end}}
+
+    {{if eq $d.Section "contributors"}}
+    <section class="stack-sm" aria-labelledby="ins-people-h">
+      <h2 class="h-sm" id="ins-people-h">Contributors by commits</h2>
+      <ol class="ins-people">
+        {{range $d.Authors}}
+        <li class="card ins-person">
+          <div class="ins-person-head">
+            <span class="avatar avatar-sm" aria-hidden="true">{{initial .Name}}</span>
+            <div class="min0 grow"><strong class="ellipsis">{{.Name}}</strong><span class="small muted ellipsis">{{.Email}}</span></div>
+            <span class="ins-rank muted">#{{.Rank}}</span>
+          </div>
+          <p class="small"><strong>{{.Commits}}</strong> commits <span class="ins-ink-add">{{.Adds}}</span> <span class="ins-ink-del">{{.Dels}}</span></p>
+          {{.Meter}}
+          {{.Spark}}
+          <p class="small muted">{{date .First}} – {{date .Last}}</p>
+        </li>
+        {{end}}
+      </ol>
+      {{if $d.Others}}<p class="small muted">And {{$d.Others}} more {{if eq $d.Others 1}}contributor{{else}}contributors{{end}}.</p>{{end}}
+      <details class="ins-data"><summary>Show data table</summary><div class="ins-table-scroll"><table class="ins-table">
+        <caption class="sr-only">Contributors</caption>
+        <thead><tr><th scope="col">Contributor</th><th scope="col">Email</th><th scope="col" class="right">Commits</th><th scope="col" class="right">Added</th><th scope="col" class="right">Deleted</th><th scope="col">First</th><th scope="col">Latest</th></tr></thead>
+        <tbody>{{range $d.Authors}}<tr><th scope="row">{{.Name}}</th><td>{{.Email}}</td><td class="right">{{.Commits}}</td><td class="right">{{.Adds}}</td><td class="right">{{.Dels}}</td><td class="nowrap">{{date .First}}</td><td class="nowrap">{{date .Last}}</td></tr>{{end}}</tbody>
+      </table></div></details>
+    </section>
+    {{end}}
+    <p class="hint">Counted from {{.Commits}} commits on {{.Branch}} at {{short .Head}}{{if .Truncated}} (stopped early: very large history){{end}}, computed {{ago .ComputedAt}}. Merge commits don't count towards additions and deletions.</p>
+    {{end}}
+    {{end}}
+    {{end}}
+  </section>
+</main>
+{{end}}
+
+{{define "ins-actions-body"}}
+<div class="ins-pulse-grid">
+  <section class="card stack-sm" aria-labelledby="ins-wf-h">
+    <h2 class="h-sm" id="ins-wf-h">Run time by workflow</h2>
+    {{if .Workflows}}
+    <table class="ins-table ins-meter-table">
+      <caption class="sr-only">Run time, runs and success rate by workflow, last {{.Days}} days</caption>
+      <thead><tr><th scope="col">Workflow</th><th scope="col" class="right">Time</th><th scope="col" class="right">Runs</th><th scope="col" class="right">Success</th></tr></thead>
+      <tbody>{{range .Workflows}}<tr><th scope="row"><span class="ellipsis">{{.Name}}</span>{{.Meter}}</th><td class="right nowrap">{{.Minutes}}</td><td class="right">{{.Runs}}</td><td class="right">{{.Success}}</td></tr>{{end}}</tbody>
+    </table>
+    {{else}}<p class="small muted">No workflow runs in the last {{.Days}} days.</p>{{end}}
+  </section>
+  <section class="card stack-sm" aria-labelledby="ins-rn-h">
+    <h2 class="h-sm" id="ins-rn-h">Run time by runner</h2>
+    {{if .Runners}}
+    <table class="ins-table ins-meter-table">
+      <caption class="sr-only">Run time and jobs by runner (device), last {{.Days}} days</caption>
+      <thead><tr><th scope="col">Runner</th><th scope="col" class="right">Time</th><th scope="col" class="right">Jobs</th></tr></thead>
+      <tbody>{{range .Runners}}<tr><th scope="row"><span class="ellipsis">{{.Name}}</span>{{.Meter}}</th><td class="right nowrap">{{.Minutes}}</td><td class="right">{{.Jobs}}</td></tr>{{end}}</tbody>
+    </table>
+    {{else}}<p class="small muted">No jobs ran on your devices in the last {{.Days}} days.</p>{{end}}
+  </section>
+</div>
+<section class="card stack-sm" aria-labelledby="ins-slow-h">
+  <h2 class="h-sm" id="ins-slow-h">Slowest jobs</h2>
+  {{if .Slowest}}
+  <div class="ins-table-scroll"><table class="ins-table">
+    <caption class="sr-only">The five slowest jobs, last {{.Days}} days</caption>
+    <thead><tr><th scope="col">Job</th><th scope="col">Workflow</th><th scope="col">Runner</th><th scope="col" class="right">Duration</th></tr></thead>
+    <tbody>{{range .Slowest}}<tr><th scope="row"><a href="{{.URL}}">{{.Name}}</a></th><td>{{.Workflow}}</td><td>{{.Runner}}</td><td class="right nowrap">{{.Duration}}</td></tr>{{end}}</tbody>
+  </table></div>
+  {{else}}<p class="small muted">Nothing yet.</p>{{end}}
+  <p class="hint">Jobs run on your own devices, so there are no billed minutes: time is wall-clock time per job, last {{.Days}} days.{{if .Truncated}} Only the latest 20,000 jobs are counted.{{end}}</p>
+</section>
+{{end}}

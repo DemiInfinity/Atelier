@@ -1,0 +1,207 @@
+/* Phones, tablets and the installed app. Loaded after every other stylesheet
+   (layout.html) so it can adjust them without rewriting them. Prefix: m-.
+   The compact menu button and the bottom tab bar are added by static/pwa.js. */
+
+/* ---------- safe areas (notches, home indicator, landscape) ---------- */
+
+.topbar {
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+}
+.wrap {
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+}
+.m-offline { padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+.m-offline .error-card { gap: 14px; }
+.m-offline-actions { justify-content: center; }
+
+/* Top-bar icons keep their size when the bar is crowded (the links scroll). */
+.topbar .icon-btn, .topbar .avatar { flex-shrink: 0; }
+.topbar .topbar-end { min-width: 0; }
+
+/* The menu button only exists on small screens. */
+.m-menu-btn { display: none; }
+.m-menu-btn .m-menu-close { display: none; }
+.m-open .m-menu-btn .m-menu-open { display: none; }
+.m-open .m-menu-btn .m-menu-close { display: inline; }
+
+/* Long words and URLs never push the page sideways. */
+main { overflow-wrap: break-word; }
+pre, code { overflow-wrap: normal; }
+
+/* ---------- tablets and phones ---------- */
+
+@media (max-width: 860px) {
+  .wrap { padding-top: 20px; padding-bottom: 20px; }
+
+  /* Settings: the 13-item side menu becomes a scrolling row of tabs above the
+     page instead of a screenful of links before the form. */
+  .side-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .side-nav a { flex-shrink: 0; white-space: nowrap; border-left: 0; border-bottom: 2px solid transparent; border-radius: var(--r-sm) var(--r-sm) 0 0; }
+  .side-nav a[aria-current="page"] { border-bottom-color: var(--amber); }
+}
+
+/* ---------- compact top bar (phones and tablets) ---------- */
+
+@media (max-width: 900px) {
+  /* Top bar: logo, bell, new, avatar and a menu button; everything else
+     (primary links, search, sign out) lives in the menu. */
+  .topbar {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    gap: 8px;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 56px;
+  }
+  .topbar .brand { min-height: 44px; }
+  .topbar .topnav,
+  .topbar .topbar-end .topbar-search,
+  .topbar .topbar-end form[action="/signout"] { display: none; }
+  .topbar .topbar-end { gap: 6px; }
+  .topbar .m-menu-btn { display: inline-grid; order: 10; }
+  .topbar .icon-btn, .topbar .avatar { width: 44px; height: 44px; }
+  .topbar .avatar { font-size: 15px; }
+
+  .topbar.m-open { padding-bottom: 12px; }
+  .topbar.m-open .topbar-end { display: contents; }
+  .topbar.m-open .topbar-end > * { order: 1; }
+  .topbar.m-open .brand { order: 0; margin-right: auto; }
+  .topbar.m-open .topnav {
+    display: flex;
+    order: 20;
+    flex: 1 1 100%;
+    flex-direction: column;
+    gap: 2px;
+    overflow: visible;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .topbar.m-open .topnav a { min-height: 44px; display: flex; align-items: center; padding: 10px 12px; font-size: 15px; }
+  .topbar.m-open .topnav a[aria-current="page"] { box-shadow: inset 2px 0 0 var(--amber); }
+  .topbar.m-open .topbar-search { display: flex; order: 21; flex: 1 1 100%; }
+  .topbar.m-open .topbar-search input { min-height: 44px; font-size: 16px; }
+  .topbar.m-open form[action="/signout"] { display: block; order: 22; flex: 1 1 100%; }
+  .topbar.m-open form[action="/signout"] .btn { width: 100%; min-height: 44px; justify-content: flex-start; padding-left: 12px; font-size: 15px; }
+  .topbar.m-open .m-menu-btn { order: 2; }
+}
+
+/* ---------- phones ---------- */
+
+@media (max-width: 640px) {
+  .topbar {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .wrap {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-top: 16px;
+  }
+
+  /* Tap targets: 44 px for things you tap on a phone. */
+  .btn, .btn-sm, .btn-xs { min-height: 44px; min-width: 44px; }
+  .btn-xs { padding: 4px 12px; font-size: 13px; }
+  .clone { min-height: 44px; }
+  .clone-proto button, .clone-copy { min-height: 42px; min-width: 44px; }
+  .nf-filters a { min-height: 44px; }
+  .issues-states a { min-height: 44px; display: inline-flex; align-items: center; }
+  p.small > a.muted-link:only-child { display: inline-flex; align-items: center; min-height: 44px; }
+
+  /* Dropdown menus open as a full-width sheet under their button, so a menu
+     on the right-hand side never runs off the screen. */
+  .dropdown[open] > .dropdown-menu {
+    position: fixed;
+    top: auto;
+    left: max(16px, env(safe-area-inset-left));
+    right: max(16px, env(safe-area-inset-right));
+    margin-top: 6px;
+    min-width: 0;
+    max-width: none;
+    max-height: 60vh;
+  }
+
+  /* Form rows (name · access · expiry…) stack instead of squeezing selects. */
+  .row.wrap-gap > .field.grow, .row.wrap-gap > .field.grow-2 { flex: 1 1 100%; }
+
+  /* Home: what you came for (activity, embers) before the account list. */
+  .layout-3 > .col-main { order: -1; }
+  .tabs a { min-height: 44px; display: inline-flex; align-items: center; }
+  .segmented a, .ins-seg a { min-height: 44px; display: inline-flex; align-items: center; }
+  .side-nav a { min-height: 44px; display: flex; align-items: center; }
+  .list-row > a:only-child, .repo-list a, .account { min-height: 44px; }
+  .dropdown-item { min-height: 44px; }
+  .ins-nav a { min-height: 44px; display: inline-flex; align-items: center; }
+  .ins-data summary { min-height: 44px; display: flex; align-items: center; }
+
+  /* iOS zooms into inputs smaller than 16px. */
+  input, select, textarea { font-size: 16px; min-height: 44px; }
+  input[type="checkbox"], input[type="radio"] { min-height: 0; }
+
+  /* Headings shrink a little. */
+  .display { font-size: 26px; }
+  .h-display { font-size: 21px; }
+  .repo-name { font-size: 18px; }
+
+  /* Cards breathe less. */
+  .card { padding: 16px; }
+  .list-row { padding: 12px; gap: 10px; }
+  .list-head { padding: 12px; }
+
+  /* Wide things scroll inside their own box, never the page. */
+  .code, .diff, .files, table { max-width: 100%; }
+  .table-scroll, .snippet, .markdown pre, .markdown table { -webkit-overflow-scrolling: touch; }
+
+  /* Home: the 53-week embers scroll inside their card. */
+  .embers-scroll { overflow-x: auto; }
+}
+
+/* ---------- the installed app (home screen) ---------- */
+
+.m-tabbar { display: none; }
+
+@media (display-mode: standalone) {
+  /* The status bar area belongs to the top bar. */
+  .topbar {
+    padding-top: env(safe-area-inset-top);
+    height: auto;
+    min-height: calc(60px + env(safe-area-inset-top));
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 860px) {
+  .m-tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    padding: 6px max(6px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .m-tabbar a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 48px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: var(--r-sm);
+  }
+  .m-tabbar a:hover { text-decoration: none; color: var(--text); }
+  .m-tabbar a[aria-current="page"] { color: var(--amber); }
+  body.m-has-tabbar { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+  /* The tab bar covers Home and Notifications, so the menu doesn't repeat them. */
+}

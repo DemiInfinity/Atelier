@@ -1,0 +1,19 @@
+{{/* Device workspaces partials. Styles: static/workspaces.css (ws- prefix). */}}
+
+{{/* "Open on…" menu on the Code page. Pass the repoView. The device list is
+     filled in by workspaces.js; without it the link opens the full page. */}}
+{{define "ws-open-menu"}}{{$v := .}}
+<link rel="stylesheet" href="/static/workspaces.css">
+<details class="dropdown ws-menu" data-ws-menu data-src="{{$v.Base}}/workspaces/devices" data-branch="{{$v.Ref}}">
+  <summary class="btn btn-sm ws-menu-btn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20 H16 M12 16 V20"/></svg>
+    Open on…
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg>
+  </summary>
+  <div class="dropdown-menu ws-menu-list">
+    <p class="dropdown-head">Open a workspace on a device</p>
+    <div data-ws-items><a class="dropdown-item" href="{{$v.Base}}/workspaces?ref={{$v.Ref}}">Choose a device…</a></div>
+  </div>
+</details>
+<script src="/static/workspaces.js" defer></script>
+{{end}}

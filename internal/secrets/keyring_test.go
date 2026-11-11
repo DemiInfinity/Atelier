@@ -20,7 +20,9 @@ func TestSealOpenRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if bytes.Contains(ct, pt) {
+		// Random ciphertext can contain a very short plaintext by chance
+		// (one byte appears in ~30 random bytes about 1 time in 9).
+		if len(pt) >= 4 && bytes.Contains(ct, pt) {
 			t.Fatal("ciphertext contains the plaintext")
 		}
 		got, err := kr.Open(aad, ct)

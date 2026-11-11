@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1917">
+<title>Can't reach Atelier</title>
+<link rel="stylesheet" href="/static/atelier.css">
+<link rel="stylesheet" href="/static/mobile.css">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<script src="/static/pwa.js" defer></script>
+</head>
+<body>
+<main class="center-page m-offline">
+  <div class="error-card stack">
+    <span class="auth-logo"><svg width="56" height="56" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="2" y="2" width="24" height="24" rx="7" stroke="currentColor" stroke-width="2"/><path d="M9 19 L14 8 L19 19 M11 15 H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <h1 class="display">Can't reach your studio</h1>
+    <p class="text-2">Atelier runs on your own server, and it isn't answering right now. Your phone may be offline, or away from the network the server is on, or the server may be restarting.</p>
+    <p class="muted small">Nothing is lost: your repositories, issues and pull requests are safe on the server. Pages aren't stored on this device, so there's nothing to show until it's back.</p>
+    <div class="row gap-sm m-offline-actions">
+      <a class="btn btn-primary" href="/" data-m-reload>Try again</a>
+    </div>
+  </div>
+</main>
+</body>
+</html>

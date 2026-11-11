@@ -46,6 +46,7 @@ Commands:
   install    install as a service (launchd / systemd / Windows service) [--system] [--dry-run]
   uninstall  remove the service [--dry-run]
   status     show configuration and service state
+  workspaces enable|disable|show: "Open on <device>" workspaces (off by default)
   version    print the version
 
 Every command accepts --config PATH.
@@ -90,6 +91,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return installCmd(rest, stdout, true)
 	case "status":
 		return statusCmd(rest, stdout)
+	case "workspaces":
+		return workspacesCmd(rest, stdout)
 	case "version", "--version", "-version":
 		fmt.Fprintf(stdout, "atelier-runner %s (%s/%s, protocol %d)\n", version, runtime.GOOS, runtime.GOARCH, actions.ProtocolVersion)
 		return nil
@@ -117,6 +120,7 @@ func registerCmd(args []string, stdout io.Writer) error {
 	caps := fs.String("capabilities", actions.CapJobs, "jobs,docker,discovery")
 	work := fs.String("work-dir", "", "where job workspaces go")
 	disc := fs.String("discovery-paths", "", "folders to scan for repos, comma-separated (default ~/Projects)")
+	ws := fs.Bool("workspaces", false, "switch on device workspaces (\"Open on <device>\"); see `atelier-runner workspaces`")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -126,6 +130,9 @@ func registerCmd(args []string, stdout io.Writer) error {
 	cl, err := runner.ParseCaps(*caps)
 	if err != nil {
 		return err
+	}
+	if *ws && !contains(cl, actions.CapWorkspaces) {
+		cl = append(cl, actions.CapWorkspaces)
 	}
 	if contains(cl, actions.CapDocker) {
 		if _, err := exec.LookPath("docker"); err != nil {
@@ -162,6 +169,7 @@ func runCmd(ctx context.Context, args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	runner.WorkspaceConfigPath = workspaceConfigPath(*cfgPath)
 	p := cfg.Parallel
 	if *parallel > 0 {
 		p = *parallel

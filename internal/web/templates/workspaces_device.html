@@ -1,0 +1,51 @@
+{{define "head"}}<link rel="stylesheet" href="/static/workspaces.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "runners"}}</aside>
+  <div class="col-main stack-lg ws-page">
+    <div>
+      <p class="small"><a class="muted-link" href="/settings/runners">← Runners</a></p>
+      <h1 class="display">Workspaces on {{$d.Runner.Name}}</h1>
+      {{if $d.HasDevice}}
+      <p class="muted">{{if $d.Online}}Online{{else}}Offline{{end}} · workspaces folder <span class="mono">{{$d.Device.Root}}</span>{{if $d.Device.Presets}} · open presets: {{range $i, $p := $d.Device.Presets}}{{if $i}}, {{end}}<span class="mono">{{$p}}</span>{{end}}{{end}}</p>
+      {{else}}
+      <p class="muted">This device hasn't switched on workspaces. Run <span class="mono">atelier-runner workspaces enable</span> there and restart the runner.</p>
+      {{end}}
+    </div>
+
+    <section class="list-card" aria-labelledby="ws-list-title">
+      <h2 class="list-head h-sm" id="ws-list-title">Workspaces</h2>
+      {{range $d.Workspaces}}
+      <article class="list-row ws-row">
+        <div class="grow min0 stack-sm">
+          <p>{{if .RepoURL}}<a href="{{.RepoURL}}"><strong>{{.OwnerName}}/{{.RepoName}}</strong></a>{{else}}<strong>{{.OwnerName}}/{{.RepoName}}</strong>{{end}}
+            {{if .Branch}}<span class="pill mono">{{.Branch}}</span>{{end}}
+            {{if .Dirty}}<span class="pill pill-amber" title="Uncommitted changes">Changes</span>{{end}}</p>
+          <p class="small mono muted break">{{.Path}}</p>
+        </div>
+        <p class="small muted nowrap">{{if .Opened}}Opened {{.Opened}}{{else}}Not opened from Atelier{{end}}</p>
+      </article>
+      {{else}}
+      <div class="list-row muted">No workspaces reported yet.</div>
+      {{end}}
+    </section>
+
+    {{if $d.Recent}}
+    <section class="list-card" aria-labelledby="ws-recent-title">
+      <h2 class="list-head h-sm" id="ws-recent-title">Recent requests</h2>
+      {{range $d.Recent}}
+      <article class="list-row ws-row">
+        <span class="ws-dot {{if .Failed}}is-bad{{else if .Done}}is-on{{end}}" aria-hidden="true"></span>
+        <div class="grow min0">
+          <p><strong>{{.Label}}</strong> <span class="pill mono">{{.Branch}}</span>{{if .Preset}} <span class="small muted">· {{.Preset}}</span>{{end}}</p>
+          <p class="small muted break">{{.Message}}</p>
+        </div>
+        <p class="small muted nowrap">{{.When}}</p>
+      </article>
+      {{end}}
+    </section>
+    {{end}}
+  </div>
+</main>
+{{end}}

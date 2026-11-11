@@ -10,6 +10,7 @@
         <p class="muted">Push some commits to get started. Use an <a href="/settings/tokens">access token</a> as the password when git asks.</p>
       </div>
       {{template "clone" $v.CloneHTTPS}}
+      {{template "edit-empty-actions" $v}}
     </div>
     <section class="card stack-sm">
       <h2 class="h-sm">Push an existing project</h2>
@@ -45,7 +46,8 @@ git push -u origin {{$v.Default}}</code></pre>
         </div>
       </details>
       {{if $v.Path}}{{template "crumbs" $v}}{{end}}
-      <div class="push-right toolbar-clone">{{template "clone" $v.CloneHTTPS}}</div>
+      <div class="push-right row gap-sm">{{template "edit-code-actions" $v}}{{template "ws-open-menu" $v}}</div>
+      <div class="toolbar-clone">{{template "clone" $v.CloneHTTPS}}</div>
     </div>
 
     <section class="list-card">

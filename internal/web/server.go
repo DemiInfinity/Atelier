@@ -37,6 +37,8 @@ var reserved = map[string]bool{
 	"settings": true, "static": true, "api": true, "explore": true, "notifications": true,
 	"search": true, "mcp": true, "npm": true, "healthz": true, "v2": true, "go": true,
 	"packages": true, "runners": true, "actions": true, "lfs": true,
+	"insights": true, "sw.js": true, "manifest.webmanifest": true, // pwa.go, insights.go
+	"snippets": true, "-": true, // snippets.go, palette.go (/-/palette)
 }
 
 type App struct {
@@ -113,6 +115,10 @@ func registerPathHandler(h func(a *App, w http.ResponseWriter, r *http.Request) 
 // ServeHTTP adds security headers, sends git traffic to the git handler and
 // everything else to the UI router.
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// The Pages host (ATELIER_PAGES_URL) serves sites and nothing else.
+	if a.servePagesHost(w, r) {
+		return
+	}
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "same-origin")
@@ -306,7 +312,7 @@ func (a *App) serveGit(w http.ResponseWriter, r *http.Request, owner, name, rest
 	write := gitrepo.IsWrite(r, rest)
 	need := PermRead
 	if write {
-		need = PermWrite
+		need = PermPush
 	}
 
 	who := Actor{Kind: ActorAnonymous, Name: "anonymous"}

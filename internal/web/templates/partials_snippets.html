@@ -1,0 +1,20 @@
+{{/* Header for public snippet pages seen without signing in (the page is Bare). */}}
+{{define "snippetanonbar"}}
+<header class="snip-anonbar">
+  <a href="/snippets" class="brand">{{template "logo"}}<span>Atelier</span></a>
+  <span class="muted small">Snippet</span>
+  <a class="btn btn-sm push-right" href="/signin">Sign in</a>
+</header>
+{{end}}
+
+{{/* Snippet header: title, visibility, description and actions. Pass snippetViewData or snippetRevisionsData. */}}
+{{define "snippethead"}}
+<div class="snip-head">
+  <div class="snip-title">
+    <svg class="snip-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7 L4 12 L9 17 M15 7 L20 12 L15 17"/></svg>
+    <h1 class="snip-name"><span class="muted">{{.S.Owner}}</span> <span class="slash">/</span> <a href="{{.Base}}">{{.S.Title}}</a></h1>
+    {{if .S.Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
+  </div>
+  {{if .S.Description}}<p class="text-2">{{.S.Description}}</p>{{end}}
+</div>
+{{end}}

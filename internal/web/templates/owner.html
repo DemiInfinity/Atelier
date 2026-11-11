@@ -26,6 +26,7 @@
   </aside>
 
   <section class="col-main stack-lg">
+    <nav class="tabs prof-tabs" aria-label="{{$o.Label}}"><a href="/{{$o.Name}}" aria-current="page">Overview</a><a href="/projects?account={{$o.Name}}">Projects</a></nav>
     {{if $v.Readme}}
     <article class="card prof-readme" aria-labelledby="prof-readme-h">
       <div class="prof-readme-head row-between">

@@ -1,0 +1,48 @@
+{{define "head"}}{{template "proj-head-assets"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap proj-narrow stack-lg proj-page">
+  <div class="stack-sm">
+    <p class="small muted"><a class="muted-link" href="{{$d.Return}}">{{$d.Repo.FullName}}#{{$d.Number}}</a></p>
+    <h1 class="display">Projects</h1>
+    <p class="muted">{{$d.Title}}</p>
+  </div>
+  <section class="card">{{template "proj-panel-body" $d}}</section>
+</main>
+{{end}}
+
+{{/* The panel itself; also served alone (?fragment=1) into the issue / PR sidebar. */}}
+{{define "proj-panel-body"}}
+<div class="proj-panel stack-sm">
+  {{range .In}}
+  <div class="proj-panel-row stack-sm">
+    <p class="row gap-sm"><svg class="proj-list-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4 V20 M15 4 V20"/></svg><a class="ellipsis" href="{{.URL}}#item-{{.ItemID}}">{{.P.Title}}</a></p>
+    {{if .CanWrite}}
+    <form class="proj-inline" method="post" action="{{.URL}}/items/{{.ItemID}}/field">
+      <input type="hidden" name="return" value="{{$.Return}}"><input type="hidden" name="field" value="{{.FieldID}}">
+      <label class="sr-only" for="proj-panel-st-{{.ItemID}}">Status in {{.P.Title}}</label>
+      {{$v := .Status.Value}}
+      <select id="proj-panel-st-{{.ItemID}}" name="value" data-proj-autosubmit>
+        <option value="">No status</option>
+        {{range .Options}}<option value="{{.ID}}" {{if eq (print .ID) $v}}selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      <button class="btn btn-xs" type="submit" data-proj-js-hide>Set</button>
+    </form>
+    {{else}}{{template "proj-status-pill" .Status}}{{if not .Status.Display}}<span class="small muted">No status</span>{{end}}{{end}}
+  </div>
+  {{else}}
+  <p class="small muted">Not in any project.</p>
+  {{end}}
+  {{if .Addable}}
+  <form class="proj-inline proj-panel-add" method="post" action="/projects/panel">
+    <input type="hidden" name="return" value="{{.Return}}">
+    <input type="hidden" name="kind" value="{{.Kind}}"><input type="hidden" name="repo" value="{{.Repo.ID}}"><input type="hidden" name="number" value="{{.Number}}">
+    <label class="sr-only" for="proj-panel-add">Add to project</label>
+    <select id="proj-panel-add" name="project">
+      {{range .Addable}}<option value="{{.ID}}">{{.Title}}</option>{{end}}
+    </select>
+    <button class="btn btn-xs" type="submit">Add</button>
+  </form>
+  {{end}}
+</div>
+{{end}}

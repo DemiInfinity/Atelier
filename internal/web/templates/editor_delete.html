@@ -1,0 +1,19 @@
+{{define "head"}}<link rel="stylesheet" href="/static/editor.css">{{end}}
+{{define "content"}}
+{{$f := .Data}}{{$v := $f.V}}
+{{template "repohead" $v}}
+<main class="wrap stack edit-page">
+  <form method="post" action="{{$f.Action}}" class="stack">
+    <div class="edit-bar">
+      <a class="muted-link small" href="{{$f.CancelURL}}">← {{$f.Name}}</a>
+      <span class="pill mono" title="Branch">{{$f.Branch}}</span>
+    </div>
+    {{template "edit-problems" $f}}
+    <section class="card card-danger stack-sm">
+      <h1 class="h-sm">Delete <span class="mono">{{$f.Path}}</span>?</h1>
+      <p class="small">The file is removed in a new commit. Its history stays, so you can bring it back later.</p>
+    </section>
+    {{template "edit-commit" $f}}
+  </form>
+</main>
+{{end}}

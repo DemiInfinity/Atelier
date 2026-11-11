@@ -1,0 +1,46 @@
+{{define "head"}}<link rel="stylesheet" href="/static/editor.css"><script src="/static/editor.js" defer></script>{{end}}
+{{define "content"}}
+{{$f := .Data}}{{$v := $f.V}}
+{{template "repohead" $v}}
+<main class="wrap stack edit-page">
+  <form method="post" action="{{$f.Action}}" class="stack" data-edit-form>
+    <div class="edit-bar">
+      <a class="muted-link small" href="{{$f.CancelURL}}">← {{$v.Repo.Name}}</a>
+      <span class="pill mono" title="Branch">{{$f.Branch}}</span>
+      <div class="field edit-path">
+        <label for="edit-path" class="sr-only">{{if eq $f.Mode "new"}}Name your file (folders allowed){{else}}File path (change it to rename or move the file){{end}}</label>
+        <input id="edit-path" class="mono" name="path" value="{{$f.Path}}" {{if eq $f.Mode "new"}}placeholder="Name your file… (e.g. docs/notes.md)" autofocus{{end}}
+          required maxlength="4096" autocomplete="off" spellcheck="false" aria-describedby="edit-path-hint" data-edit-path>
+      </div>
+      <p class="hint" id="edit-path-hint">{{if eq $f.Mode "new"}}Type a / to add folders.{{else}}Change the path to rename or move the file.{{end}}</p>
+    </div>
+
+    {{template "edit-problems" $f}}
+
+    <section class="list-card edit-card" aria-label="Editor">
+      {{if $f.Editable}}
+      <div class="list-head row-between wrap-gap">
+        <div class="segmented edit-tabs" role="tablist" aria-label="Editor view" data-edit-tabs {{if not (or $f.Markdown (eq $f.Mode "new"))}}hidden{{end}}>
+          <a href="#edit-code" role="tab" aria-selected="true" aria-current="page" id="edit-tab-code" data-edit-tab="code">Edit</a>
+          <a href="#edit-preview" role="tab" aria-selected="false" id="edit-tab-preview" data-edit-tab="preview" data-preview-url="{{$v.Base}}/edit-preview">Preview</a>
+        </div>
+        <p class="hint edit-keys" id="edit-keys">Tab indents · Shift+Tab outdents · Esc, then Tab, leaves the editor</p>
+      </div>
+      <div class="edit-surface" id="edit-code" role="tabpanel" aria-labelledby="edit-tab-code" data-edit-surface>
+        <pre class="edit-gutter" aria-hidden="true" data-edit-gutter></pre>
+        <label for="edit-content" class="sr-only">File contents</label>
+        <textarea id="edit-content" name="content" class="edit-text" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off"
+          aria-describedby="edit-keys" data-edit-text>{{$f.Content}}</textarea>
+      </div>
+      <div class="markdown edit-preview" id="edit-preview" role="tabpanel" aria-labelledby="edit-tab-preview" aria-live="polite" hidden data-edit-preview></div>
+      {{else}}
+      <input type="hidden" name="keep_content" value="1">
+      <div class="empty"><p><strong>This file can't be edited in the browser.</strong></p>
+        <p class="muted">It's binary or larger than 1 MB. You can still rename or move it by changing its path above.</p></div>
+      {{end}}
+    </section>
+
+    {{template "edit-commit" $f}}
+  </form>
+</main>
+{{end}}

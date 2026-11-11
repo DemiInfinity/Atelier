@@ -199,7 +199,7 @@ func (a *App) sshAllow(ctx context.Context, keyID int64, repo store.Repo, write 
 	}
 	need := PermRead
 	if write {
-		need = PermWrite
+		need = PermPush
 	}
 	return a.can(ctx, Actor{Kind: ActorOwner, Name: p.Name, PersonID: p.ID}, repo, need)
 }

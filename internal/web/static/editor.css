@@ -1,0 +1,96 @@
+/* Web editor (edit- prefix). Uses the tokens from atelier.css. */
+
+.edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.edit-bar .hint { flex-basis: 100%; }
+.edit-path { flex: 1 1 320px; }
+.edit-path input { width: 100%; }
+
+.edit-card { overflow: hidden; }
+.edit-keys { margin-left: auto; }
+
+.edit-surface {
+  display: flex;
+  min-height: 420px;
+  max-height: 75vh;
+  background: #151412;
+  overflow: hidden;
+}
+.edit-gutter {
+  flex: none;
+  min-width: 52px;
+  margin: 0;
+  padding: 12px 12px 12px 8px;
+  text-align: right;
+  color: #6f6a62;
+  font: 13px/1.7 var(--font-mono);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  user-select: none;
+  white-space: pre;
+}
+.edit-gutter:empty { display: none; }
+.edit-text {
+  flex: 1;
+  min-width: 0;
+  min-height: 420px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: 13px/1.7 var(--font-mono);
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+}
+.edit-text:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; border-radius: 0; }
+.edit-tabs a { cursor: pointer; }
+.edit-preview { padding: 20px 24px; min-height: 200px; }
+
+.edit-commit .choice.is-disabled { opacity: 0.85; cursor: not-allowed; }
+.edit-commit .choice.is-disabled strong { color: var(--muted); }
+.edit-protected { color: var(--amber); }
+.edit-branch-field { margin-top: 6px; }
+.edit-branch-field input { width: min(100%, 360px); }
+
+.edit-msgs { display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.edit-diff summary { cursor: pointer; }
+.edit-diff .table-scroll { margin-top: 8px; border: 1px solid var(--border); border-radius: var(--r-sm); max-height: 360px; overflow: auto; }
+
+.edit-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 40px 20px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  text-align: center;
+  cursor: pointer;
+}
+.edit-drop:hover, .edit-drop.is-over { border-color: var(--amber); background: #1d1a15; }
+.edit-drop:focus-within { outline: 2px solid var(--amber); outline-offset: 2px; }
+.edit-file-input { max-width: 100%; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.edit-file-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 16px; border-top: 1px solid var(--border); }
+.edit-file-list li:first-child { border-top: 0; }
+.edit-file-list .is-too-big { color: var(--danger); }
+
+.edit-pencil, .edit-trash { gap: 6px; }
+.edit-trash:hover { color: var(--danger); border-color: var(--danger-border); }
+
+@media (max-width: 640px) {
+  .edit-keys { display: none; }
+  .edit-surface, .edit-text { min-height: 300px; }
+}
+
+/* display rules above would otherwise beat the hidden attribute */
+.edit-surface[hidden], .edit-preview[hidden], .edit-tabs[hidden], .edit-file-list[hidden], .edit-page .flash[hidden] { display: none; }

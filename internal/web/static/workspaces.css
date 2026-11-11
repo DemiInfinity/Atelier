@@ -1,0 +1,31 @@
+/* Device workspaces (ws- prefix). Uses the tokens from atelier.css. */
+
+.ws-menu-btn { color: var(--violet); border-color: #3f3863; background: #1c1a26; }
+.ws-menu-btn:hover { color: #ddd0ff; }
+.ws-menu-list { min-width: 260px; }
+.ws-menu-list form { margin: 0; }
+.ws-menu-list button.dropdown-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ws-item-sub { display: block; color: var(--muted); font-size: 12px; }
+
+.ws-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #6f6a62;
+  vertical-align: middle;
+  flex: none;
+}
+.ws-dot.is-on { background: var(--ok); }
+.ws-dot.is-bad { background: var(--danger); }
+.ws-row { align-items: center; gap: 12px; }
+.ws-path { overflow-wrap: anywhere; }
+.ws-dirty { color: var(--amber); }

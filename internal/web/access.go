@@ -22,6 +22,10 @@ const (
 	PermRead  Perm = iota + 1 // view code, issues, pull requests; clone
 	PermWrite                 // push, open/edit issues and pull requests, merge
 	PermAdmin                 // repository settings, branch rules, delete
+	// PermPush is git push (and LFS uploads) only. For everyone but bots it
+	// is the same as PermWrite; a bot with push gets this and not PermWrite,
+	// so it can't publish releases or change anything else.
+	PermPush
 )
 
 func (p Perm) String() string {
@@ -32,6 +36,8 @@ func (p Perm) String() string {
 		return "write"
 	case PermAdmin:
 		return "admin"
+	case PermPush:
+		return "push"
 	}
 	return "none"
 }
@@ -47,6 +53,9 @@ func registerAccessPolicy(p AccessPolicy) { accessPolicies = append(accessPolici
 
 // can reports whether who may do something needing perm on repo.
 func (a *App) can(ctx context.Context, who Actor, repo store.Repo, need Perm) bool {
+	if need == PermPush && who.Kind != ActorBot {
+		need = PermWrite
+	}
 	for _, p := range accessPolicies {
 		if allowed, decided := p(ctx, a, who, repo, need); decided {
 			return allowed

@@ -1,0 +1,101 @@
+{{/* Web editor partials. Styles: static/editor.css (edit- prefix). */}}
+
+{{/* Toolbar buttons on the code page. Pass the repoView. Only branches can be edited. */}}
+{{define "edit-code-actions"}}{{$v := .}}{{$isBranch := false}}{{range $v.Branches}}{{if eq . $v.Ref}}{{$isBranch = true}}{{end}}{{end}}
+<link rel="stylesheet" href="/static/editor.css">
+{{if $isBranch}}
+<details class="dropdown edit-add">
+  <summary class="btn btn-sm">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5 V19 M5 12 H19"/></svg>
+    Add file
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg>
+  </summary>
+  <div class="dropdown-menu">
+    <a class="dropdown-item" href="{{$v.Base}}/new/{{$v.Ref}}{{if $v.Path}}/{{$v.Path}}{{end}}">Create new file</a>
+    <a class="dropdown-item" href="{{$v.Base}}/upload/{{$v.Ref}}{{if $v.Path}}/{{$v.Path}}{{end}}">Upload files</a>
+  </div>
+</details>
+{{end}}
+{{end}}
+
+{{/* Edit and delete buttons on the file page. Pass the repoView. */}}
+{{define "edit-blob-actions"}}{{$v := .}}{{$isBranch := false}}{{range $v.Branches}}{{if eq . $v.Ref}}{{$isBranch = true}}{{end}}{{end}}
+{{if $isBranch}}
+<link rel="stylesheet" href="/static/editor.css">
+<a class="btn btn-sm edit-pencil" href="{{$v.Base}}/edit/{{$v.Ref}}/{{$v.Path}}" aria-label="Edit this file" title="Edit this file">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20 H8 L19 9 L15 5 L4 16 Z M13.5 6.5 L17.5 10.5"/></svg>
+  Edit</a>
+<a class="btn btn-sm edit-trash" href="{{$v.Base}}/delete-file/{{$v.Ref}}/{{$v.Path}}" aria-label="Delete this file" title="Delete this file">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7 H20 M9 7 V4 H15 V7 M6 7 L7 20 H17 L18 7"/></svg>
+</a>
+{{end}}
+{{end}}
+
+{{/* Links in an empty repository. Pass the repoView. */}}
+{{define "edit-empty-actions"}}{{$v := .}}
+<p class="row gap-sm wrap-gap">
+  <a class="btn btn-sm" href="{{$v.Base}}/new/{{$v.Default}}">Create a new file</a>
+  <a class="btn btn-sm" href="{{$v.Base}}/upload/{{$v.Default}}">Upload files</a>
+</p>
+{{end}}
+
+{{/* Problems: stale base, hook rejections, other errors. Pass the editorForm. */}}
+{{define "edit-problems"}}
+{{if .Problem}}<div class="flash flash-error" role="alert">{{.Problem}}</div>{{end}}
+{{with .Rejected}}
+<section class="card card-danger stack-sm edit-rejected" role="alert" aria-labelledby="edit-rej-title">
+  <h2 class="h-sm" id="edit-rej-title">Atelier's push checks refused this commit</h2>
+  <p class="small">The same checks run for web commits as for <span class="mono">git push</span>. Nothing was committed.</p>
+  <ul class="edit-msgs">{{range .}}<li class="mono small">{{.}}</li>{{end}}</ul>
+</section>
+{{end}}
+{{with .Stale}}
+<section class="card card-danger stack-sm edit-stale" role="alert" aria-labelledby="edit-stale-title">
+  <h2 class="h-sm" id="edit-stale-title">{{.Branch}} changed since you started</h2>
+  <p class="small">{{if .Paths}}{{range $i, $p := .Paths}}{{if $i}}, {{end}}<span class="mono">{{$p}}</span>{{end}} changed{{else}}The branch moved{{end}} after you opened the editor{{with .Last}}: <span class="mono">{{short .Hash}}</span> “{{.Subject}}” by {{.Author}}, {{ago .When}}{{end}}. Nothing was committed, and nothing was overwritten.</p>
+  <p class="small">Your changes are still below. To keep both: copy your edit, open the latest version{{with .URL}} (<a href="{{.}}">history</a>){{end}} and reapply it there. Or choose <strong>Create a new branch</strong> and commit: the pull request shows both versions and lets you merge them.</p>
+  {{with .Diff}}<details class="edit-diff" open><summary class="small">What changed on {{$.Branch}}</summary>
+    <div class="table-scroll"><pre class="diff"><code>{{range diffLines .}}<span class="dl {{.Class}}">{{.Text}}</span>
+{{end}}</code></pre></div></details>{{end}}
+</section>
+{{end}}
+{{end}}
+
+{{/* The commit form. Pass the editorForm. */}}
+{{define "edit-commit"}}
+<section class="card stack edit-commit" aria-labelledby="edit-commit-title">
+  <h2 class="h-sm" id="edit-commit-title">Commit changes</h2>
+  <input type="hidden" name="base_commit" value="{{.BaseCommit}}">
+  <div class="field">
+    <label for="edit-message">Commit message</label>
+    <input id="edit-message" name="message" value="{{.Message}}" placeholder="{{.DefaultMessage}}" maxlength="500">
+  </div>
+  <div class="field">
+    <label for="edit-description">Extended description <span class="muted small">(optional)</span></label>
+    <textarea id="edit-description" name="description" rows="3" placeholder="Add more detail">{{.Description}}</textarea>
+  </div>
+  <fieldset class="field">
+    <legend class="sr-only">Where to commit</legend>
+    <label class="choice{{if .Protection}} is-disabled{{end}}">
+      <input type="radio" name="commit_choice" value="direct" {{if eq .Choice "direct"}}checked{{end}} {{if .Protection}}disabled{{end}}>
+      <span><strong>Commit directly to the <span class="mono">{{.Branch}}</span> branch</strong>
+        {{if .Protection}}<span class="small edit-protected" role="note">{{.Protection}}</span>{{end}}</span>
+    </label>
+    {{if not .V.Empty}}
+    <label class="choice">
+      <input type="radio" name="commit_choice" value="branch" {{if eq .Choice "branch"}}checked{{end}}>
+      <span><strong>Create a new branch for this commit and start a pull request</strong>
+        <span class="small muted">Into <span class="mono">{{.Branch}}</span>.</span>
+        <span class="edit-branch-field">
+          <label for="edit-new-branch" class="sr-only">New branch name</label>
+          <input id="edit-new-branch" class="mono" name="new_branch" value="{{.NewBranch}}" maxlength="200" autocomplete="off">
+        </span></span>
+    </label>
+    {{end}}
+  </fieldset>
+  <div class="row-end gap-sm">
+    <a class="btn" href="{{.CancelURL}}">Cancel</a>
+    <button class="btn btn-primary" type="submit">Commit changes</button>
+  </div>
+</section>
+{{end}}

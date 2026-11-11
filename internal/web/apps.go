@@ -42,7 +42,7 @@ func init() {
 			appsAPIRoutes(a, m)
 		},
 		start: func(ctx context.Context, a *App) {
-			go a.appsRefLoop(ctx, 5*time.Second)
+			go a.appsRefLoop(ctx, 30*time.Second) // fallback; repo.pushed scans at once
 			a.appsDeliveryLoop(ctx)
 		},
 	})

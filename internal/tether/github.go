@@ -528,10 +528,20 @@ func (c *Client) ReceivedEvents(ctx context.Context, login string, perPage int) 
 }
 
 // Starred lists the token user's starred repositories, recently starred first.
-func (c *Client) Starred(ctx context.Context, perPage int) ([]Repo, error) {
+// Reading /user/starred needs the optional Starring permission; without it,
+// login's public stars (which need no permission) are used instead.
+func (c *Client) Starred(ctx context.Context, login string, perPage int) ([]Repo, error) {
 	var out []Repo
 	_, err := c.do(ctx, http.MethodGet, "/user/starred?sort=updated&per_page="+strconv.Itoa(perPage), nil, &out, true)
-	return out, err
+	if err == nil || login == "" {
+		return out, err
+	}
+	out = nil
+	_, err2 := c.do(ctx, http.MethodGet, "/users/"+url.PathEscape(login)+"/starred?sort=updated&per_page="+strconv.Itoa(perPage), nil, &out, true)
+	if err2 != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *Client) Releases(ctx context.Context, full string, perPage int) ([]Release, error) {

@@ -63,7 +63,21 @@ type Event struct {
 	// Recipients, if set, limits who is notified to these people. Repository
 	// access and the no-self-notification rule still apply.
 	Recipients []int64
+	// Push is set on repo.pushed: one ref update.
+	Push *EventPush
 }
+
+// EventPush describes one ref update for repo.pushed. Old or New is all zeros
+// when the ref was created or deleted.
+type EventPush struct {
+	Ref, Old, New string
+	Pusher        string // "<actor kind>:<name>", as the hook recorded it
+}
+
+// EventRepoPushed fires once per ref update: pushes over HTTPS or SSH, Atelier's
+// own merges, web edits and Tether fetches. It has no Title, so it never
+// becomes a notification; webhooks, Pages and Tether mirroring listen for it.
+const EventRepoPushed = "repo.pushed"
 
 // Subject is the subject type: the part of Kind before the dot.
 func (ev Event) Subject() string {

@@ -1,0 +1,127 @@
+{{define "head"}}{{template "proj-head-assets"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap proj-narrow stack-lg proj-page">
+  {{template "proj-title" $d}}
+  {{template "flash" .}}
+
+  <form class="card stack" method="post" action="{{$d.URL}}/settings" aria-labelledby="proj-gen-h">
+    <h2 class="h-sm" id="proj-gen-h">General</h2>
+    <div class="field">
+      <label for="proj-title">Name</label>
+      <input id="proj-title" name="title" value="{{$d.P.Title}}" required maxlength="120">
+    </div>
+    <div class="field">
+      <label for="proj-desc">Description</label>
+      <textarea id="proj-desc" name="description" rows="3" maxlength="1000">{{$d.P.Description}}</textarea>
+    </div>
+    <fieldset class="field">
+      <legend>Visibility</legend>
+      <label class="choice"><input type="radio" name="visibility" value="private" {{if $d.P.Private}}checked{{end}}> <span><strong>Private</strong><br><span class="small muted">Only you can see it.</span></span></label>
+      <label class="choice"><input type="radio" name="visibility" value="public" {{if not $d.P.Private}}checked{{end}}> <span><strong>Public</strong><br><span class="small muted">Anyone signed in can see the project. Items from repositories they can’t read show as “Private item”.</span></span></label>
+    </fieldset>
+    <label class="choice"><input type="checkbox" name="closed" value="1" {{if $d.P.Closed}}checked{{end}}> <span><strong>Closed</strong><br><span class="small muted">Moves it to the closed list and pauses automation that adds items.</span></span></label>
+
+    <fieldset class="field" id="automation">
+      <legend>Automation</legend>
+      <label class="choice"><input type="checkbox" name="auto_add" value="1" {{if $d.P.AutoAdd}}checked{{end}}> <span><strong>Add new issues and pull requests</strong><br><span class="small muted">Anything opened in a linked repository (below) joins the project as Todo.</span></span></label>
+      <label class="choice"><input type="checkbox" name="auto_done" value="1" {{if $d.P.AutoDone}}checked{{end}}> <span><strong>Closed or merged → Done</strong><br><span class="small muted">Also for issues a merged pull request closes.</span></span></label>
+      <label class="choice"><input type="checkbox" name="auto_reopen" value="1" {{if $d.P.AutoReopen}}checked{{end}}> <span><strong>Reopened → Todo</strong></span></label>
+    </fieldset>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Save</button></div>
+  </form>
+
+  <form class="card stack" method="post" action="{{$d.URL}}/links" aria-labelledby="proj-links-h">
+    <div>
+      <h2 class="h-sm" id="proj-links-h">Linked repositories</h2>
+      <p class="small muted">Automation adds issues and pull requests opened here. You can add items from any repository by hand.</p>
+    </div>
+    {{if $d.Links}}
+    <fieldset class="proj-links">
+      <legend class="sr-only">Repositories to link</legend>
+      {{range $d.Links}}<label class="choice"><input type="checkbox" name="repo" value="{{.Repo.ID}}" {{if .Linked}}checked{{end}}> <span class="mono">{{.Repo.FullName}}</span>{{if .Repo.Private}} <span class="pill">Private</span>{{end}}</label>{{end}}
+    </fieldset>
+    <div class="row-end"><button class="btn" type="submit">Save links</button></div>
+    {{else}}<p class="small muted">No repositories yet.</p>{{end}}
+  </form>
+
+  <section class="stack" id="fields" aria-labelledby="proj-fields-h">
+    <div>
+      <h2 class="h-sm" id="proj-fields-h">Fields</h2>
+      <p class="small muted">Status is built in and drives the board’s columns. Rename, recolour or remove its options here.</p>
+    </div>
+    {{range $f := $d.Fields}}
+    <form class="card stack-sm proj-field" id="field-{{$f.ID}}" method="post" action="{{$d.URL}}/fields/{{$f.ID}}/edit" aria-labelledby="proj-field-{{$f.ID}}-h">
+      <div class="row-between wrap-gap">
+        <h3 class="h-sm" id="proj-field-{{$f.ID}}-h">{{$f.Name}} <span class="pill">{{$f.KindLabel}}</span>{{if $f.IsStatus}} <span class="pill pill-amber">Built in</span>{{end}}</h3>
+      </div>
+      {{if not $f.IsStatus}}
+      <div class="field">
+        <label for="proj-fname-{{$f.ID}}">Name</label>
+        <input id="proj-fname-{{$f.ID}}" name="name" value="{{$f.Name}}" maxlength="60">
+      </div>
+      {{end}}
+      {{if $f.IsSelect}}
+      <fieldset class="stack-sm">
+        <legend class="small">Options</legend>
+        {{range $o := $f.Options}}
+        <div class="proj-opt-row">
+          {{template "proj-dot" $o.Color}}
+          <label class="sr-only" for="proj-opt-{{$o.ID}}">Option name</label>
+          <input id="proj-opt-{{$o.ID}}" name="opt_{{$o.ID}}" value="{{$o.Name}}" maxlength="60" required>
+          <label class="sr-only" for="proj-col-{{$o.ID}}">Colour of {{$o.Name}}</label>
+          <select id="proj-col-{{$o.ID}}" name="color_{{$o.ID}}">{{range $d.Colors}}<option value="{{.}}" {{if eq . $o.Color}}selected{{end}}>{{.}}</option>{{end}}</select>
+          <label class="small row gap-sm"><input type="checkbox" name="del_{{$o.ID}}" value="1"> Remove</label>
+        </div>
+        {{end}}
+        <div class="proj-opt-row">
+          <span class="proj-dot proj-c-gray" aria-hidden="true"></span>
+          <label class="sr-only" for="proj-opt-new-{{$f.ID}}">New option</label>
+          <input id="proj-opt-new-{{$f.ID}}" name="new" maxlength="60" placeholder="New option">
+          <label class="sr-only" for="proj-col-new-{{$f.ID}}">Colour of the new option</label>
+          <select id="proj-col-new-{{$f.ID}}" name="new_color">{{range $d.Colors}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+        </div>
+      </fieldset>
+      {{end}}
+      <div class="row-end gap-sm">
+        <button class="btn btn-sm btn-primary" type="submit">Save {{$f.Name}}</button>
+      </div>
+    </form>
+    {{if not $f.IsStatus}}
+    <form class="row-end proj-field-delete" method="post" action="{{$d.URL}}/fields/{{$f.ID}}/delete" data-proj-confirm="Delete the field “{{$f.Name}}” and every value in it?">
+      <button class="btn btn-sm btn-danger" type="submit">Delete {{$f.Name}}</button>
+    </form>
+    {{end}}
+    {{end}}
+
+    <form class="card stack-sm" method="post" action="{{$d.URL}}/fields" aria-labelledby="proj-newfield-h">
+      <h3 class="h-sm" id="proj-newfield-h">New field</h3>
+      <div class="proj-newfield">
+        <div class="field grow">
+          <label for="proj-nf-name">Name</label>
+          <input id="proj-nf-name" name="name" required maxlength="60" placeholder="Target date">
+        </div>
+        <div class="field">
+          <label for="proj-nf-kind">Type</label>
+          <select id="proj-nf-kind" name="kind">{{range $d.Kinds}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="proj-nf-opts">Options <span class="small muted">(single select only, one per line)</span></label>
+        <textarea id="proj-nf-opts" name="options" rows="3" placeholder="Phase 1&#10;Phase 2"></textarea>
+      </div>
+      <div class="row-end"><button class="btn btn-sm" type="submit">Add field</button></div>
+    </form>
+  </section>
+
+  <form class="card card-danger stack-sm" method="post" action="{{$d.URL}}/delete" aria-labelledby="proj-del-h">
+    <h2 class="h-sm" id="proj-del-h">Delete this project</h2>
+    <p class="small text-2">Its fields, views and drafts are deleted. Issues and pull requests stay in their repositories.</p>
+    <div class="field">
+      <label for="proj-del-confirm">Type <strong>{{$d.P.Title}}</strong> to confirm</label>
+      <input id="proj-del-confirm" name="confirm" required autocomplete="off">
+    </div>
+    <div class="row-end"><button class="btn btn-danger" type="submit">Delete project</button></div>
+  </form>
+</main>
+{{end}}

@@ -1,0 +1,137 @@
+{{define "head"}}<link rel="stylesheet" href="/static/pagesite.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "repohead" $v}}
+<main class="wrap narrow stack-lg pages-page">
+  <div class="stack-sm">
+    <p class="small"><a class="muted-link" href="{{$v.Base}}/settings">← Settings</a></p>
+    <h1 class="h-display">Pages</h1>
+    <p class="muted">Publish a static website from <span class="mono">{{$v.Repo.FullName}}</span>.</p>
+  </div>
+  {{template "flash" .}}
+
+  {{if not $d.On}}
+  <section class="card stack" aria-labelledby="pages-off-h">
+    <h2 class="h-sm" id="pages-off-h">Pages is off on this server</h2>
+    <p class="small muted">Sites are served from their own address, never from Atelier's, so a site's pages can't reach your session. To turn Pages on:</p>
+    <ol class="pages-steps small">
+      <li>Add a DNS name for sites that points at the same server, for example a DNS rewrite <span class="mono">pages.example.lan → &lt;server IP&gt;</span> in AdGuard Home or Pi-hole.</li>
+      <li>Add a proxy host for that name in Nginx Proxy Manager that forwards to the <em>same</em> Atelier container and port as the app.</li>
+      <li>Set <span class="mono">ATELIER_PAGES_URL=http://pages.example.lan</span> (or <span class="mono">https://</span> with a certificate) on the Atelier container and restart it.</li>
+    </ol>
+    <p class="small muted">Sites then live at <span class="mono">&lt;pages&gt;/{{$v.Repo.Owner}}/{{$v.Repo.Name}}/</span>, and a repository named <span class="mono">{{$d.UserSite}}</span> is served at <span class="mono">&lt;pages&gt;/{{$v.Repo.Owner}}/</span>. See docs/pages.md.</p>
+  </section>
+  {{else if $d.Private}}
+  <section class="card stack" aria-labelledby="pages-priv-h">
+    <h2 class="h-sm" id="pages-priv-h">Private repositories can't publish</h2>
+    <p class="small muted">Every site shares the Pages address, so a sign-in there would let any published site's script read a private site with your credentials. Make this repository public in <a href="{{$v.Base}}/settings">Settings</a> to publish it.{{if $d.Site.Enabled}} Its site is offline while the repository is private.{{end}}</p>
+  </section>
+  {{end}}
+
+  {{if and $d.On $d.Site.Enabled (not $d.Private)}}
+  {{if $d.Live}}
+  <section class="card card-ok pages-live" aria-labelledby="pages-live-h">
+    <div class="grow min0">
+      <h2 class="h-sm" id="pages-live-h">Your site is live</h2>
+      <a class="mono pages-url" href="{{$d.SiteURL}}" rel="noopener noreferrer" target="_blank">{{$d.SiteURL}}</a>
+    </div>
+    <span class="small muted">Deployed {{ago $d.Live.CreatedAt}}{{if $d.Live.SHA}} from <span class="mono">{{short $d.Live.SHA}}</span>{{end}}</span>
+    <a class="btn btn-sm" href="{{$d.SiteURL}}" rel="noopener noreferrer" target="_blank">Visit site ↗</a>
+  </section>
+  {{else}}
+  <section class="card pages-live" aria-labelledby="pages-wait-h">
+    <div class="grow min0">
+      <h2 class="h-sm" id="pages-wait-h">Not deployed yet</h2>
+      <p class="small muted">{{if eq $d.Site.Source "actions"}}Run a workflow on <span class="mono">{{$d.Site.Branch}}</span> that ends with <span class="mono">atelier/deploy-pages</span>.{{else}}Push to <span class="mono">{{$d.Site.Branch}}</span>, or deploy now.{{end}} The site will be at <span class="mono">{{$d.SiteURL}}</span>.</p>
+    </div>
+  </section>
+  {{end}}
+  {{if $d.BadBranch}}<div class="flash flash-error" role="alert">The branch <span class="mono">{{$d.Site.Branch}}</span> doesn't exist, so pushes won't publish anything.</div>{{end}}
+  {{end}}
+
+  {{if and $d.On (not $d.Private)}}
+  <form method="post" action="{{$v.Base}}/settings/pages" class="card stack" aria-labelledby="pages-build-h">
+    <h2 class="h-sm" id="pages-build-h">Build and deploy</h2>
+    <fieldset class="field">
+      <legend>Source</legend>
+      <label class="choice"><input type="radio" name="source" value="branch" {{if ne $d.Site.Source "actions"}}checked{{end}}><span><strong>A folder on a branch</strong><span class="small muted">No build: the files are published as they are, on every push to the branch.</span></span></label>
+      <label class="choice"><input type="radio" name="source" value="actions" {{if eq $d.Site.Source "actions"}}checked{{end}}><span><strong>An Actions workflow</strong><span class="small muted">A workflow builds the site (Astro, Vite, Hugo…) and uploads it with <span class="mono">atelier/deploy-pages</span>. Only runs from a push to the branch can deploy.</span></span></label>
+    </fieldset>
+    <div class="pages-fields">
+      <div class="field">
+        <label for="pages-branch">Branch</label>
+        {{if $v.Branches}}
+        <select id="pages-branch" name="branch">
+          {{range $v.Branches}}<option value="{{.}}" {{if eq . $d.Site.Branch}}selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        {{else}}
+        <input id="pages-branch" name="branch" value="{{$d.Site.Branch}}" maxlength="200" autocomplete="off" spellcheck="false">
+        {{end}}
+      </div>
+      <div class="field">
+        <label for="pages-folder">Folder <span class="small muted">(branch source)</span></label>
+        <input id="pages-folder" name="folder" class="mono" value="{{$d.Folder}}" placeholder="/ or /docs" maxlength="200" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <p class="small muted">Each deploy is a snapshot of up to {{$d.MaxSize}} and {{$d.MaxFiles}} files; the last {{$d.Keep}} are kept for rolling back. Sites get <span class="mono">index.html</span> for folders, their own <span class="mono">404.html</span>, and run sandboxed.{{if $d.IsUserSite}} This is your account's site, served at <span class="mono">{{$d.SiteURL}}</span>.{{else}} A repository named <span class="mono">{{$d.UserSite}}</span> is served at <span class="mono">{{$d.PagesBase}}/{{$v.Repo.Owner}}/</span>.{{end}}</p>
+    <div class="row-end">
+      <button class="btn btn-primary" type="submit">{{if $d.Site.Enabled}}Save{{else}}Publish site{{end}}</button>
+    </div>
+  </form>
+  {{end}}
+
+  {{if and $d.On $d.Site.Enabled (eq $d.Site.Source "branch") (not $d.Private)}}
+  <form method="post" action="{{$v.Base}}/settings/pages/deploy" class="card row-between wrap-gap">
+    <div>
+      <h2 class="h-sm">Deploy now</h2>
+      <p class="small muted">Publish the current <span class="mono">{{$d.Site.Branch}}</span> without waiting for a push.</p>
+    </div>
+    <button class="btn" type="submit">Deploy now</button>
+  </form>
+  {{end}}
+
+  {{if and $d.On (eq $d.Site.Source "actions") (not $d.Private)}}
+  <section class="card stack" aria-labelledby="pages-wf-h">
+    <h2 class="h-sm" id="pages-wf-h">Workflow example</h2>
+    <p class="small muted">Save as <span class="mono">.atelier/workflows/pages.yml</span>. The built-in action needs no lockfile entry.</p>
+    <pre class="pages-code"><code>{{$d.Workflow}}</code></pre>
+  </section>
+  {{end}}
+
+  {{if $d.Deploys}}
+  <section class="stack" aria-labelledby="pages-hist-h">
+    <h2 class="h-sm" id="pages-hist-h">Deploys</h2>
+    <div class="list-card">
+      {{range $d.Deploys}}
+      <div class="list-row pages-deploy">
+        <div class="grow min0">
+          <div class="row wrap-gap">
+            <strong>#{{.ID}}</strong>
+            {{if .Live}}<span class="pill pages-pill-live">Live</span>{{else if eq .Status "failed"}}<span class="pill pages-pill-failed">Failed</span>{{else if eq .Status "building"}}<span class="pill">Building</span>{{end}}
+            <span class="small muted">{{if eq .Source "actions"}}Actions{{else}}Branch{{end}}{{if .SHA}} · <span class="mono">{{short .SHA}}</span>{{end}} · {{.Actor}} · {{ago .CreatedAt}}</span>
+          </div>
+          {{if eq .Status "failed"}}<div class="small pages-err">{{.Error}}</div>{{else if eq .Status "ready"}}<div class="small muted">{{.Files}} files · {{.Size}}</div>{{end}}
+        </div>
+        {{if .Rollback}}
+        <form method="post" action="{{$v.Base}}/settings/pages/rollback">
+          <input type="hidden" name="deploy" value="{{.ID}}">
+          <button class="btn btn-sm" type="submit">Roll back to this deploy</button>
+        </form>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if or $d.Site.Enabled $d.Deploys}}
+  <form method="post" action="{{$v.Base}}/settings/pages/unpublish" class="card card-danger row-between wrap-gap">
+    <div>
+      <h2 class="h-sm danger-ink">Unpublish</h2>
+      <p class="small">Take the site offline and delete every deploy. The repository isn't touched.</p>
+    </div>
+    <button class="btn btn-danger" type="submit">Unpublish site</button>
+  </form>
+  {{end}}
+</main>
+{{end}}

@@ -1,0 +1,257 @@
+{{define "head"}}{{template "proj-head-assets"}}<link rel="stylesheet" href="/static/issues.css">{{range .Data.LabelCSS}}<link rel="stylesheet" href="{{.}}">{{end}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap proj-wide stack proj-page" data-proj-board="{{$d.URL}}" {{if $d.CanWrite}}data-proj-can-write{{end}}>
+  {{template "proj-title" $d}}
+
+  <div class="proj-viewbar">
+    <nav class="tabs proj-views" aria-label="Saved views">
+      {{range $d.Views}}<a href="{{.URL}}" {{if .Active}}aria-current="page"{{end}}>{{.View.Name}}</a>{{end}}
+      {{if not $d.Active}}<a href="{{$d.Self}}" aria-current="page">Unsaved view</a>{{end}}
+    </nav>
+    <nav class="segmented proj-layouts" aria-label="Layout">
+      <a href="{{index $d.LayoutURLs "board"}}" {{if eq $d.Layout "board"}}aria-current="page"{{end}}>Board</a>
+      <a href="{{index $d.LayoutURLs "table"}}" {{if eq $d.Layout "table"}}aria-current="page"{{end}}>Table</a>
+      <a href="{{index $d.LayoutURLs "roadmap"}}" {{if eq $d.Layout "roadmap"}}aria-current="page"{{end}}>Roadmap</a>
+    </nav>
+  </div>
+
+  <div class="proj-toolbar">
+    <form class="proj-filter" method="get" action="{{$d.URL}}" role="search">
+      {{with $d.Active}}<input type="hidden" name="view" value="{{.ID}}">{{end}}
+      <input type="hidden" name="layout" value="{{$d.Layout}}">
+      {{if $d.Sort}}<input type="hidden" name="sort" value="{{$d.Sort}}">{{end}}
+      <label class="sr-only" for="proj-q">Filter items</label>
+      <input id="proj-q" type="search" name="q" value="{{$d.Q}}" maxlength="500" placeholder='Filter: status:"In progress" repo:atelier is:open label:bug' autocomplete="off" aria-describedby="proj-q-help">
+      <button class="btn" type="submit">Filter</button>
+      {{if $d.Q}}<a class="btn btn-ghost" href="{{$d.ClearURL}}">Clear</a>{{end}}
+    </form>
+    {{if $d.CanWrite}}
+    <div class="row gap-sm wrap-gap">
+      {{if and $d.Active $d.Modified}}
+      <form method="post" action="{{$d.URL}}/views">
+        <input type="hidden" name="view" value="{{$d.Active.ID}}"><input type="hidden" name="update" value="1">
+        <input type="hidden" name="layout" value="{{$d.Layout}}"><input type="hidden" name="q" value="{{$d.Q}}"><input type="hidden" name="sort" value="{{$d.Sort}}">
+        <button class="btn btn-sm" type="submit">Save changes to {{$d.Active.Name}}</button>
+      </form>
+      {{end}}
+      <details class="dropdown proj-menu">
+        <summary class="btn btn-sm">Save as new view</summary>
+        <form class="dropdown-menu proj-menu-body stack-sm" method="post" action="{{$d.URL}}/views">
+          <input type="hidden" name="layout" value="{{$d.Layout}}"><input type="hidden" name="q" value="{{$d.Q}}"><input type="hidden" name="sort" value="{{$d.Sort}}">
+          <label class="small" for="proj-view-name">View name</label>
+          <input id="proj-view-name" name="name" required maxlength="60" placeholder="Bugs in progress">
+          <button class="btn btn-sm btn-primary" type="submit">Save view</button>
+        </form>
+      </details>
+      {{if $d.Active}}
+      <form method="post" action="{{$d.URL}}/views/{{$d.Active.ID}}/delete" data-proj-confirm="Delete the view “{{$d.Active.Name}}”? Its items stay on the project.">
+        <button class="btn btn-sm btn-ghost" type="submit">Delete view</button>
+      </form>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  <p class="small muted" id="proj-q-help">
+    {{$d.Shown}} of {{$d.Total}} {{if eq $d.Total 1}}item{{else}}items{{end}}{{if $d.Q}} match{{end}}.
+    {{if $d.Hidden}}{{$d.Hidden}} {{if eq $d.Hidden 1}}is{{else}}are{{end}} in repositories you can’t see.{{end}}
+    Filter with <span class="mono">status:</span>, <span class="mono">repo:</span>, <span class="mono">is:open</span>, <span class="mono">label:</span>, <span class="mono">no:status</span> or any field name.
+  </p>
+
+  {{if $d.CanWrite}}
+  <form class="proj-addbar" method="post" action="{{$d.URL}}/items">
+    <input type="hidden" name="return" value="{{$d.Self}}">
+    <label class="sr-only" for="proj-add-ref">Add an issue or pull request</label>
+    <input id="proj-add-ref" name="ref" placeholder="Add an issue or pull request: owner/repo#12 or paste its link" maxlength="300">
+    <button class="btn btn-sm" type="submit">Add</button>
+  </form>
+  {{end}}
+
+  {{if eq $d.Layout "table"}}{{template "proj-table" .}}
+  {{else if eq $d.Layout "roadmap"}}{{template "proj-roadmap" .}}
+  {{else}}{{template "proj-board" .}}{{end}}
+
+  <p class="sr-only" aria-live="polite" data-proj-live></p>
+</main>
+{{end}}
+
+{{define "proj-board"}}
+{{$d := .Data}}
+{{if not $d.Columns}}
+<div class="card empty"><p class="muted">Nothing on this board{{if $d.Q}} matches the filter{{end}}.</p></div>
+{{else}}
+<div class="proj-board-scroll">
+  <div class="proj-board">
+    {{range $col := $d.Columns}}
+    <section class="proj-col" data-proj-col="{{$col.Value}}" aria-labelledby="proj-col-{{if $col.Value}}{{$col.Value}}{{else}}none{{end}}">
+      <header class="proj-col-head">
+        {{template "proj-dot" $col.Color}}
+        <h2 id="proj-col-{{if $col.Value}}{{$col.Value}}{{else}}none{{end}}">{{$col.Name}}</h2>
+        <span class="small muted" data-proj-count>{{len $col.Cards}}</span>
+      </header>
+      <ol class="proj-cards" data-proj-drop>
+        {{range $col.Cards}}
+        <li class="proj-card{{if .Hidden}} is-hidden{{end}}" id="item-{{.ID}}" data-proj-item="{{.ID}}" data-proj-url="{{.ItemURL}}" {{if and $d.CanWrite (not .Hidden)}}draggable="true"{{end}}>
+          {{if .Hidden}}
+          <p class="row gap-sm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11 V8 a4 4 0 0 1 8 0 V11"/></svg><strong>Private item</strong></p>
+          <p class="small muted">It’s in a repository you can’t see.</p>
+          {{else}}
+          <p class="small muted row gap-sm proj-card-meta">{{template "proj-kind-icon" .Kind}}<span class="ellipsis">{{if .Repo}}{{.Repo}}{{if .Number}} #{{.Number}}{{end}}{{else}}Draft{{end}}</span>{{if and .Repo (ne .State "open")}}<span class="pill proj-state-{{.State}}">{{.StateLabel}}</span>{{end}}</p>
+          <a class="proj-card-title" href="{{.URL}}">{{.Title}}</a>
+          {{if or .Labels .Cells}}
+          <div class="proj-card-pills">
+            {{range .Labels}}{{template "label-pill" .}}{{end}}
+            {{range .Cells}}{{if .Display}}{{if .Color}}<span class="proj-pill proj-c-{{.Color}}">{{.Display}}</span>{{else}}<span class="proj-pill" title="{{.Field.Name}}">{{.Field.Name}}: {{.Display}}</span>{{end}}{{end}}{{end}}
+          </div>
+          {{end}}
+          {{end}}
+          {{if and $d.CanWrite (not .Hidden)}}
+          <div class="proj-card-tools">
+            <form method="post" action="{{.ItemURL}}/move">
+              <input type="hidden" name="return" value="{{$d.Self}}"><input type="hidden" name="before" value="{{.Prev}}">
+              <button class="icon-btn proj-tool" type="submit" {{if not .Prev}}disabled{{end}} aria-label="Move {{.Title}} up" title="Move up"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 15 L12 9 L18 15"/></svg></button>
+            </form>
+            <form method="post" action="{{.ItemURL}}/move">
+              <input type="hidden" name="return" value="{{$d.Self}}"><input type="hidden" name="after" value="{{.Next}}">
+              <button class="icon-btn proj-tool" type="submit" {{if not .Next}}disabled{{end}} aria-label="Move {{.Title}} down" title="Move down"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg></button>
+            </form>
+            <form class="proj-card-status" method="post" action="{{.ItemURL}}/move">
+              <input type="hidden" name="return" value="{{$d.Self}}">
+              <select name="status" aria-label="Status of {{.Title}}" data-proj-autosubmit>
+                <option value="">No status</option>
+                {{$v := .Status.Value}}{{range $d.Status.Options}}<option value="{{.ID}}" {{if eq (print .ID) $v}}selected{{end}}>{{.Name}}</option>{{end}}
+              </select>
+              <button class="btn btn-xs" type="submit" data-proj-js-hide>Move</button>
+            </form>
+            <a class="icon-btn proj-tool" href="{{.ItemURL}}" aria-label="Details for {{.Title}}" title="Details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></a>
+          </div>
+          {{end}}
+        </li>
+        {{end}}
+      </ol>
+      {{if $d.CanWrite}}
+      <details class="proj-add-draft">
+        <summary class="proj-add-btn">+ Add item</summary>
+        <form class="stack-sm" method="post" action="{{$d.URL}}/items">
+          <input type="hidden" name="return" value="{{$d.Self}}">
+          <input type="hidden" name="status" value="{{$col.Value}}">
+          <label class="sr-only" for="proj-draft-{{if $col.Value}}{{$col.Value}}{{else}}none{{end}}">Draft title in {{$col.Name}}</label>
+          <input id="proj-draft-{{if $col.Value}}{{$col.Value}}{{else}}none{{end}}" name="title" required maxlength="256" placeholder="Draft title">
+          <button class="btn btn-sm btn-primary" type="submit">Add draft</button>
+        </form>
+      </details>
+      {{end}}
+    </section>
+    {{end}}
+  </div>
+</div>
+{{if $d.CanWrite}}<p class="small muted">Drag cards between columns, or use the arrows and the status menu on each card.</p>{{end}}
+{{end}}
+{{end}}
+
+{{define "proj-table"}}
+{{$d := .Data}}
+<div class="table-scroll proj-table-wrap">
+  <table class="proj-table">
+    <thead>
+      <tr>
+        {{range $d.TableCols}}<th scope="col" {{if .Sorted}}aria-sort="{{if .Desc}}descending{{else}}ascending{{end}}"{{end}}><a href="{{.URL}}" class="proj-sort">{{.Label}}{{if .Sorted}}<span aria-hidden="true">{{if .Desc}} ↓{{else}} ↑{{end}}</span>{{end}}</a></th>{{end}}
+        <th scope="col"><span class="sr-only">Details</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range $row := $d.Rows}}
+      <tr id="item-{{$row.ID}}" {{if $row.Hidden}}class="is-hidden"{{end}}>
+        <th scope="row" class="proj-td-title">
+          {{if $row.Hidden}}<span class="muted">Private item</span>
+          {{else}}<span class="row gap-sm">{{template "proj-kind-icon" $row.Kind}}<a href="{{$row.URL}}">{{$row.Title}}</a></span>{{end}}
+        </th>
+        <td class="small mono">{{if $row.Repo}}{{$row.Repo}}{{if $row.Number}}#{{$row.Number}}{{end}}{{end}}</td>
+        <td class="small">{{$row.StateLabel}}{{if $row.Labels}}<span class="proj-td-labels">{{range $row.Labels}} {{template "label-pill" .}}{{end}}</span>{{end}}</td>
+        {{range $cell := $row.AllCells}}
+        <td class="proj-td-field">
+          {{if and $d.CanWrite (not $row.Hidden)}}
+          <form class="proj-inline" method="post" action="{{$row.ItemURL}}/field">
+            <input type="hidden" name="return" value="{{$d.Self}}"><input type="hidden" name="field" value="{{$cell.Field.ID}}">
+            {{template "proj-field-input" $cell}}
+            <button class="btn btn-xs" type="submit" data-proj-js-hide>Save</button>
+          </form>
+          {{else if $cell.Color}}<span class="proj-pill proj-c-{{$cell.Color}}">{{$cell.Display}}</span>
+          {{else}}{{$cell.Display}}{{end}}
+        </td>
+        {{end}}
+        <td>{{if not $row.Hidden}}<a class="icon-btn proj-tool" href="{{$row.ItemURL}}" aria-label="Details for {{$row.Title}}" title="Details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></a>{{end}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="{{len $d.TableCols}}" class="muted center">Nothing here{{if $d.Q}} matches the filter{{end}}.</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{if $d.CanWrite}}
+<form class="proj-addbar" method="post" action="{{$d.URL}}/items">
+  <input type="hidden" name="return" value="{{$d.Self}}">
+  <label class="sr-only" for="proj-draft-table">New draft title</label>
+  <input id="proj-draft-table" name="title" required maxlength="256" placeholder="+ Add a draft">
+  <button class="btn btn-sm" type="submit">Add draft</button>
+</form>
+{{end}}
+{{end}}
+
+{{define "proj-roadmap"}}
+{{$d := .Data}}{{$rm := $d.Road}}
+{{if $rm.NeedsFields}}
+<div class="card empty stack-sm">
+  <p class="muted">The roadmap places items by date. Add two date fields, such as “Start date” and “Target date”, and fill them in.</p>
+  {{if $d.CanAdmin}}<a class="btn btn-sm" href="{{$d.URL}}/settings#fields">Add date fields</a>{{end}}
+</div>
+{{else}}
+<form class="toolbar proj-road-pick" method="get" action="{{$d.URL}}">
+  {{with $d.Active}}<input type="hidden" name="view" value="{{.ID}}">{{end}}
+  <input type="hidden" name="layout" value="roadmap">
+  {{if $d.Q}}<input type="hidden" name="q" value="{{$d.Q}}">{{end}}
+  <label class="small" for="proj-road-start">Start</label>
+  <select id="proj-road-start" name="start" data-proj-autosubmit>{{range $rm.DateFields}}<option value="{{.ID}}" {{if eq .ID $rm.StartFieldID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
+  <label class="small" for="proj-road-target">Target</label>
+  <select id="proj-road-target" name="target" data-proj-autosubmit>{{range $rm.DateFields}}<option value="{{.ID}}" {{if eq .ID $rm.EndFieldID}}selected{{end}}>{{.Name}}</option>{{end}}</select>
+  <button class="btn btn-sm" type="submit" data-proj-js-hide>Show</button>
+  {{if $rm.From}}<span class="small muted">{{$rm.From}} – {{$rm.To}}</span>{{end}}
+</form>
+{{if $rm.Rows}}
+<div class="proj-road card">
+  <div class="proj-road-row proj-road-axis" aria-hidden="true">
+    <span></span>
+    <svg class="proj-road-svg" viewBox="0 0 1000 22" preserveAspectRatio="none">
+      {{range $rm.Ticks}}<line class="proj-road-tick" x1="{{printf "%.1f" .X}}" x2="{{printf "%.1f" .X}}" y1="0" y2="22"/>{{end}}
+    </svg>
+    <div class="proj-road-labels">{{range $rm.Ticks}}<span>{{.Label}}</span>{{end}}</div>
+  </div>
+  <ul class="proj-road-list">
+    {{range $rm.Rows}}
+    <li class="proj-road-row" id="item-{{.Card.ID}}">
+      <span class="proj-road-title min0">{{if .Card.Hidden}}<span class="muted">Private item</span>{{else}}{{template "proj-kind-icon" .Card.Kind}} <a href="{{.Card.URL}}" class="ellipsis">{{.Card.Title}}</a>{{end}}</span>
+      <svg class="proj-road-svg" viewBox="0 0 1000 22" preserveAspectRatio="none" role="img" aria-label="{{.Start}} to {{.End}}">
+        {{range $rm.Ticks}}<line class="proj-road-tick" x1="{{printf "%.1f" .X}}" x2="{{printf "%.1f" .X}}" y1="0" y2="22"/>{{end}}
+        {{if $rm.ShowToday}}<line class="proj-road-today" x1="{{printf "%.1f" $rm.TodayX}}" x2="{{printf "%.1f" $rm.TodayX}}" y1="0" y2="22"/>{{end}}
+        <rect class="proj-road-bar proj-c-{{if .Card.Status.Color}}{{.Card.Status.Color}}{{else}}gray{{end}}" x="{{printf "%.1f" .X}}" y="5" width="{{printf "%.1f" .W}}" height="12" rx="3"/>
+      </svg>
+      <span class="small muted proj-road-dates">{{.Start}} – {{.End}}</span>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{else}}
+<div class="card empty"><p class="muted">No items have a {{$rm.Start.Name}} or {{$rm.End.Name}} yet{{if $d.Q}} among those matching the filter{{end}}.</p></div>
+{{end}}
+{{end}}
+{{if $rm.Unscheduled}}
+<section class="stack-sm" aria-labelledby="proj-unsched-h">
+  <h2 class="h-sm" id="proj-unsched-h">No dates <span class="pill">{{len $rm.Unscheduled}}</span></h2>
+  <ul class="list-card">
+    {{range $rm.Unscheduled}}
+    <li class="list-row">{{if .Hidden}}<span class="muted">Private item</span>{{else}}{{template "proj-kind-icon" .Kind}}<a href="{{.URL}}" class="grow min0 ellipsis">{{.Title}}</a>{{if $d.CanWrite}}<a class="small" href="{{.ItemURL}}">Set dates</a>{{end}}{{end}}</li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+{{end}}

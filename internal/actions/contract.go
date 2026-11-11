@@ -236,6 +236,76 @@ type DiscoveredRepo struct {
 	Dirty   bool              `json:"dirty"`
 }
 
+// ---------- workspaces (optional capability) ----------
+//
+// Runners with CapWorkspaces (opt-in on the device) also long-poll
+//
+//	POST /workspaces/poll          wait (≤ PollWait) for an "Open on <device>" request
+//	POST /workspaces/{id}/status   report progress on a request
+//	POST /workspaces/sync          report the workspaces on the device
+//
+// The server only names a branch and, optionally, one of the runner's own
+// open presets. The commands themselves live in the runner's config: the
+// server can never make a runner run a command of its choosing.
+
+// Workspace request states a runner reports.
+const (
+	WorkspaceCloning = "cloning"
+	WorkspaceCloned  = "cloned"
+	WorkspaceUpdated = "updated"
+	WorkspaceOpened  = "opened"
+	WorkspaceFailed  = "failed"
+)
+
+type WorkspacePollRequest struct {
+	Capabilities []string `json:"capabilities"`
+	Version      string   `json:"version"`
+	Presets      []string `json:"presets"` // names of the runner's open presets
+	Root         string   `json:"root"`    // the workspaces folder on the device
+	SSH          bool     `json:"ssh"`     // the device sets remotes to the SSH URL
+}
+
+// WorkspacePollResponse: Request is nil when nothing was asked within PollWait.
+type WorkspacePollResponse struct {
+	Request *WorkspaceRequest `json:"request,omitempty"`
+}
+
+type WorkspaceRequest struct {
+	ID       int64   `json:"id"`
+	Repo     RepoRef `json:"repo"`
+	Branch   string  `json:"branch"`
+	CloneURL string  `json:"clone_url"`         // HTTPS, no credentials
+	SSHURL   string  `json:"ssh_url,omitempty"` // empty when the server has no SSH
+	// Token is short-lived and limited to this repository (username
+	// "atelier"). Use it only for this clone or fetch; never store it.
+	Token string `json:"token"`
+	// Preset names one of the runner's own open presets ("" = don't open).
+	Preset string `json:"preset,omitempty"`
+}
+
+type WorkspaceStatus struct {
+	State   string `json:"state"` // Workspace* above
+	Message string `json:"message,omitempty"`
+	Path    string `json:"path,omitempty"`
+	Branch  string `json:"branch,omitempty"`
+	Dirty   bool   `json:"dirty,omitempty"`
+	Final   bool   `json:"final,omitempty"` // the last report for this request
+}
+
+type WorkspaceSyncRequest struct {
+	Workspaces []WorkspaceInfo `json:"workspaces"`
+}
+
+type WorkspaceInfo struct {
+	Owner      string    `json:"owner"`
+	Repo       string    `json:"repo"`
+	Path       string    `json:"path"`
+	Branch     string    `json:"branch"`
+	Head       string    `json:"head,omitempty"`
+	Dirty      bool      `json:"dirty"`
+	LastOpened time.Time `json:"last_opened,omitempty"`
+}
+
 // ---------- secrets hook ----------
 
 // SecretSource resolves secrets for a job. The secrets feature registers one;

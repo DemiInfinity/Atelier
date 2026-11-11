@@ -59,6 +59,13 @@ services:
       # Put ATELIER_SECRET_KEY=<base64 32 bytes> in a .env file next to this
       # stack (mode 600), or in Portainer's environment variables.
       ATELIER_SECRET_KEY: ${ATELIER_SECRET_KEY:-}
+      # Pages (static sites, see docs/pages.md). Empty = off. Sites need their
+      # own host name pointing at this same container, e.g. a DNS rewrite
+      # pages.<your-domain> → server IP and an NPM proxy host → port 3010.
+      ATELIER_PAGES_URL: ${ATELIER_PAGES_URL:-}
+      # ATELIER_PAGES_MAX_MB: "1024"       # per deploy
+      # ATELIER_PAGES_MAX_FILES: "50000"   # per deploy
+      # ATELIER_PAGES_KEEP: "5"            # deploys kept for rollback
       # Usually leave these at the image defaults:
       # ATELIER_LISTEN: ":3000"
       # ATELIER_SSH_LISTEN: ":2222"

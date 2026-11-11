@@ -191,7 +191,7 @@ func (a *App) lfsBatch(w http.ResponseWriter, r *http.Request, repo store.Repo) 
 	switch req.Operation {
 	case "download":
 	case "upload":
-		need = PermWrite
+		need = PermPush
 	default:
 		lfsError(w, http.StatusUnprocessableEntity, "operation must be upload or download")
 		return
@@ -267,7 +267,7 @@ func containsStr(xs []string, s string) bool {
 
 func (a *App) lfsUpload(w http.ResponseWriter, r *http.Request, repo store.Repo, oid string) {
 	ctx := r.Context()
-	if _, ok := a.lfsAuth(w, r, repo, PermWrite); !ok {
+	if _, ok := a.lfsAuth(w, r, repo, PermPush); !ok {
 		return
 	}
 	if !validSHA256(oid) {
@@ -338,7 +338,7 @@ func (a *App) lfsDownload(w http.ResponseWriter, r *http.Request, repo store.Rep
 
 func (a *App) lfsVerify(w http.ResponseWriter, r *http.Request, repo store.Repo) {
 	ctx := r.Context()
-	if _, ok := a.lfsAuth(w, r, repo, PermWrite); !ok {
+	if _, ok := a.lfsAuth(w, r, repo, PermPush); !ok {
 		return
 	}
 	var p lfsPointer

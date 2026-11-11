@@ -83,10 +83,10 @@ func botAccessPolicy(ctx context.Context, a *App, who Actor, repo store.Repo, ne
 	switch need {
 	case PermRead:
 		return true, true
-	case PermWrite:
+	case PermPush:
 		return who.hasScope("bot:push"), true
 	}
-	return false, true
+	return false, true // PermWrite, PermAdmin: never
 }
 
 // appsMayDo reports whether who may perform an API operation on repo:

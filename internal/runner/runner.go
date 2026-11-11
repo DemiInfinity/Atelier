@@ -100,6 +100,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.Config.HasCap(actions.CapDiscovery) {
 		go r.discoveryLoop(ctx)
 	}
+	if r.Config.HasCap(actions.CapWorkspaces) {
+		go r.workspaceLoop(ctx) // device workspaces (workspace.go)
+	}
 	if !r.Config.HasCap(actions.CapJobs) {
 		r.logger().Info("jobs capability is off; only discovery runs")
 		<-ctx.Done()

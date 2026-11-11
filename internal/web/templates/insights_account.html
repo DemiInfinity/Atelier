@@ -1,0 +1,52 @@
+{{define "head"}}<link rel="stylesheet" href="/static/insights.css">{{if .Data.Refresh}}
+<meta http-equiv="refresh" content="4">{{end}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap stack-lg ins-account">
+  <div class="stack-sm">
+    <h1 class="display">Insights</h1>
+    <p class="muted">Across the {{$d.Repos}} {{if eq $d.Repos 1}}repository{{else}}repositories{{end}} you can see.</p>
+  </div>
+  {{if $d.Updating}}<p class="ins-updating" role="status"><span class="ins-dot" aria-hidden="true"></span>Updating… counting commits in {{$d.Updating}} {{if eq $d.Updating 1}}repository{{else}}repositories{{end}} in the background. This page refreshes by itself.</p>{{end}}
+
+  <div class="ins-stats">
+    <div class="ins-stat"><span class="ins-stat-label">Commits, last 12 months</span><span class="ins-stat-value ins-ink-commits">{{$d.YearTotal}}</span><span class="ins-stat-hint">on default branches</span></div>
+    <div class="ins-stat"><span class="ins-stat-label">Active days</span><span class="ins-stat-value">{{$d.ActiveDays}}</span><span class="ins-stat-hint">current streak {{$d.Streak}} {{if eq $d.Streak 1}}day{{else}}days{{end}}</span></div>
+    {{with $d.Actions}}
+    <div class="ins-stat"><span class="ins-stat-label">Actions run time, {{.Days}} days</span><span class="ins-stat-value">{{.Minutes}}</span><span class="ins-stat-hint">{{.Runs}} runs · {{.Success}} succeeded</span></div>
+    <div class="ins-stat ins-stat-agent"><span class="ins-stat-label">Agent runs</span><span class="ins-stat-value ins-ink-agent">{{.AgentRuns}}</span><span class="ins-stat-hint">{{if .AgentRuns}}{{.AgentTokens}}{{with .AgentCost}} · {{.}} (estimate){{end}}{{else}}none in {{.Days}} days{{end}}</span></div>
+    {{end}}
+  </div>
+
+  <section class="card stack" aria-labelledby="ins-cal-h">
+    <div class="row-between wrap-gap"><h2 class="h-sm" id="ins-cal-h">Contributions</h2><span class="small muted">{{$d.YearTotal}} commits in the last year</span></div>
+    {{$d.Calendar}}
+  </section>
+
+  <div class="ins-pulse-grid">
+    <section class="card stack-sm" aria-labelledby="ins-active-h">
+      <h2 class="h-sm" id="ins-active-h">Most active repositories, 30 days</h2>
+      {{if $d.Active}}
+      <table class="ins-table ins-meter-table">
+        <caption class="sr-only">Commits per repository in the last 30 days</caption>
+        <thead><tr><th scope="col">Repository</th><th scope="col" class="right">Commits</th></tr></thead>
+        <tbody>{{range $d.Active}}<tr><th scope="row"><a class="ellipsis" href="/{{.Repo.FullName}}/insights">{{.Repo.FullName}}</a>{{.Meter}}</th><td class="right">{{.Commits}}</td></tr>{{end}}</tbody>
+      </table>
+      {{else}}<p class="small muted">No commits in the last 30 days.</p>{{end}}
+    </section>
+    {{with $d.Actions}}
+    <section class="card stack-sm" aria-labelledby="ins-dev-h">
+      <h2 class="h-sm" id="ins-dev-h">Actions time per device, {{.Days}} days</h2>
+      {{if .Runners}}
+      <table class="ins-table ins-meter-table">
+        <caption class="sr-only">Run time and jobs by runner (device)</caption>
+        <thead><tr><th scope="col">Device</th><th scope="col" class="right">Time</th><th scope="col" class="right">Jobs</th></tr></thead>
+        <tbody>{{range .Runners}}<tr><th scope="row"><span class="ellipsis">{{.Name}}</span>{{.Meter}}</th><td class="right nowrap">{{.Minutes}}</td><td class="right">{{.Jobs}}</td></tr>{{end}}</tbody>
+      </table>
+      {{else}}<p class="small muted">No jobs ran on your devices in the last {{.Days}} days.</p>{{end}}
+      <p class="hint">Wall-clock time of jobs on each runner. Runners are your own devices, so nothing is billed.</p>
+    </section>
+    {{end}}
+  </div>
+</main>
+{{end}}

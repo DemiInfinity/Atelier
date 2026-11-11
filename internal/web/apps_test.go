@@ -639,6 +639,13 @@ func TestAppsBotScopes(t *testing.T) {
 	if rec := do(t, f.a, "GET", "/zoe/demo.git/info/refs?service=git-receive-pack", nil, basic(ptok)); rec.Code != 200 {
 		t.Errorf("bot with push: receive-pack = %d", rec.Code)
 	}
+	// Push is git push only: no releases and no other writes.
+	if f.a.can(ctx, f.a.mustResolve(t, ptok), f.repo, PermWrite) {
+		t.Error("bot with push has PermWrite")
+	}
+	if rec := apiReq(t, f.a, "POST", "/api/v1/repos/zoe/demo/releases", ptok, map[string]any{"tag_name": "v9", "name": "x"}); rec.Code < 400 {
+		t.Errorf("bot with push created a release: %d %s", rec.Code, rec.Body)
+	}
 	if rec := apiReq(t, f.a, "POST", "/api/v3/repos/zoe/demo/issues/1/comments", ptok, map[string]string{"body": "x"}); rec.Code != 403 {
 		t.Errorf("bot without comment = %d", rec.Code)
 	}
@@ -836,4 +843,13 @@ func TestAppsSecondPersonLockedOut(t *testing.T) {
 	if rec := apiReq(t, f.a, "POST", "/api/v3/repos/zoe/demo/issues/1/comments", vtok, map[string]string{"body": "x"}); rec.Code != 404 {
 		t.Errorf("visitor's bot = %d", rec.Code)
 	}
+}
+
+func (a *App) mustResolve(t *testing.T, tok string) Actor {
+	t.Helper()
+	who, ok := a.resolveCredential(context.Background(), tok)
+	if !ok {
+		t.Fatal("token didn't resolve")
+	}
+	return who
 }

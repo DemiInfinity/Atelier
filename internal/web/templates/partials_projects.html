@@ -1,0 +1,58 @@
+{{/* Projects: shared pieces. Sidebar includes for the issue and pull request pages
+     (pass the page), the project header, status dots and field inputs. */}}
+
+{{define "proj-head-assets"}}<link rel="stylesheet" href="/static/projects.css"><script src="/static/projects.js" defer></script>{{end}}
+
+{{/* Issue sidebar: {{template "proj-side-issue" .}} on issues_view.html. */}}
+{{define "proj-side-issue"}}{{with .Data}}{{template "proj-side" (print "/projects/panel?kind=issue&repo=" .V.Repo.ID "&number=" .Issue.Number)}}{{end}}{{end}}
+
+{{/* Pull request sidebar: {{template "proj-side-pull" .}} on pulls_view.html. */}}
+{{define "proj-side-pull"}}{{with .Data}}{{template "proj-side" (print "/projects/panel?kind=pull&repo=" .V.Repo.ID "&number=" .P.Number)}}{{end}}{{end}}
+
+{{define "proj-side"}}
+<section class="side-section pr-side-block proj-side" aria-labelledby="proj-side-h" data-proj-panel="{{.}}">
+  {{template "proj-head-assets"}}
+  <h2 class="side-title eyebrow" id="proj-side-h">Projects</h2>
+  <div class="proj-side-body" data-proj-panel-body>
+    <a class="small muted-link" href="{{.}}">Add to a project or set its status</a>
+  </div>
+</section>
+{{end}}
+
+{{define "proj-dot"}}<span class="proj-dot proj-c-{{if .}}{{.}}{{else}}gray{{end}}" aria-hidden="true"></span>{{end}}
+
+{{define "proj-status-pill"}}{{if .Display}}<span class="proj-pill proj-c-{{.Color}}">{{template "proj-dot" .Color}}{{.Display}}</span>{{end}}{{end}}
+
+{{define "proj-kind-icon"}}{{if eq . "pull"}}<svg class="proj-kind" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5 V15.5 M18 15.5 V10 a3 3 0 0 0-3-3 H11 M13 5 L11 7 L13 9"/></svg>{{else if eq . "draft"}}<svg class="proj-kind" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>{{else}}<svg class="proj-kind" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>{{end}}{{end}}
+
+{{/* The project header. Pass map-like data with .P, .URL, .CanAdmin and an Active key (board, settings, item). */}}
+{{define "proj-title"}}
+<div class="proj-title-row">
+  <div class="stack-sm min0">
+    <p class="small muted"><a class="muted-link" href="/projects?account={{.P.Owner}}">{{.P.Owner}}</a> <span class="slash">/</span> Projects</p>
+    <div class="row gap-sm wrap-gap">
+      <h1 class="h-display proj-name"><a href="{{.URL}}">{{.P.Title}}</a></h1>
+      {{if .P.Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
+      {{if .P.Closed}}<span class="pill">Closed</span>{{end}}
+    </div>
+    {{if .P.Description}}<p class="text-2 proj-desc">{{.P.Description}}</p>{{end}}
+  </div>
+  {{if .CanAdmin}}<a class="btn btn-sm" href="{{.URL}}/settings">Settings</a>{{end}}
+</div>
+{{end}}
+
+{{/* One field input for an item. Pass a projCell-like value with .Field, .Value. Name is "value". */}}
+{{define "proj-field-input"}}
+{{if eq .Field.Kind "single_select"}}
+<select name="value" aria-label="{{.Field.Name}}" data-proj-autosubmit>
+  <option value="">{{if .Field.IsStatus}}No status{{else}}None{{end}}</option>
+  {{$v := .Value}}{{range .Field.Options}}<option value="{{.ID}}" {{if eq (print .ID) $v}}selected{{end}}>{{.Name}}</option>{{end}}
+</select>
+{{else if eq .Field.Kind "number"}}
+<input type="number" step="any" name="value" aria-label="{{.Field.Name}}" value="{{.Value}}" data-proj-autosubmit>
+{{else if eq .Field.Kind "date"}}
+<input type="date" name="value" aria-label="{{.Field.Name}}" value="{{.Value}}" data-proj-autosubmit>
+{{else}}
+<input type="text" name="value" aria-label="{{.Field.Name}}" value="{{.Value}}" maxlength="1000" data-proj-autosubmit>
+{{end}}
+{{end}}

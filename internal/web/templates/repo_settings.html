@@ -37,10 +37,26 @@
 
   <section class="card row-between wrap-gap">
     <div>
+      <h2 class="h-sm">Tether</h2>
+      <p class="small muted">Link this repository to a twin on GitHub: mirror pushes out, or keep GitHub as home and run Atelier's checks on its pull requests.</p>
+    </div>
+    <a class="btn" href="{{$v.Base}}/settings/tether">Tether</a>
+  </section>
+
+  <section class="card row-between wrap-gap">
+    <div>
       <h2 class="h-sm">Apps, bots and webhooks</h2>
       <p class="small muted">Bots that can comment and post checks here, webhooks, and Review on GitHub through Tether.</p>
     </div>
     <a class="btn" href="{{$v.Base}}/settings/apps">Apps and webhooks</a>
+  </section>
+
+  <section class="card row-between wrap-gap">
+    <div>
+      <h2 class="h-sm">Pages</h2>
+      <p class="small muted">Publish a static website from a branch folder or an Actions workflow, with deploy history and rollback.</p>
+    </div>
+    <a class="btn" href="{{$v.Base}}/settings/pages">Pages</a>
   </section>
 
   {{with .Data.Move}}{{if .Accounts}}

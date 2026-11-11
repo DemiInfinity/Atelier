@@ -1,0 +1,73 @@
+{{define "head"}}<link rel="stylesheet" href="/static/snippets.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}
+{{if $d.Anon}}{{template "snippetanonbar"}}{{end}}
+<main class="wrap stack">
+  {{template "snippethead" $d}}
+  <div class="snip-toolbar">
+    <nav class="segmented" aria-label="Snippet">
+      <a href="{{$d.Base}}" aria-current="page">Code</a>
+      <a href="{{$d.Base}}/revisions">Revisions <span class="snip-count">{{$d.Count}}</span></a>
+    </nav>
+    <div class="clone snip-clone">
+      <span class="clone-label">Clone</span>
+      <input class="clone-url" id="snip-clone-url" value="{{$d.CloneURL}}" readonly aria-label="Clone URL (HTTPS)">
+      <button type="button" class="clone-copy" data-copy="#snip-clone-url" aria-label="Copy clone URL"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+    </div>
+    <div class="snip-buttons">
+      {{if $d.Tip}}<a class="btn btn-sm" href="{{$d.Base}}/archive.zip">Download zip</a>{{end}}
+      {{if $d.CanStar}}
+      <form method="post" action="{{$d.Base}}/star">
+        {{if $d.Starred}}<input type="hidden" name="star" value="0"><button class="btn btn-sm" type="submit" aria-pressed="true">Starred</button>
+        {{else}}<input type="hidden" name="star" value="1"><button class="btn btn-sm" type="submit" aria-pressed="false">Star</button>{{end}}
+      </form>
+      {{end}}
+      {{if $d.CanEdit}}<a class="btn btn-sm" href="{{$d.Base}}/edit">Edit</a>{{end}}
+      {{if $d.CanAdmin}}
+      <details class="dropdown snip-delete">
+        <summary class="btn btn-sm btn-danger">Delete</summary>
+        <div class="dropdown-menu snip-delete-menu">
+          <p class="small">Delete this snippet and all its revisions? This can't be undone.</p>
+          <form method="post" action="{{$d.Base}}/delete"><button class="btn btn-sm btn-danger" type="submit">Delete snippet</button></form>
+        </div>
+      </details>
+      {{end}}
+    </div>
+  </div>
+
+  {{if $d.Rev}}<div class="flash snip-rev-note" role="status">You're viewing an older revision ({{short $d.Rev}}). <a href="{{$d.Base}}">See the latest</a>.</div>{{end}}
+
+  {{if $d.Last}}<p class="small muted snip-last">{{$d.Last.Subject}} · <span class="mono">{{$d.Last.Short}}</span> · {{ago $d.Last.When}}</p>{{end}}
+
+  {{range $d.Files}}
+  <section class="list-card snip-view-file" id="{{.Anchor}}">
+    <div class="list-head row-between wrap-gap">
+      <div class="row gap-sm min0">
+        <h2 class="h-sm mono snip-view-name"><a href="#{{.Anchor}}">{{.Name}}</a></h2>
+        <span class="small muted nowrap">{{bytes .Blob.Size}}{{if and (not .Blob.Binary) (not .Blob.TooLarge)}} · {{len (lines .Blob.Data)}} lines{{end}}</span>
+      </div>
+      <a class="btn btn-sm" href="{{.RawURL}}">Raw</a>
+    </div>
+    {{if .Blob.TooLarge}}
+      <div class="empty"><p><strong>This file is too large to show here.</strong></p><p class="muted"><a href="{{.RawURL}}">View the raw file</a> instead.</p></div>
+    {{else if .Blob.Binary}}
+      <div class="empty"><p><strong>Binary file not shown.</strong></p><p class="muted"><a href="{{.RawURL}}">Download it</a> ({{bytes .Blob.Size}}).</p></div>
+    {{else if .Markdown}}
+      <div class="markdown">{{markdown .Blob.Data}}</div>
+    {{else}}
+      <div class="table-scroll">
+        <table class="code">
+          <caption class="sr-only">Contents of {{.Name}}</caption>
+          <tbody>
+          {{$a := .Anchor}}{{range lines .Blob.Data}}<tr id="{{$a}}-L{{.N}}"><td class="ln"><a href="#{{$a}}-L{{.N}}">{{.N}}</a></td><td class="lc">{{.Text}}</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{end}}
+  </section>
+  {{else}}
+  <div class="card empty"><p><strong>This snippet has no files yet.</strong></p><p class="muted">Push to <span class="mono">{{$d.CloneURL}}</span> to add some.</p></div>
+  {{end}}
+</main>
+{{end}}

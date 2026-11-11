@@ -1,0 +1,224 @@
+/* Insights: /{owner}/{repo}/insights and /insights. Charts are inline SVG
+   (internal/web/insights_charts.go); their colours live here. */
+
+:root {
+  --ins-commits: var(--amber);
+  --ins-add: #7fd16b;
+  --ins-del: #d77fd0; /* green/magenta: told apart with red-green colour blindness */
+  --ins-agent: var(--violet);
+  --ins-grid: #2d2a26;
+  --ins-axis: #4a453e;
+  --ins-l0: #24211d;
+  --ins-l1: #4a3a1f;
+  --ins-l2: #7a5a26;
+  --ins-l3: #b8842f;
+  --ins-l4: #f2b85c;
+}
+
+/* ---------- layout ---------- */
+
+.ins-layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px;
+}
+.ins-nav {
+  flex: 1 1 200px;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 84px;
+}
+.ins-nav a {
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  border-left: 2px solid transparent;
+}
+.ins-nav a:hover { background: var(--raised); color: var(--text); text-decoration: none; }
+.ins-nav a[aria-current="page"] { background: var(--raised-2); color: var(--text); border-left-color: var(--amber); }
+.ins-main { flex: 999 1 640px; min-width: 0; }
+
+@media (max-width: 860px) {
+  .ins-nav {
+    position: static;
+    max-width: none;
+    flex: 1 1 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+  .ins-nav a { white-space: nowrap; border-left: 0; border-bottom: 2px solid transparent; }
+  .ins-nav a[aria-current="page"] { border-bottom-color: var(--amber); }
+}
+
+.ins-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--r-sm); overflow: hidden; }
+.ins-seg a { padding: 6px 12px; color: var(--text-2); font-weight: 500; }
+.ins-seg a + a { border-left: 1px solid var(--border-strong); }
+.ins-seg a:hover { background: var(--raised); text-decoration: none; color: var(--text); }
+.ins-seg a[aria-current="page"] { background: var(--amber-chip); color: var(--amber); }
+
+/* ---------- stat tiles ---------- */
+
+.ins-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 12px;
+}
+.ins-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  min-width: 0;
+}
+.ins-stat-agent { background: #1c1a26; border-color: #3f3863; }
+.ins-stat-label { font-size: 12px; color: var(--muted); }
+.ins-stat-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ins-stat-hint { font-size: 12.5px; color: var(--text-2); }
+.ins-ink-commits { color: var(--ins-commits); }
+.ins-ink-merged { color: var(--ok); }
+.ins-ink-add { color: var(--ins-add); }
+.ins-ink-del { color: var(--ins-del); }
+.ins-ink-agent { color: var(--ins-agent); }
+
+.ins-pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.ins-list { display: flex; flex-direction: column; }
+.ins-list li { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-top: 1px solid var(--border); min-width: 0; }
+.ins-list li:first-child { border-top: 0; padding-top: 0; }
+.ins-list a { color: var(--text); overflow-wrap: anywhere; }
+.ins-list a:hover { color: var(--amber); }
+.ins-num { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.ins-updating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--r);
+  border: 1px solid #5a4320;
+  background: var(--amber-chip);
+  color: var(--text);
+}
+.ins-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex-shrink: 0; animation: ins-pulse 1.4s ease-in-out infinite; }
+@keyframes ins-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .ins-dot { animation: none; } }
+
+/* ---------- charts ---------- */
+
+.ins-chart { margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ins-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--text-2); }
+.ins-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ins-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.ins-swatch.ins-c-commits { background: var(--ins-commits); }
+.ins-swatch.ins-c-add { background: var(--ins-add); }
+.ins-swatch.ins-c-del { background: var(--ins-del); }
+
+.ins-plot { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+.ins-yaxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 180px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.ins-yaxis span:first-child { transform: translateY(-1px); }
+.ins-svg { display: block; width: 100%; height: 180px; overflow: visible; }
+.ins-grid { stroke: var(--ins-grid); stroke-width: 1; }
+.ins-base { stroke: var(--ins-axis); stroke-width: 1; }
+.ins-hit { fill: transparent; }
+.ins-col:hover .ins-hit { fill: rgba(242, 184, 92, 0.07); }
+.ins-col:hover .ins-bar { filter: brightness(1.15); }
+.ins-bar.ins-c-commits, .ins-c-commits { fill: var(--ins-commits); }
+.ins-c-add { fill: var(--ins-add); }
+.ins-c-del { fill: var(--ins-del); }
+.ins-c-runner { fill: var(--ins-commits); }
+.ins-xaxis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-left: 36px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.ins-data summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 12.5px;
+  width: fit-content;
+  padding: 6px 0;
+}
+.ins-data summary:hover { color: var(--amber); }
+.ins-data[open] summary { margin-bottom: 8px; }
+.ins-table-scroll { overflow-x: auto; max-width: 100%; max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-sm); }
+.ins-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ins-table th, .ins-table td { padding: 7px 12px; text-align: left; border-top: 1px solid var(--border); }
+.ins-table thead th { border-top: 0; background: var(--raised); color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; }
+.ins-table tbody th { font-weight: 500; color: var(--text); }
+.ins-table .right { text-align: right; }
+
+.ins-meter-table th, .ins-meter-table td { padding-left: 0; padding-right: 8px; vertical-align: top; }
+.ins-meter-table td:last-child { padding-right: 0; }
+.ins-meter-table thead th { background: none; position: static; }
+.ins-meter-table tbody th { width: 100%; max-width: 0; }
+.ins-meter-table tbody th .ellipsis { display: block; }
+.ins-meter { display: block; width: 100%; height: 6px; margin-top: 6px; }
+.ins-meter-track { fill: var(--raised-2); }
+
+.ins-spark { display: block; width: 100%; height: 32px; }
+
+.ins-stack { display: block; width: 100%; height: 12px; border-radius: 6px; overflow: hidden; }
+.ins-lang-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; }
+.ins-lang-legend li { display: inline-flex; align-items: center; gap: 6px; }
+
+/* contribution calendar */
+/* rtl on the box (ltr inside) starts a scrolling calendar at today, like GitHub. */
+.ins-cal-scroll { overflow-x: auto; max-width: 100%; padding-bottom: 4px; direction: rtl; }
+.ins-cal-scroll > svg { direction: ltr; }
+.ins-cal-svg { display: block; width: 100%; height: auto; min-width: 680px; max-width: 1100px; }
+.ins-cal-label { fill: var(--muted); font: 10.5px var(--font); }
+.ins-l0 { fill: var(--ins-l0); }
+.ins-l1 { fill: var(--ins-l1); }
+.ins-l2 { fill: var(--ins-l2); }
+.ins-l3 { fill: var(--ins-l3); }
+.ins-l4 { fill: var(--ins-l4); }
+.ins-cal-svg rect:hover { stroke: var(--text); stroke-width: 1; }
+.ins-cal-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.ins-cal-legend span { margin: 0 4px; }
+
+/* contributors */
+.ins-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.ins-person { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+.ins-person-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ins-person-head .grow { display: flex; flex-direction: column; }
+.ins-rank { font-variant-numeric: tabular-nums; font-size: 12.5px; }
+
+@media (forced-colors: active) {
+  .ins-bar, .ins-meter rect:last-child, .ins-stack rect { fill: CanvasText; }
+  .ins-c-del { fill: GrayText; }
+}

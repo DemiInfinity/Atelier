@@ -36,7 +36,7 @@ var tetherScopesNeeded = []struct{ Name, Access, Why string }{
 	{"Issues", "Read and write", "sync issues and comments both ways"},
 	{"Commit statuses", "Read and write", "report Actions results on GitHub pull requests"},
 	{"Metadata", "Read-only", "required by GitHub for every token"},
-	{"Starring", "Read-only", "your stars' releases in the home feed"},
+	{"Starring (optional)", "Read-only", "private stars in the home feed; without it, your public stars are used"},
 }
 
 type tetherLinkRow struct {

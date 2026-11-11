@@ -446,9 +446,9 @@ func (a *App) appsPing(ctx context.Context, h store.Webhook, who Actor) error {
 
 // ---------- pushes (ref scanning) ----------
 //
-// Pushes don't emit an event today, so the apps loop compares each watched
-// repository's refs with a snapshot every few seconds. That also catches
-// Atelier's own merges, which move refs without running hooks.
+// Each watched repository's refs are compared with a snapshot. A repo.pushed
+// event scans that repository at once (with the real pusher); a slow timer
+// is the fallback for ref changes that don't emit one.
 
 const appsZeroSHA = "0000000000000000000000000000000000000000"
 
@@ -497,6 +497,39 @@ func (a *App) appsScanRefs(ctx context.Context) {
 type appsRefChange struct{ Ref, Old, New string }
 
 func (a *App) appsScanRepo(ctx context.Context, rp store.Repo) {
+	a.appsScanRepoAs(ctx, rp, Actor{})
+}
+
+// appsOnPushed scans a watched repository as soon as it's pushed to.
+func appsOnPushed(ctx context.Context, a *App, ev Event) {
+	if ev.Kind != EventRepoPushed || ev.RepoID == 0 {
+		return
+	}
+	ids, err := a.db.ReposWithHooks(ctx)
+	if err != nil {
+		return
+	}
+	tids, _ := a.db.TetherReviewRepos(ctx)
+	for _, id := range append(ids, tids...) {
+		if id != ev.RepoID {
+			continue
+		}
+		rp, err := a.db.RepoByIDApps(ctx, id)
+		if err != nil {
+			return
+		}
+		st := a.apps()
+		st.refMu.Lock()
+		defer st.refMu.Unlock()
+		a.appsScanRepoAs(ctx, rp, ev.Actor)
+		return
+	}
+}
+
+func init() { registerEventHandler(appsOnPushed) }
+
+// appsScanRepoAs is appsScanRepo with a known pusher (zero Actor: the owner).
+func (a *App) appsScanRepoAs(ctx context.Context, rp store.Repo, pusher Actor) {
 	cur, err := a.appsRefs(ctx, rp)
 	if err != nil {
 		return
@@ -537,8 +570,10 @@ func (a *App) appsScanRepo(ctx context.Context, rp store.Repo) {
 	if err != nil {
 		return
 	}
-	me, _ := a.db.PersonalOwner(ctx)
-	pusher := Actor{Kind: ActorOwner, Name: me.Name, PersonID: me.ID}
+	if pusher.Kind == "" {
+		me, _ := a.db.PersonalOwner(ctx)
+		pusher = Actor{Kind: ActorOwner, Name: me.Name, PersonID: me.ID}
+	}
 	for _, c := range changes {
 		a.appsPushed(ctx, rp, g, c, pusher)
 	}

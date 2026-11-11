@@ -30,6 +30,7 @@
         </nav>
         {{end}}
         <a class="btn btn-sm" href="{{$v.Base}}/raw/{{$v.Ref}}/{{$v.Path}}">Raw</a>
+        {{template "edit-blob-actions" $v}}
       </div>
     </div>
     {{if $b.TooLarge}}

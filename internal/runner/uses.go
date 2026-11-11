@@ -135,7 +135,7 @@ func isCheckout(u string) bool {
 func (j *jobRun) prepareActions(sc *scope, steps []stepDef) error {
 	for _, st := range steps {
 		u := strings.TrimSpace(st.Uses)
-		if u == "" || strings.HasPrefix(u, "docker://") || strings.HasPrefix(u, "./") || isCheckout(u) || strings.Contains(u, "${{") {
+		if u == "" || strings.HasPrefix(u, "docker://") || strings.HasPrefix(u, "./") || isCheckout(u) || isDeployPages(u) || strings.Contains(u, "${{") {
 			continue
 		}
 		dir, err := j.actionDir(j.ctx, u)
@@ -230,6 +230,12 @@ func (j *jobRun) runUses(ctx context.Context, sc *scope, st stepDef, stepEnv env
 		}
 		code, err := j.checkout(ctx, sc, with)
 		return nil, code, err
+	case isDeployPages(u):
+		with, err := j.evalWith(sc, st, stepEnv)
+		if err != nil {
+			return nil, 1, err
+		}
+		return j.deployPages(ctx, sc, with)
 	}
 	var dir string
 	if strings.HasPrefix(u, "./") || strings.HasPrefix(u, ".\\") {

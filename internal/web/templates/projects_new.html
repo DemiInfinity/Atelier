@@ -1,0 +1,34 @@
+{{define "head"}}{{template "proj-head-assets"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap proj-narrow stack-lg">
+  <div>
+    <h1 class="display">New project</h1>
+    <p class="muted">A board, table and roadmap for issues, pull requests and drafts from any of your repositories.</p>
+  </div>
+  {{template "flash" .}}
+  <form class="card stack" method="post" action="/projects/new">
+    <div class="field">
+      <label for="proj-account">Account</label>
+      <select id="proj-account" name="account" required>
+        {{range $d.Accounts}}<option value="{{.Name}}" {{if eq .Name $d.Account}}selected{{end}}>{{.Label}}{{if .IsCompany}} (company){{end}}</option>{{end}}
+      </select>
+    </div>
+    <div class="field">
+      <label for="proj-title">Name</label>
+      <input id="proj-title" name="title" value="{{$d.Title}}" required maxlength="120" placeholder="Atelier roadmap" autofocus>
+    </div>
+    <div class="field">
+      <label for="proj-desc">Description <span class="muted small">(optional)</span></label>
+      <textarea id="proj-desc" name="description" rows="3" maxlength="1000">{{$d.Description}}</textarea>
+    </div>
+    <fieldset class="field">
+      <legend>Visibility</legend>
+      <label class="choice"><input type="radio" name="visibility" value="private" {{if $d.Private}}checked{{end}}> <span><strong>Private</strong><br><span class="small muted">Only you can see it.</span></span></label>
+      <label class="choice"><input type="radio" name="visibility" value="public" {{if not $d.Private}}checked{{end}}> <span><strong>Public</strong><br><span class="small muted">Anyone signed in can see it. Items from private repositories stay hidden from people who can’t read them.</span></span></label>
+    </fieldset>
+    <p class="small muted">It starts with a Status field (Todo, In progress, Done) and a Board view. You can add fields and views afterwards.</p>
+    <div class="row-end"><button class="btn btn-primary" type="submit">Create project</button></div>
+  </form>
+</main>
+{{end}}
