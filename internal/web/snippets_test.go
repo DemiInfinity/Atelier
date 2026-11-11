@@ -308,28 +308,79 @@ func TestSnippetGitOverHTTPS(t *testing.T) {
 func TestBackupIncludesSnippets(t *testing.T) {
 	e := newSnipEnv(t)
 	a := e.a
+	ctx := context.Background()
 	sn := e.create(t, snippetForm("zoe", "", "private", "keep.txt", "keep me\n"))
-	res, err := backup.Create(context.Background(), backup.Options{DB: a.db.DB(), RepoRoot: a.cfg.RepoRoot(),
+	g, _ := a.openSnippet(sn.UID)
+	tip := a.snippetTip(ctx, g)
+	res, err := backup.Create(ctx, backup.Options{DB: a.db.DB(), RepoRoot: a.cfg.RepoRoot(),
 		DataDir: a.cfg.DataDir, Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefix := "snippets/" + sn.UID[:2] + "/" + sn.UID + ".git/"
-	var head bool
-	n := 0
+	// Snippet repositories are bundled, not copied file by file (issue #12).
 	for _, f := range res.Manifest.Files {
-		if strings.HasPrefix(f.Path, prefix) {
-			n++
-			head = head || f.Path == prefix+"HEAD"
+		if strings.HasPrefix(f.Path, "snippets/") {
+			t.Errorf("snippet file copied as a plain file: %s", f.Path)
 		}
 	}
-	if !head || n < 3 {
-		t.Errorf("snapshot has %d files of the snippet repo (HEAD %v)", n, head)
+	var entry *backup.RepoEntry
+	for i, rp := range res.Manifest.DataRepos {
+		if rp.Name == sn.UID {
+			entry = &res.Manifest.DataRepos[i]
+		}
+	}
+	if entry == nil || entry.Dir != "snippets" || entry.Owner != sn.UID[:2] || entry.Bundle == "" {
+		t.Fatalf("snippet bundle entry = %+v (data repos %+v)", entry, res.Manifest.DataRepos)
 	}
 	for _, rp := range res.Manifest.Repos {
 		if strings.Contains(rp.Name, sn.UID) {
 			t.Errorf("snippet backed up as a repository: %+v", rp)
 		}
+	}
+
+	// Full restore into a new data directory, then serve it: the snippet reads
+	// back at the same commit and can still be edited and cloned.
+	dst := t.TempDir()
+	cfg := a.cfg
+	cfg.DataDir = dst
+	if _, err := backup.RestoreAll(ctx, backup.RestoreOptions{Archive: res.Path, DataDir: dst, DBPath: cfg.DBPath(),
+		RepoRoot: cfg.RepoRoot()}); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(cfg.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	gs := *a.git
+	gs.Root = cfg.RepoRoot()
+	b, err := New(cfg, db, &gs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g2, err := b.openSnippet(sn.UID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := b.snippetTip(ctx, g2); got != tip {
+		t.Errorf("restored tip = %s, want %s", got, tip)
+	}
+	sess, _ := db.CreateSession(ctx, time.Hour)
+	ck := map[string]string{"Cookie": sessionCookie + "=" + sess}
+	if rec := do(t, b, "GET", "/snippets/"+sn.UID, nil, ck); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "keep me") {
+		t.Errorf("restored snippet page = %d", rec.Code)
+	}
+	if _, err := b.commitSnippet(ctx, sn.UID, tip, []snippetFile{{Name: "more.txt", Content: "more"}}, map[string]bool{"keep.txt": true}, "more"); err != nil {
+		t.Errorf("edit after restore: %v", err)
+	}
+	srv := httptest.NewServer(b)
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	tok, _ := db.CreateToken(ctx, "read", tokenScopes["read"], time.Hour)
+	work := filepath.Join(t.TempDir(), "c")
+	runGit(t, t.TempDir(), "clone", "http://zoe:"+tok+"@"+u.Host+"/snippets/"+sn.UID+".git", work)
+	if b, _ := os.ReadFile(filepath.Join(work, "more.txt")); string(b) != "more\n" {
+		t.Errorf("clone after restore: more.txt = %q", b)
 	}
 }
 

@@ -107,7 +107,7 @@ func extract(archive, dir string, want func(name string) bool) (Manifest, error)
 			for _, fe := range m.Files {
 				sums[fe.Path] = fe
 			}
-			for _, re := range m.Repos {
+			for _, re := range append(append([]RepoEntry(nil), m.Repos...), m.DataRepos...) {
 				if re.Bundle != "" {
 					sums[re.Bundle] = FileEntry{Path: re.Bundle, Size: re.Size, SHA256: re.SHA256}
 				}
@@ -244,7 +244,56 @@ func RestoreAll(ctx context.Context, o RestoreOptions) (Manifest, error) {
 		}
 		o.Log("restored %s", re.FullName())
 	}
+	// Repositories from git data directories (snippets). Version 1 archives
+	// carried these as plain files, which the data directories above placed;
+	// those copies lack git's empty directories (refs/, objects/pack…), so
+	// recreate them or git won't recognise the repository.
+	for _, d := range gitDataDirs {
+		if err := repairPlainCopies(filepath.Join(o.DataDir, d)); err != nil {
+			return m, fmt.Errorf("%s: %w", d, err)
+		}
+	}
+	for _, re := range m.DataRepos {
+		if re.Dir == "" || path.Clean(re.Dir) != re.Dir || strings.ContainsAny(re.Dir, `/\`) || re.Dir == ".." ||
+			!safeSegment(re.Owner) || !safeSegment(re.Name) {
+			return m, fmt.Errorf("unsafe repository path %q in snapshot", re.FullName())
+		}
+		dst := filepath.Join(o.DataDir, re.Dir, re.Owner, re.Name+".git")
+		bundle := ""
+		if re.Bundle != "" {
+			bundle = filepath.Join(work, filepath.FromSlash(re.Bundle))
+		}
+		if err := restoreBundle(ctx, o.Git, bundle, dst, re.Head); err != nil {
+			return m, fmt.Errorf("%s: %w", re.FullName(), err)
+		}
+	}
+	if len(m.DataRepos) > 0 {
+		o.Log("restored %d repositories from data directories", len(m.DataRepos))
+	}
 	return m, nil
+}
+
+// repairPlainCopies adds the empty directories a file-by-file copy of a bare
+// repository leaves out.
+func repairPlainCopies(root string) error {
+	repos, err := findRepos(root)
+	if err != nil {
+		return err
+	}
+	for _, rp := range repos {
+		dir := filepath.Join(root, rp.Owner, rp.Name+".git")
+		for _, sub := range []string{"refs/heads", "refs/tags", "objects/info", "objects/pack"} {
+			if err := os.MkdirAll(filepath.Join(dir, filepath.FromSlash(sub)), 0o755); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// safeSegment is a single, ordinary path segment.
+func safeSegment(s string) bool {
+	return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, `/\`) && !strings.HasPrefix(s, ".")
 }
 
 // RestoreRepo restores one repository (owner/name) from a snapshot into a

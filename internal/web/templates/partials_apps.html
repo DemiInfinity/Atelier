@@ -58,7 +58,7 @@
 <div class="row wrap-gap apps-hook-row">
   <div class="field grow">
     <label for="hook-ct">Content type</label>
-    <select id="hook-ct" name="content_type" disabled><option>application/json</option></select>
+    <select id="hook-ct" name="content_type"><option value="json"{{if ne .Form.ContentType "form"}} selected{{end}}>application/json</option><option value="form"{{if eq .Form.ContentType "form"}} selected{{end}}>application/x-www-form-urlencoded</option></select>
   </div>
   <div class="field grow-2">
     <label for="hook-secret">Secret</label>
@@ -66,7 +66,7 @@
   </div>
 </div>
 {{if .Form.HasSecret}}<label class="row gap-sm small"><input type="checkbox" name="remove_secret" value="1"> Remove the saved secret</label>{{end}}
-<p class="small muted">Each delivery is signed with HMAC-SHA256 in <span class="mono">X-Atelier-Signature-256</span> and <span class="mono">X-Hub-Signature-256</span>, and carries <span class="mono">X-GitHub-Event</span> and <span class="mono">X-GitHub-Delivery</span>, so receivers written for GitHub work unchanged.</p>
+<p class="small muted">Form-encoded deliveries send the JSON as a <span class="mono">payload</span> parameter, as GitHub does. Each delivery is signed over the exact body sent with HMAC-SHA256 in <span class="mono">X-Atelier-Signature-256</span> and <span class="mono">X-Hub-Signature-256</span>, and carries <span class="mono">X-GitHub-Event</span> and <span class="mono">X-GitHub-Delivery</span>, so receivers written for GitHub work unchanged.</p>
 <fieldset class="field">
   <legend>Events</legend>
   <div class="apps-events">

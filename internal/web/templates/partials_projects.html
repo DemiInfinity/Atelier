@@ -19,6 +19,9 @@
 </section>
 {{end}}
 
+{{/* An iteration value as a pill: its name, with the dates as a tooltip. Pass a projCell. */}}
+{{define "proj-iter-pill"}}<span class="proj-pill proj-iter{{if .Current}} is-current{{end}}" title="{{.Field.Name}}: {{.Range}}">{{.Display}}{{if .Current}}<span class="sr-only"> (current iteration)</span>{{end}}</span>{{end}}
+
 {{define "proj-dot"}}<span class="proj-dot proj-c-{{if .}}{{.}}{{else}}gray{{end}}" aria-hidden="true"></span>{{end}}
 
 {{define "proj-status-pill"}}{{if .Display}}<span class="proj-pill proj-c-{{.Color}}">{{template "proj-dot" .Color}}{{.Display}}</span>{{end}}{{end}}
@@ -47,6 +50,11 @@
 <select name="value" aria-label="{{.Field.Name}}" data-proj-autosubmit>
   <option value="">{{if .Field.IsStatus}}No status{{else}}None{{end}}</option>
   {{$v := .Value}}{{range .Field.Options}}<option value="{{.ID}}" {{if eq (print .ID) $v}}selected{{end}}>{{.Name}}</option>{{end}}
+</select>
+{{else if eq .Field.Kind "iteration"}}
+<select name="value" aria-label="{{.Field.Name}}" data-proj-autosubmit>
+  <option value="">None</option>
+  {{$v := .Value}}{{range .Field.Iterations}}<option value="{{.ID}}" {{if eq (print .ID) $v}}selected{{end}}>{{.Name}} ({{.Range}}){{if .Current}} · current{{end}}</option>{{end}}
 </select>
 {{else if eq .Field.Kind "number"}}
 <input type="number" step="any" name="value" aria-label="{{.Field.Name}}" value="{{.Value}}" data-proj-autosubmit>

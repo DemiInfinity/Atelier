@@ -134,13 +134,25 @@ type appsHookForm struct {
 	AllowLocal   bool
 	HasSecret    bool
 	RemoveSecret bool
+	ContentType  string // "json" or "form", as GitHub stores it
 	secret       string
+}
+
+// appsContentType is the stored content type for a form value: "form" for
+// application/x-www-form-urlencoded, otherwise "json".
+func appsContentType(v string) string {
+	switch strings.TrimSpace(strings.ToLower(v)) {
+	case "form", "application/x-www-form-urlencoded":
+		return "form"
+	}
+	return "json"
 }
 
 func appsHookFormFrom(r *http.Request) appsHookForm {
 	_ = r.ParseForm()
 	f := appsHookForm{URL: strings.TrimSpace(r.FormValue("url")), Events: map[string]bool{}, Active: r.FormValue("active") != "",
-		AllowLocal: r.FormValue("allow_local") != "", RemoveSecret: r.FormValue("remove_secret") != "", secret: r.FormValue("secret")}
+		AllowLocal: r.FormValue("allow_local") != "", RemoveSecret: r.FormValue("remove_secret") != "", secret: r.FormValue("secret"),
+		ContentType: appsContentType(r.FormValue("content_type"))}
 	for _, e := range r.Form["events"] {
 		for _, k := range store.WebhookEvents {
 			if e == k {
@@ -152,7 +164,8 @@ func appsHookFormFrom(r *http.Request) appsHookForm {
 }
 
 func appsFormOfHook(h store.Webhook) appsHookForm {
-	f := appsHookForm{URL: h.URL, Events: map[string]bool{}, Active: h.Active, AllowLocal: h.AllowLocal, HasSecret: h.HasSecret}
+	f := appsHookForm{URL: h.URL, Events: map[string]bool{}, Active: h.Active, AllowLocal: h.AllowLocal, HasSecret: h.HasSecret,
+		ContentType: appsContentType(h.ContentType)}
 	for _, e := range h.Events {
 		f.Events[e] = true
 	}
@@ -205,7 +218,7 @@ func (a *App) appsHooksPage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	a.renderHooks(w, r, s, appsHookForm{Active: true, Events: map[string]bool{"push": true}}, "", http.StatusOK)
+	a.renderHooks(w, r, s, appsHookForm{Active: true, ContentType: "json", Events: map[string]bool{"push": true}}, "", http.StatusOK)
 }
 
 func (a *App) renderHooks(w http.ResponseWriter, r *http.Request, s appsHookScope, f appsHookForm, errMsg string, code int) {
@@ -241,7 +254,8 @@ func (a *App) appsHookCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	who := a.actor(r)
-	h := store.Webhook{URL: f.URL, Events: f.eventList(), Active: f.Active, AllowLocal: f.AllowLocal, CreatedBy: who.Name, PersonID: who.PersonID}
+	h := store.Webhook{URL: f.URL, ContentType: f.ContentType, Events: f.eventList(), Active: f.Active, AllowLocal: f.AllowLocal,
+		CreatedBy: who.Name, PersonID: who.PersonID}
 	if s.V != nil {
 		h.RepoID = s.V.Repo.ID
 	} else {
@@ -304,7 +318,7 @@ func (a *App) appsHookUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	h.URL, h.Events, h.Active, h.AllowLocal = f.URL, f.eventList(), f.Active, f.AllowLocal
+	h.URL, h.ContentType, h.Events, h.Active, h.AllowLocal = f.URL, f.ContentType, f.eventList(), f.Active, f.AllowLocal
 	if _, err := a.db.SaveWebhook(ctx, h); err != nil {
 		a.fail(w, r, err)
 		return

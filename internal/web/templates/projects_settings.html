@@ -83,6 +83,37 @@
         </div>
       </fieldset>
       {{end}}
+      {{if $f.IsIteration}}
+      <div class="field">
+        <label for="proj-dur-{{$f.ID}}">Default length</label>
+        <div class="proj-duration">
+          <input id="proj-dur-{{$f.ID}}" name="duration" type="number" min="1" max="365" value="{{$f.Duration}}" required>
+          <select name="duration_unit" aria-label="Unit"><option value="days" selected>days</option><option value="weeks">weeks</option></select>
+        </div>
+      </div>
+      <fieldset class="stack-sm">
+        <legend class="small">Iterations</legend>
+        {{range $it := $f.Iterations}}
+        <div class="proj-iter-row">
+          <label class="sr-only" for="proj-it-{{$it.ID}}">Iteration name</label>
+          <input id="proj-it-{{$it.ID}}" name="it_{{$it.ID}}" value="{{$it.Name}}" maxlength="60" required>
+          <label class="sr-only" for="proj-its-{{$it.ID}}">Start of {{$it.Name}}</label>
+          <input id="proj-its-{{$it.ID}}" type="date" name="it_start_{{$it.ID}}" value="{{$it.StartDate}}" required>
+          <label class="sr-only" for="proj-itd-{{$it.ID}}">Length of {{$it.Name}} in days</label>
+          <input id="proj-itd-{{$it.ID}}" type="number" min="1" max="365" name="it_days_{{$it.ID}}" value="{{$it.Days}}" required> <span class="small muted">days</span>
+          {{if $it.Current}}<span class="pill pill-amber">Current</span>{{end}}
+          <label class="small row gap-sm"><input type="checkbox" name="it_del_{{$it.ID}}" value="1"> Remove</label>
+        </div>
+        {{else}}<p class="small muted">No iterations yet.</p>{{end}}
+        <div class="proj-iter-row">
+          <label class="sr-only" for="proj-it-new-{{$f.ID}}">New iteration</label>
+          <input id="proj-it-new-{{$f.ID}}" name="new_iter" maxlength="60" placeholder="New iteration">
+          <label class="sr-only" for="proj-its-new-{{$f.ID}}">Its start</label>
+          <input id="proj-its-new-{{$f.ID}}" type="date" name="new_iter_start">
+          <span class="small muted">Leave the date empty to start after the last one.</span>
+        </div>
+      </fieldset>
+      {{end}}
       <div class="row-end gap-sm">
         <button class="btn btn-sm btn-primary" type="submit">Save {{$f.Name}}</button>
       </div>
@@ -107,8 +138,21 @@
         </div>
       </div>
       <div class="field">
-        <label for="proj-nf-opts">Options <span class="small muted">(single select only, one per line)</span></label>
+        <label for="proj-nf-opts">Options <span class="small muted">(single select: one option per line; iteration: one name per line, optionally followed by a start date such as 2026-11-02)</span></label>
         <textarea id="proj-nf-opts" name="options" rows="3" placeholder="Phase 1&#10;Phase 2"></textarea>
+      </div>
+      <div class="proj-newfield">
+        <div class="field">
+          <label for="proj-nf-dur">Iteration length <span class="small muted">(iteration only)</span></label>
+          <div class="proj-duration">
+            <input id="proj-nf-dur" name="duration" type="number" min="1" max="365" value="2">
+            <select name="duration_unit" aria-label="Unit"><option value="weeks" selected>weeks</option><option value="days">days</option></select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="proj-nf-start">First iteration starts <span class="small muted">(iteration only)</span></label>
+          <input id="proj-nf-start" name="start" type="date">
+        </div>
       </div>
       <div class="row-end"><button class="btn btn-sm" type="submit">Add field</button></div>
     </form>

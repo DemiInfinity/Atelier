@@ -1,0 +1,54 @@
+{{/* Atelier Connect pieces: Home feed items, the profile section and "Follow on Atelier". Styles: static/connect.css. */}}
+
+{{define "connect-icon"}}<svg width="{{.}}" height="{{.}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8.7 10.7 15.3 7.3 M8.7 13.3 15.3 16.7"/></svg>{{end}}
+
+{{define "connect-feed-item"}}
+<li class="feed-item cn-feed">
+  <span class="feed-chip" aria-hidden="true">{{template "connect-icon" 14}}</span>
+  <div class="feed-body">
+    <div class="feed-meta"><span class="feed-source">via Connect</span><span class="small muted cn-handle">{{.Handle}}</span><span class="small muted">{{ago .Published}}</span></div>
+    <p class="row gap-sm wrap-gap"><strong class="cn-who">{{.Who}}</strong> <span>{{.Text}}</span>
+      {{if .ObjectName}}{{if .Link}}<a href="{{.Link}}" rel="noopener noreferrer nofollow ugc" target="_blank">{{.ObjectName}}</a>{{else}}<span class="mono">{{.ObjectName}}</span>{{end}}
+      {{else if .Link}}<a class="cn-out" href="{{.Link}}" rel="noopener noreferrer nofollow ugc" target="_blank" aria-label="Open on their studio" title="Open on their studio">↗</a>{{end}}
+    </p>
+    {{with .Detail}}<p class="small cn-detail">{{.}}</p>{{end}}
+    {{if .CanStar}}
+    <form method="post" action="/settings/connect/{{if .Starred}}unstar{{else}}star{{end}}" class="cn-star-form">
+      <input type="hidden" name="repo" value="{{.ObjectURI}}"><input type="hidden" name="next" value="/">
+      <button class="btn btn-sm cn-star {{if .Starred}}is-on{{end}}" type="submit">{{if .Starred}}★ Starred{{else}}☆ Star{{end}}</button>
+    </form>
+    {{end}}
+  </div>
+</li>
+{{end}}
+
+{{define "connect-actor-row"}}
+<li class="cn-actor">
+  <span class="cn-avatar" aria-hidden="true">{{if .Actor.Name}}{{initial .Actor.Name}}{{else}}{{initial .Actor.Host}}{{end}}</span>
+  <span class="cn-actor-names"><strong>{{.Actor.Label}}</strong> <span class="small muted mono">{{.Actor.Handle}}</span></span>
+  {{if .Actor.URL}}<a class="small cn-out" href="{{.Actor.URL}}" rel="noopener noreferrer nofollow" target="_blank">Studio ↗</a>{{end}}
+</li>
+{{end}}
+
+{{define "connect-profile"}}
+<section class="cn-profile stack-sm" aria-label="Atelier Connect">
+  <p class="small row gap-sm cn-profile-head">{{template "connect-icon" 14}}<span>{{if .Handle}}<span class="mono">{{.Handle}}</span>{{else}}Atelier Connect{{end}}</span></p>
+  <p class="small"><strong>{{len .Followers}}</strong> followers · <strong>{{len .Following}}</strong> following <span class="muted">on other studios</span></p>
+  {{if .Owner}}
+  {{if .Followers}}<details class="small"><summary>Followers</summary><ul class="cn-actors">{{range .Followers}}{{template "connect-actor-row" .}}{{end}}</ul></details>{{end}}
+  {{if .Following}}<details class="small"><summary>Following</summary><ul class="cn-actors">{{range .Following}}{{template "connect-actor-row" .}}{{end}}</ul></details>{{end}}
+  <a class="small cn-link" href="/settings/connect">Connect settings</a>
+  {{end}}
+</section>
+{{end}}
+
+{{define "connect-follow-badge"}}
+{{if .Following}}<span class="btn btn-sm cn-follow is-on" aria-disabled="true">{{template "connect-icon" 14}} Following on Atelier</span>
+{{else if .Pending}}<span class="btn btn-sm cn-follow" aria-disabled="true">{{template "connect-icon" 14}} Follow requested</span>
+{{else}}
+<form method="post" action="/settings/connect/follow">
+  <input type="hidden" name="target" value="{{.Actor}}">
+  <button class="btn btn-sm cn-follow" type="submit">{{template "connect-icon" 14}} Follow on Atelier</button>
+</form>
+{{end}}
+{{end}}

@@ -78,12 +78,16 @@ func checkSecretPush(ctx context.Context, pc pushContext) ([]string, error) {
 		return err
 	}
 	if !settings.PushProtection {
-		// Not blocking: the secrets land, so they become alerts.
-		for _, h := range hits {
-			if err := alert(h.f, "push"); err != nil {
-				return nil, err
+		// Not blocking: the secrets land, so they become alerts, but only
+		// once another check can no longer reject the push.
+		pc.onAccept(func(ctx context.Context) (string, error) {
+			for _, h := range hits {
+				if err := alert(h.f, "push"); err != nil {
+					return "", err
+				}
 			}
-		}
+			return "", nil
+		})
 		return nil, nil
 	}
 
@@ -100,16 +104,32 @@ func checkSecretPush(ctx context.Context, pc pushContext) ([]string, error) {
 		}
 	}
 	if len(blocked) == 0 {
-		// Every secret has a one-time bypass: use them up, and keep an alert
-		// so the secret is still rotated later.
-		for _, h := range bypassed {
-			if _, err := pc.DB.UseSecretBypass(ctx, pc.Repo.ID, h.f.Fingerprint); err != nil {
-				return nil, err
+		// Every secret has a one-time bypass. They are used up only when the
+		// whole push is accepted: if branch rules or another check reject it,
+		// the bypasses stay available for the next try. Using them is one
+		// transaction, so two pushes racing for the same bypass can't both
+		// get through; the loser is rejected here.
+		pc.onAccept(func(ctx context.Context) (string, error) {
+			fps := make([]string, len(bypassed))
+			for i, h := range bypassed {
+				fps[i] = h.f.Fingerprint
 			}
-			if err := alert(h.f, "bypass"); err != nil {
-				return nil, err
+			ok, err := pc.DB.UseSecretBypasses(ctx, pc.Repo.ID, fps)
+			if err != nil {
+				return "", err
 			}
-		}
+			if !ok {
+				return "secret scanning: the one-time bypass for this secret was already used by another push. " +
+					"Choose \"Allow once\" again on the repository's Security page and push again.", nil
+			}
+			// Keep an alert so the secret is still rotated later.
+			for _, h := range bypassed {
+				if err := alert(h.f, "bypass"); err != nil {
+					return "", err
+				}
+			}
+			return "", nil
+		})
 		return nil, nil
 	}
 

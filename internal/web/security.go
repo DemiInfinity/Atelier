@@ -4,7 +4,8 @@ package web
 //
 //   security.go          the page, settings, alert actions, one-time bypasses
 //   security_scan.go     Actions log scanning and the full-history scan
-//   security_deps.go     dependency updates (Go modules, npm) and update PRs
+//   security_deps.go     dependency updates (Go, npm, Gradle; any folder) and update PRs
+//   security_deps_lockfiles.go  lockfile pushes by Actions jobs on update branches
 //
 // Secret detection lives in internal/secretscan, push protection in
 // cmd/atelier/hook_secretscan.go, version lookups and manifest edits in
@@ -73,6 +74,8 @@ type secPageData struct {
 	History, DepsScan           *store.SecurityScan
 	Deps                        []secDepView
 	Settings                    store.SecuritySettings
+	DepSettings                 store.DepUpdateSettings
+	Weekdays                    []secWeekday
 	GoProxy, NpmRegistry        string
 	NpmViaAtelier               bool
 	SecretsURL                  string
@@ -89,7 +92,7 @@ var secFlashes = map[string]string{
 	"scanning": "A history scan is already running.",
 	"deps":     "Dependency check started. Refresh in a moment to see the results.",
 	"checking": "A dependency check is already running.",
-	"nodeps":   "There's no go.mod or package.json on the default branch.",
+	"nodeps":   "There's no go.mod, package.json or Gradle build on the default branch.",
 }
 
 func (a *App) securityPage(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +185,10 @@ func (a *App) secLoadDetails(ctx context.Context, r *http.Request, d *secPageDat
 	if d.Settings, err = a.db.SecuritySettings(ctx, v.Repo.ID); err != nil {
 		return err
 	}
+	if d.DepSettings, err = a.db.DepUpdateSettings(ctx, v.Repo.ID); err != nil {
+		return err
+	}
+	d.Weekdays = secWeekdays(d.DepSettings.ScheduleDay)
 	d.GoProxy = a.secGoProxySetting(ctx)
 	d.NpmRegistry = a.secNpmRegistrySetting(ctx)
 	_, d.NpmViaAtelier = a.npmUpstream(ctx)
@@ -227,6 +234,10 @@ func (a *App) securitySettingsSave(w http.ResponseWriter, r *http.Request) {
 		AllPRs:         r.FormValue("all_prs") == "on",
 	}
 	if err := a.db.SetSecuritySettings(ctx, v.Repo.ID, st); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.secSaveDepSettings(ctx, v.Repo.ID, r); err != nil {
 		a.fail(w, r, err)
 		return
 	}

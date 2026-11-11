@@ -57,6 +57,7 @@ const (
 	classAPI      = "api"
 	classRegistry = "registry"
 	classOther    = "other"
+	classConnect  = "connect" // Atelier Connect's federation endpoints (connect.go), exposed from Settings → Remote access
 )
 
 // tunnelClass sorts a request path into what the owner can expose. Anything
@@ -65,6 +66,8 @@ func tunnelClass(r *http.Request) string {
 	p := r.URL.Path
 	under := func(prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
 	switch {
+	case connectClassPath(p):
+		return classConnect
 	case under("/v2"), under("/npm"), strings.HasPrefix(p, "/go/"), p == "/go",
 		strings.HasPrefix(p, "/api/v1/packages/"), under("/packages"),
 		r.URL.Query().Get("go-get") == "1":
@@ -191,6 +194,11 @@ func (m *tunnelManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if cfg.Mode == "named" && cfg.PagesHostname != "" && reqHost == cfg.PagesHostname {
 		class = classPages
 	}
+	// A verified Pages custom domain added as a public hostname on the named tunnel.
+	customPages := cfg.Mode == "named" && reqHost != cfg.Hostname && reqHost != cfg.PagesHostname && m.a.pagesIsDomain(r.Context(), reqHost)
+	if customPages {
+		class = classPages
+	}
 
 	sw := &statusWriter{ResponseWriter: w}
 	a := m.a
@@ -218,13 +226,19 @@ func (m *tunnelManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Method: r.Method, Status: st, SignedIn: signedIn, Who: who})
 	}()
 
-	if !tunnelExposes(cfg, class) {
+	if !tunnelExposes(cfg, class) && !(class == classConnect && a.connectTunnelExposed(r.Context())) {
 		http.NotFound(sw, r)
 		return
 	}
 	if class == classPages {
 		if a.pagesBase() == "" {
 			http.NotFound(sw, r)
+			return
+		}
+		if customPages {
+			if !a.servePagesDomain(sw, r, reqHost) {
+				http.NotFound(sw, r)
+			}
 			return
 		}
 		a.servePages(sw, r)

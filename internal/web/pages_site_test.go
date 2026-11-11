@@ -598,15 +598,23 @@ func TestPagesUploadWithJobToken(t *testing.T) {
 	a.cfg.PagesMaxBytes = 0
 	pagesWant(t, pagesGet(t, a, "/zoe/demo/", nil), 200, "", "Again")
 
-	// Pull requests and other branches can't deploy.
+	// Pull requests never deploy the site (only previews of open pull
+	// requests, pages_site_preview_test.go); other branches can't deploy.
 	saved := pagesJobRun
 	t.Cleanup(func() { pagesJobRun = saved })
-	pagesJobRun = func(context.Context, *App, int64) (string, string, error) {
-		return "pull_request", "refs/heads/main", nil
+	pagesJobRun = func(context.Context, *App, int64) (pagesJobInfo, error) {
+		return pagesJobInfo{Event: "pull_request", Ref: "refs/heads/main", Pull: 99}, nil
 	}
-	expectStatus(t, pagesUploadReq(t, a, "", tok, site), http.StatusForbidden, "pull request")
-	pagesJobRun = func(context.Context, *App, int64) (string, string, error) { return "push", "refs/heads/feature", nil }
+	expectStatus(t, pagesUploadReq(t, a, "", tok, site), http.StatusConflict, "pull request")
+	pagesWant(t, pagesGet(t, a, "/zoe/demo/", nil), 200, "", "Again")
+	pagesJobRun = func(context.Context, *App, int64) (pagesJobInfo, error) {
+		return pagesJobInfo{Event: "push", Ref: "refs/heads/feature"}, nil
+	}
 	expectStatus(t, pagesUploadReq(t, a, "", tok, site), http.StatusForbidden, "other branch")
+	pagesJobRun = func(context.Context, *App, int64) (pagesJobInfo, error) {
+		return pagesJobInfo{Event: "push", Ref: "refs/heads/main", Waiting: true}, nil
+	}
+	expectStatus(t, pagesUploadReq(t, a, "", tok, site), http.StatusForbidden, "waiting job")
 	pagesJobRun = saved
 
 	// A site set to publish from a branch doesn't take uploads.
@@ -636,7 +644,9 @@ func TestPagesUploadScopeIsOwnRepoOnly(t *testing.T) {
 	}
 	savedR, savedRun := tokenResolvers, pagesJobRun
 	t.Cleanup(func() { tokenResolvers, pagesJobRun = savedR, savedRun })
-	pagesJobRun = func(context.Context, *App, int64) (string, string, error) { return "push", "refs/heads/main", nil }
+	pagesJobRun = func(context.Context, *App, int64) (pagesJobInfo, error) {
+		return pagesJobInfo{Event: "push", Ref: "refs/heads/main"}, nil
+	}
 	registerTokenResolver(func(_ context.Context, _ *App, s string) (Actor, bool) {
 		switch s {
 		case "atljob_demo":

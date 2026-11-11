@@ -1,4 +1,4 @@
-{{define "head"}}<link rel="stylesheet" href="/static/tether.css">{{end}}
+{{define "head"}}<link rel="stylesheet" href="/static/tether.css"><link rel="stylesheet" href="/static/connect.css">{{end}}
 {{define "content"}}
 {{$d := .Data}}
 <main class="wrap layout-3">
@@ -66,7 +66,7 @@
             <p class="small muted"><a class="muted-link" href="/{{.Repo.FullName}}/commit/{{.Commit.Hash}}">{{.Commit.Subject}}</a></p>
           </div>
         </li>
-        {{end}}{{else}}{{with .Tether}}
+        {{end}}{{else if .Connect}}{{template "connect-feed-item" .Connect}}{{else}}{{with .Tether}}
         <li class="feed-item tt-feed">
           <span class="feed-chip" aria-hidden="true">{{template "tether-icon" 14}}</span>
           <div class="feed-body">

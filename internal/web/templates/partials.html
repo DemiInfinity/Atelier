@@ -37,6 +37,7 @@
       <p class="repo-name"><a href="/{{.Repo.Owner}}" class="muted-link">{{.Repo.Owner}}</a> <span class="slash">/</span> <a href="{{.Base}}"><strong>{{.Repo.Name}}</strong></a></p>
       {{if .Repo.Private}}<span class="pill">Private</span>{{else}}<span class="pill pill-amber">Public</span>{{end}}
       {{if eq .Repo.OwnerKind "company"}}<span class="pill pill-violet">Company</span>{{end}}
+      {{with connectStars .Repo}}<span class="pill pill-violet" title="Stars from other studios, through Atelier Connect">★ {{.}} via Connect</span>{{end}}
     </div>
     <nav class="tabs" aria-label="Repository">
       <a href="{{.Base}}" {{if eq .Tab "code"}}aria-current="page"{{end}}>Code</a>
@@ -71,6 +72,7 @@
   <a href="/settings/apps" {{if eq . "apps"}}aria-current="page"{{end}}>Apps and bots</a>
   <a href="/settings/mcp" {{if eq . "mcp"}}aria-current="page"{{end}}>MCP</a>
   <a href="/settings/remote" {{if eq . "remote"}}aria-current="page"{{end}}>Remote access</a>
+  <a href="/settings/connect" {{if eq . "connect"}}aria-current="page"{{end}}>Connect</a>
 </nav>
 {{end}}
 

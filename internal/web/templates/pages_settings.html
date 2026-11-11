@@ -23,8 +23,8 @@
   </section>
   {{else if $d.Private}}
   <section class="card stack" aria-labelledby="pages-priv-h">
-    <h2 class="h-sm" id="pages-priv-h">Private repositories can't publish</h2>
-    <p class="small muted">Every site shares the Pages address, so a sign-in there would let any published site's script read a private site with your credentials. Make this repository public in <a href="{{$v.Base}}/settings">Settings</a> to publish it.{{if $d.Site.Enabled}} Its site is offline while the repository is private.{{end}}</p>
+    <h2 class="h-sm" id="pages-priv-h">Private repositories can't publish on the Pages address</h2>
+    <p class="small muted">Every site shares the Pages address, so a sign-in there would let any published site's script read a private site with your credentials. Make this repository public in <a href="{{$v.Base}}/settings">Settings</a>, or give the site a <a href="#pages-domain">verified custom domain</a>: that's its own origin, and only people who can read the repository get in.{{if $d.Site.Enabled}} Its site is offline until then.{{end}}</p>
   </section>
   {{end}}
 
@@ -96,6 +96,11 @@
     <p class="small muted">Save as <span class="mono">.atelier/workflows/pages.yml</span>. The built-in action needs no lockfile entry.</p>
     <pre class="pages-code"><code>{{$d.Workflow}}</code></pre>
   </section>
+  {{end}}
+
+  {{if $d.On}}
+  {{template "pages-domain" $d}}
+  {{if and (not $v.Repo.Private) $d.Site.Enabled}}{{template "pages-previews" $d}}{{end}}
   {{end}}
 
   {{if $d.Deploys}}

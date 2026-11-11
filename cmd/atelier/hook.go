@@ -66,6 +66,53 @@ type pushContext struct {
 	Repo    store.Repo
 	Git     *gitrepo.Repo
 	Updates []refUpdate
+
+	// accepted holds work that may only happen once the push is accepted,
+	// i.e. after every check has passed (see onAccept).
+	accepted *[]acceptStep
+}
+
+// An acceptStep runs after every pre-receive check has passed. It returns
+// a rejection message if the push must be refused after all (for example a
+// one-time bypass that a concurrent push used up first), or an error.
+type acceptStep func(ctx context.Context) (string, error)
+
+// onAccept defers a step until the whole push is known to be accepted, so a
+// check that consumes something (a one-time secret-scanning bypass) doesn't
+// use it up for a push that a later check rejects.
+func (pc pushContext) onAccept(step acceptStep) {
+	if pc.accepted != nil {
+		*pc.accepted = append(*pc.accepted, step)
+	}
+}
+
+// runPreReceiveChecks runs every check and, only if none rejected the push,
+// the steps they deferred until acceptance. It returns the rejection
+// messages; none means the push is accepted.
+func runPreReceiveChecks(ctx context.Context, pc pushContext, checks []preReceiveCheck) ([]string, error) {
+	var steps []acceptStep
+	pc.accepted = &steps
+	var msgs []string
+	for _, check := range checks {
+		m, err := check(ctx, pc)
+		if err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, m...)
+	}
+	if len(msgs) > 0 {
+		return msgs, nil
+	}
+	for _, step := range steps {
+		m, err := step(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if m != "" {
+			msgs = append(msgs, m)
+		}
+	}
+	return msgs, nil
 }
 
 // A preReceiveCheck returns one human-readable message per rejected update.
@@ -107,14 +154,10 @@ func preReceive(owner, name string, stdin io.Reader, stderr io.Writer) error {
 		return err
 	}
 	pc := pushContext{DB: db, Repo: repo, Git: g, Updates: ups}
-	var msgs []string
-	for _, check := range preReceiveChecks {
-		m, err := check(ctx, pc)
-		if err != nil {
-			fmt.Fprintln(stderr, "atelier: push check failed, push rejected:", err)
-			return errors.New("push rejected")
-		}
-		msgs = append(msgs, m...)
+	msgs, err := runPreReceiveChecks(ctx, pc, preReceiveChecks)
+	if err != nil {
+		fmt.Fprintln(stderr, "atelier: push check failed, push rejected:", err)
+		return errors.New("push rejected")
 	}
 	if len(msgs) == 0 {
 		return nil

@@ -407,9 +407,9 @@ func (s *Store) SecurityScanState(ctx context.Context, repoID int64, kind string
 // DepUpdate is a dependency with an available update and/or known vulnerabilities.
 type DepUpdate struct {
 	RepoID    int64
-	Ecosystem string // go, npm
+	Ecosystem string // go, npm, maven, gradle
 	Name      string
-	Manifest  string
+	Manifest  string // path in the repository (results live in dep_update_rows, see depupdates.go)
 	Current   string
 	Latest    string
 	NewSpec   string
@@ -428,12 +428,12 @@ func (s *Store) ReplaceDepUpdates(ctx context.Context, repoID int64, ups []DepUp
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM dep_updates WHERE repo_id=?`, repoID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM dep_update_rows WHERE repo_id=?`, repoID); err != nil {
 		return err
 	}
 	t := now()
 	for _, u := range ups {
-		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO dep_updates (repo_id, ecosystem, name, manifest, current, latest, new_spec, kind,
+		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO dep_update_rows (repo_id, ecosystem, name, manifest, current, latest, new_spec, kind,
 			vulns, vuln_ids, fixes, pr_number, checked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			repoID, u.Ecosystem, u.Name, u.Manifest, u.Current, u.Latest, u.NewSpec, u.Kind, u.Vulns, u.VulnIDs, u.Fixes, u.PRNumber, t); err != nil {
 			return err
@@ -444,7 +444,7 @@ func (s *Store) ReplaceDepUpdates(ctx context.Context, repoID int64, ups []DepUp
 
 func (s *Store) DepUpdates(ctx context.Context, repoID int64) ([]DepUpdate, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT repo_id, ecosystem, name, manifest, current, latest, new_spec, kind, vulns, vuln_ids, fixes,
-		pr_number, checked_at FROM dep_updates WHERE repo_id=? ORDER BY vulns > 0 DESC, ecosystem, name`, repoID)
+		pr_number, checked_at FROM dep_update_rows WHERE repo_id=? ORDER BY vulns > 0 DESC, ecosystem, manifest, name`, repoID)
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +465,7 @@ func (s *Store) DepUpdates(ctx context.Context, repoID int64) ([]DepUpdate, erro
 
 // DepCounts returns the number of available updates and of known vulnerabilities.
 func (s *Store) DepCounts(ctx context.Context, repoID int64) (updates, vulns int, err error) {
-	err = s.db.QueryRowContext(ctx, `SELECT COUNT(CASE WHEN latest!='' THEN 1 END), COALESCE(SUM(vulns), 0) FROM dep_updates WHERE repo_id=?`,
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(CASE WHEN latest!='' THEN 1 END), COALESCE(SUM(vulns), 0) FROM dep_update_rows WHERE repo_id=?`,
 		repoID).Scan(&updates, &vulns)
 	return
 }

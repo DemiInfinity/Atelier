@@ -592,9 +592,14 @@ type snippetViewData struct {
 	Tip      string
 	Files    []snippetViewFile
 	CloneURL string
-	Base     string
-	Count    int
-	Last     *gitrepo.Commit
+	// SSHCloneURL is ssh://git@host:port/snippets/<uid>.git when SSH is on.
+	SSHCloneURL string
+	Base        string
+	Count       int
+	Last        *gitrepo.Commit
+	// Comments are shown to everyone who can read the snippet (snippets_comments.go).
+	Comments     snippetCommentsData
+	CommentEmpty bool
 }
 
 func (a *App) snippetView(w http.ResponseWriter, r *http.Request) {
@@ -605,6 +610,9 @@ func (a *App) snippetView(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	d := &snippetViewData{S: sn, Anon: who.Kind == ActorAnonymous, Base: "/snippets/" + sn.UID,
 		CloneURL: a.baseURL(r) + "/snippets/" + sn.UID + ".git"}
+	if base := a.sshCloneBase(r); base != "" && !d.Anon {
+		d.SSHCloneURL = base + "/snippets/" + sn.UID + ".git"
+	}
 	d.CanEdit = a.can(ctx, who, snippetRepo(sn), PermWrite)
 	d.CanAdmin = a.can(ctx, who, snippetRepo(sn), PermAdmin)
 	d.CanStar = who.PersonID != 0
@@ -641,6 +649,13 @@ func (a *App) snippetView(w http.ResponseWriter, r *http.Request) {
 				RawURL:   raw})
 		}
 	}
+	cs, err := a.snippetComments(r, sn, who)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	d.Comments = cs
+	d.CommentEmpty = r.URL.Query().Get("comment") == "empty"
 	title := sn.Title()
 	a.render(w, r, "snippets_view", page{Title: title + " · Snippet", Nav: "snippets", Bare: d.Anon, Data: d})
 }

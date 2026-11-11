@@ -18,7 +18,7 @@ package web
 //	GET    /api/v3/repos/{owner}/{repo}/pulls/{n}
 //	GET    /api/v3/repos/{owner}/{repo}/pulls/{n}/files
 //	GET    /api/v3/repos/{owner}/{repo}/pulls/{n}/comments
-//	POST   /api/v3/repos/{owner}/{repo}/pulls/{n}/comments           {body, commit_id, path, line, side}  → an Atelier note
+//	POST   /api/v3/repos/{owner}/{repo}/pulls/{n}/comments           {body, commit_id, path, line, side} or {…, position}  → an Atelier note
 //	PUT    /api/v3/repos/{owner}/{repo}/pulls/{n}/merge              always 403: merge in Atelier
 //	POST   /api/v3/repos/{owner}/{repo}/statuses/{sha}               {state, context, description, target_url}
 //	GET    /api/v3/repos/{owner}/{repo}/commits/{ref}/status         combined status
@@ -30,8 +30,10 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -279,37 +281,87 @@ func (a *App) apiV3IssueCommentCreate(w http.ResponseWriter, r *http.Request) {
 
 // ---------- labels ----------
 
-func (a *App) apiV3IssueForLabels(w http.ResponseWriter, r *http.Request, op string) (store.Repo, store.Issue, Actor, bool) {
+// apiV3LabelTarget is the issue or pull request an issues/{n}/labels call
+// names: on GitHub every pull request is also an issue.
+type apiV3LabelTarget struct {
+	repo   store.Repo
+	issue  *store.Issue
+	pull   *store.Pull
+	labels []store.Label
+}
+
+func (a *App) apiV3LabelTargetFor(w http.ResponseWriter, r *http.Request, op string) (apiV3LabelTarget, Actor, bool) {
 	rp, who, ok := a.apiV3RepoFor(w, r, op)
 	if !ok {
-		return rp, store.Issue{}, who, false
+		return apiV3LabelTarget{}, who, false
 	}
 	n, ok := apiV3Number(w, r)
 	if !ok {
-		return rp, store.Issue{}, who, false
+		return apiV3LabelTarget{}, who, false
 	}
-	is, err := a.db.IssueByNumber(r.Context(), rp.ID, n)
-	if err != nil {
-		if _, perr := a.db.PullByNumber(r.Context(), rp.ID, n); perr == nil {
-			writeJSON(w, http.StatusOK, []any{}) // pull requests have no labels in Atelier yet
-			return rp, is, who, false
+	t := apiV3LabelTarget{repo: rp}
+	if err := a.apiV3ReloadLabels(r.Context(), &t, n); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeAPIError(w, http.StatusNotFound, "Not Found")
+		} else {
+			a.apiFail(w, r, err)
 		}
-		writeAPIError(w, http.StatusNotFound, "Not Found")
-		return rp, is, who, false
+		return t, who, false
 	}
-	return rp, is, who, true
+	return t, who, true
+}
+
+// apiV3ReloadLabels (re)reads the issue or pull request numbered n.
+func (a *App) apiV3ReloadLabels(ctx context.Context, t *apiV3LabelTarget, n int64) error {
+	if is, err := a.db.IssueByNumber(ctx, t.repo.ID, n); err == nil {
+		t.issue, t.labels = &is, is.Labels
+		return nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	p, err := a.db.PullByNumber(ctx, t.repo.ID, n)
+	if err != nil {
+		return err
+	}
+	ls, err := a.db.PullLabels(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	t.pull, t.labels = &p, ls
+	return nil
+}
+
+func (t apiV3LabelTarget) number() int64 {
+	if t.issue != nil {
+		return t.issue.Number
+	}
+	return t.pull.Number
+}
+
+// set replaces the labels, then reloads them.
+func (a *App) apiV3SetLabels(ctx context.Context, t *apiV3LabelTarget, ids []int64, who Actor) error {
+	var err error
+	if t.issue != nil {
+		err = a.db.SetIssueLabels(ctx, t.issue.ID, ids, who.Kind, who.Name)
+	} else {
+		err = a.db.SetPullLabels(ctx, t.pull.ID, ids)
+	}
+	if err != nil {
+		return err
+	}
+	return a.apiV3ReloadLabels(ctx, t, t.number())
 }
 
 func (a *App) apiV3Labels(w http.ResponseWriter, r *http.Request) {
-	_, is, _, ok := a.apiV3IssueForLabels(w, r, "read")
+	t, _, ok := a.apiV3LabelTargetFor(w, r, "read")
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, ghLabels(is.Labels))
+	writeJSON(w, http.StatusOK, ghLabels(t.labels))
 }
 
 func (a *App) apiV3LabelsAdd(w http.ResponseWriter, r *http.Request) {
-	rp, is, who, ok := a.apiV3IssueForLabels(w, r, "comment")
+	t, who, ok := a.apiV3LabelTargetFor(w, r, "comment")
 	if !ok {
 		return
 	}
@@ -326,7 +378,7 @@ func (a *App) apiV3LabelsAdd(w http.ResponseWriter, r *http.Request) {
 		names = obj.Labels
 	}
 	ctx := r.Context()
-	all, err := a.db.Labels(ctx, rp.ID)
+	all, err := a.db.Labels(ctx, t.repo.ID)
 	if err != nil {
 		a.apiFail(w, r, err)
 		return
@@ -337,9 +389,10 @@ func (a *App) apiV3LabelsAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	ids := []int64{}
 	have := map[int64]bool{}
-	for _, l := range is.Labels {
+	for _, l := range t.labels {
 		ids, have[l.ID] = append(ids, l.ID), true
 	}
+	before := maps.Clone(have)
 	for _, n := range names {
 		n = strings.TrimSpace(n)
 		l, ok := byName[strings.ToLower(n)]
@@ -351,32 +404,29 @@ func (a *App) apiV3LabelsAdd(w http.ResponseWriter, r *http.Request) {
 			ids, have[l.ID] = append(ids, l.ID), true
 		}
 	}
-	if err := a.db.SetIssueLabels(ctx, is.ID, ids, who.Kind, who.Name); err != nil {
+	if err := a.apiV3SetLabels(ctx, &t, ids, who); err != nil {
 		a.apiFail(w, r, err)
 		return
 	}
-	before := map[int64]bool{}
-	for _, l := range is.Labels {
-		before[l.ID] = true
-	}
-	is, _ = a.db.IssueByNumber(ctx, rp.ID, is.Number)
-	for _, l := range is.Labels {
-		if !before[l.ID] {
-			a.emit(ctx, issueEvent(EventIssueLabeled, appsView(rp), is, who, l.Name))
+	if t.issue != nil {
+		for _, l := range t.labels {
+			if !before[l.ID] {
+				a.emit(ctx, issueEvent(EventIssueLabeled, appsView(t.repo), *t.issue, who, l.Name))
+			}
 		}
 	}
-	writeJSON(w, http.StatusOK, ghLabels(is.Labels))
+	writeJSON(w, http.StatusOK, ghLabels(t.labels))
 }
 
 func (a *App) apiV3LabelRemove(w http.ResponseWriter, r *http.Request) {
-	rp, is, who, ok := a.apiV3IssueForLabels(w, r, "comment")
+	t, who, ok := a.apiV3LabelTargetFor(w, r, "comment")
 	if !ok {
 		return
 	}
 	name := r.PathValue("name")
-	var ids []int64
+	ids := []int64{}
 	found := false
-	for _, l := range is.Labels {
+	for _, l := range t.labels {
 		if strings.EqualFold(l.Name, name) {
 			found = true
 			continue
@@ -387,13 +437,11 @@ func (a *App) apiV3LabelRemove(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, http.StatusNotFound, "Label does not exist")
 		return
 	}
-	ctx := r.Context()
-	if err := a.db.SetIssueLabels(ctx, is.ID, ids, who.Kind, who.Name); err != nil {
+	if err := a.apiV3SetLabels(r.Context(), &t, ids, who); err != nil {
 		a.apiFail(w, r, err)
 		return
 	}
-	is, _ = a.db.IssueByNumber(ctx, rp.ID, is.Number)
-	writeJSON(w, http.StatusOK, ghLabels(is.Labels))
+	writeJSON(w, http.StatusOK, ghLabels(t.labels))
 }
 
 // ---------- pull requests ----------
@@ -504,10 +552,48 @@ func (a *App) apiV3ReviewComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := []map[string]any{}
+	diffs := apiV3Diffs{}
 	for _, n := range notes {
-		out = append(out, a.ghReviewComment(ctx, rp, p, n))
+		out = append(out, a.apiV3ReviewCommentJSON(ctx, rp, p, n, diffs))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// apiV3Diffs caches pull request diffs by commit for one request.
+type apiV3Diffs map[string]*gitrepo.Diff
+
+// apiV3PullDiff is the pull request's diff as of commit (its base to commit).
+func (a *App) apiV3PullDiff(ctx context.Context, rp store.Repo, p store.Pull, commit string, cache apiV3Diffs) *gitrepo.Diff {
+	if d, ok := cache[commit]; ok {
+		return d
+	}
+	cache[commit] = nil
+	_, base := a.appsPullSHAs(ctx, rp, p)
+	if base == "" || commit == "" {
+		return nil
+	}
+	g, err := a.git.Open(rp.Owner, rp.Name)
+	if err != nil {
+		return nil
+	}
+	cmp, err := g.Compare(ctx, base, commit)
+	if err != nil {
+		return nil
+	}
+	cache[commit] = cmp.Diff
+	return cmp.Diff
+}
+
+// apiV3ReviewCommentJSON adds the diff position and hunk to a review comment
+// when its line is part of the diff at its commit.
+func (a *App) apiV3ReviewCommentJSON(ctx context.Context, rp store.Repo, p store.Pull, n store.PullNote, diffs apiV3Diffs) map[string]any {
+	m := a.ghReviewComment(ctx, rp, p, n)
+	if f := appsDiffFile(a.apiV3PullDiff(ctx, rp, p, n.CommitSHA, diffs), n.Path); f != nil {
+		if pos, ok := appsLinePosition(f, n.Line, n.Side); ok {
+			m["position"], m["original_position"], m["diff_hunk"] = pos, pos, appsDiffHunk(f, pos)
+		}
+	}
+	return m
 }
 
 var appsSHARe = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
@@ -547,8 +633,24 @@ func (a *App) apiV3ReviewCommentCreate(w http.ResponseWriter, r *http.Request) {
 	case in.Path == "" || len(in.Path) > 4096:
 		apiV3Invalid(w, "path is required")
 		return
-	case in.Line < 1:
-		apiV3Invalid(w, "line is required (diff positions aren't supported; use line and side)")
+	}
+	diffs := apiV3Diffs{}
+	if in.Line < 1 && in.Position != nil {
+		// GitHub's legacy diff position: map it to a line and side.
+		f := appsDiffFile(a.apiV3PullDiff(ctx, rp, p, in.CommitID, diffs), in.Path)
+		if f == nil {
+			apiV3Invalid(w, "path isn't part of the pull request's diff at commit_id")
+			return
+		}
+		line, s, ok := appsPositionLine(f, *in.Position)
+		if !ok {
+			apiV3Invalid(w, "position isn't a line of the diff for path")
+			return
+		}
+		in.Line, side = line, s
+	}
+	if in.Line < 1 {
+		apiV3Invalid(w, "line is required (or a diff position)")
 		return
 	}
 	n, err := a.db.AddPullNote(ctx, store.NewPullNote{PullID: p.ID, CommitSHA: in.CommitID, Path: in.Path, Side: side,
@@ -558,7 +660,7 @@ func (a *App) apiV3ReviewCommentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.emit(ctx, pullEvent(EventPullNote, appsView(rp), p, who, body, fmt.Sprintf("/files#note-%d", n.ID)))
-	writeJSON(w, http.StatusCreated, a.ghReviewComment(ctx, rp, p, n))
+	writeJSON(w, http.StatusCreated, a.apiV3ReviewCommentJSON(ctx, rp, p, n, diffs))
 }
 
 func (a *App) apiV3Merge(w http.ResponseWriter, r *http.Request) {

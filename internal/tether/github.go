@@ -423,6 +423,7 @@ type Issue struct {
 	User          User       `json:"user"`
 	Comments      int        `json:"comments"`
 	Labels        []Label    `json:"labels"`
+	Milestone     *Milestone `json:"milestone,omitempty"`
 	PullRequest   *struct{}  `json:"pull_request,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
@@ -518,9 +519,13 @@ type Release struct {
 	Body        string    `json:"body"`
 }
 
-// Label is an issue or pull request label (its colour is ignored: untrusted).
+// Label is an issue or pull request label. Its colour and description are
+// untrusted: the colour is only used after validation as six hex digits, the
+// description only as text.
 type Label struct {
-	Name string `json:"name"`
+	Name        string `json:"name"`
+	Color       string `json:"color,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type Status struct {

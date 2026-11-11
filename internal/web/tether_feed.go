@@ -312,6 +312,8 @@ type homeItem struct {
 	When   time.Time
 	Local  *activity
 	Tether *tetherFeedView
+	// Connect is an activity from another studio you follow (connect_ui.go).
+	Connect *connectFeedView
 }
 
 func (a *App) tetherHomeData(ctx context.Context, personID int64, lang, account string) tetherHome {

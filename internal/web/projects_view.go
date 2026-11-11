@@ -18,6 +18,8 @@ type projCell struct {
 	Value   string // stored value (option id for single selects)
 	Display string
 	Color   string // single selects
+	Range   string // iterations: their dates, e.g. "3 Nov – 16 Nov 2026"
+	Current bool   // iterations: running today
 }
 
 type projCard struct {
@@ -293,6 +295,14 @@ func projCellFor(f store.ProjField, v string) projCell {
 			cell.Display = t.Format("2 Jan 2006")
 		}
 	}
+	if f.IsIteration() {
+		cell.Display = ""
+		if it, ok := f.Iteration(v); ok {
+			cell.Display, cell.Range, cell.Current = it.Name, it.Range(), it.Current()
+		} else {
+			cell.Value = ""
+		}
+	}
 	return cell
 }
 
@@ -390,6 +400,11 @@ func projTable(d projViewData, cards []projCard) ([]projCard, []projTableCol) {
 						return "", 0, false
 					}
 					return "x", n, true
+				case store.ProjFieldIteration:
+					if it, ok := cell.Field.Iteration(cell.Value); ok {
+						return it.StartDate(), 0, false
+					}
+					return "", 0, false
 				case store.ProjFieldSelect:
 					for i, o := range cell.Field.Options {
 						if strconv.FormatInt(o.ID, 10) == cell.Value {

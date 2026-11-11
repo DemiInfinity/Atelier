@@ -1,4 +1,4 @@
-{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "head"}}{{template "gh-css"}}<link rel="stylesheet" href="/static/connect.css">{{end}}
 {{define "content"}}
 {{$d := .Data}}
 <main class="wrap gh-page gh-profile">
@@ -20,6 +20,7 @@
       <section class="gh-atelier stack-sm" aria-label="Atelier">
         <p class="row gap-sm">{{template "gh-badge" $d.Person}}<span class="small">{{$d.Person.Login}} has a studio of their own.</span></p>
         {{if $d.Studio}}<a class="btn btn-sm gh-studio-btn" href="{{$d.Studio}}" rel="noopener noreferrer nofollow" target="_blank">Visit their studio ↗</a>{{end}}
+        {{with connectBadgeFollow $d.Person.Login}}{{template "connect-follow-badge" .}}{{end}}
       </section>
       {{end}}
       {{with $d.Bio}}<p class="gh-bio">{{.}}</p>{{end}}

@@ -16,7 +16,7 @@ import (
 // pull request mirrors it to the private GitHub twin, where GitHub-only bots
 // (CodeRabbit, Cursor Bugbot, any GitHub App) review it. Tether syncs their
 // comments back as tether.comment events; merging or closing here closes the
-// mirror.
+// mirror (Tether's event handler makes that one call; this bridge records it).
 //
 // The timeline entry is a pull event of kind "tether_mirrored" with data
 // "<github number> <url>"; synced comments are pull comments by kind
@@ -62,15 +62,12 @@ func (a *App) appsTetherOnEvent(ctx context.Context, rp store.Repo, ev Event) {
 		if err != nil || m.Closed {
 			return
 		}
-		merged := ev.Kind == EventPullMerged
-		a.appsBG(func(ctx context.Context) {
-			if err := tether.Get().ClosePull(ctx, rp.ID, p.Number, merged, p.MergedSHA); err != nil {
-				log.Printf("apps: closing GitHub mirror of %s#%d: %v", rp.FullName(), p.Number, err)
-				return
-			}
-			m.Closed = true
-			_ = a.db.SaveTetherMirror(ctx, m)
-		})
+		// Tether's own event handler closes the GitHub side (one call, for
+		// every pull request mirrored from Atelier); the bridge only records it.
+		m.Closed = true
+		if err := a.db.SaveTetherMirror(ctx, m); err != nil {
+			log.Printf("apps: marking GitHub mirror of %s#%d closed: %v", rp.FullName(), p.Number, err)
+		}
 	case EventTetherComment:
 		a.appsTetherComment(ctx, rp, ev)
 	}

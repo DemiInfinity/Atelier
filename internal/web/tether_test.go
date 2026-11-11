@@ -69,6 +69,13 @@ type fakeGH struct {
 	tokens     map[string]fakeToken
 	mainDenied map[string]bool
 	byToken    map[string]int
+
+	// Issue sync (tether_issues_test.go): repository labels and milestones,
+	// and pull request reviews by number.
+	labels      map[string][]tether.Label
+	milestones  map[string][]*tether.Milestone
+	prReviews   map[string]map[int64][]tether.Review
+	lastPayload map[string]map[string]any // "METHOD path" → last JSON body
 }
 
 type fakeToken struct {
@@ -89,7 +96,9 @@ func newFakeGH(t *testing.T) *fakeGH {
 	t.Helper()
 	f := &fakeGH{t: t, gitRoot: t.TempDir(), login: "zoe-gh", repos: map[string]*tether.Repo{}, issues: map[string][]tether.Issue{},
 		comments: map[string][]tether.Comment{}, reviews: map[string][]tether.ReviewComment{}, pulls: map[string]map[int64]*tether.Pull{},
-		files: map[string]fakeFile{}, releases: map[string][]tether.Release{}, hits: map[string]int{}, nextID: 1000}
+		files: map[string]fakeFile{}, releases: map[string][]tether.Release{}, hits: map[string]int{}, nextID: 1000,
+		labels: map[string][]tether.Label{}, milestones: map[string][]*tether.Milestone{}, prReviews: map[string]map[int64][]tether.Review{},
+		lastPayload: map[string]map[string]any{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -195,6 +204,9 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &body)
 	}
+	if body != nil {
+		f.lastPayload[r.Method+" "+p] = body
+	}
 	str := func(k string) string { s, _ := body[k].(string); return s }
 	seg := strings.Split(strings.Trim(p, "/"), "/")
 	if len(seg) >= 2 && seg[0] == "repos" {
@@ -286,6 +298,9 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 	rp, ok := f.repos[full]
 	if !ok {
 		f.write(w, r, 404, map[string]string{"message": "Not Found"})
+		return
+	}
+	if f.serveIssueSync(w, r, full, rest, body) {
 		return
 	}
 	switch {

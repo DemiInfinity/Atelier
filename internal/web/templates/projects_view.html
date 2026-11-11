@@ -101,7 +101,7 @@
           {{if or .Labels .Cells}}
           <div class="proj-card-pills">
             {{range .Labels}}{{template "label-pill" .}}{{end}}
-            {{range .Cells}}{{if .Display}}{{if .Color}}<span class="proj-pill proj-c-{{.Color}}">{{.Display}}</span>{{else}}<span class="proj-pill" title="{{.Field.Name}}">{{.Field.Name}}: {{.Display}}</span>{{end}}{{end}}{{end}}
+            {{range .Cells}}{{if .Display}}{{if .Color}}<span class="proj-pill proj-c-{{.Color}}">{{.Display}}</span>{{else if .Range}}{{template "proj-iter-pill" .}}{{else}}<span class="proj-pill" title="{{.Field.Name}}">{{.Field.Name}}: {{.Display}}</span>{{end}}{{end}}{{end}}
           </div>
           {{end}}
           {{end}}
@@ -177,6 +177,7 @@
             <button class="btn btn-xs" type="submit" data-proj-js-hide>Save</button>
           </form>
           {{else if $cell.Color}}<span class="proj-pill proj-c-{{$cell.Color}}">{{$cell.Display}}</span>
+          {{else if $cell.Range}}{{template "proj-iter-pill" $cell}}
           {{else}}{{$cell.Display}}{{end}}
         </td>
         {{end}}

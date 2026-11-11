@@ -31,6 +31,33 @@ func RegisterDataDir(name string) {
 	dataDirs = append(dataDirs, name)
 }
 
+// gitDataDirs are data directories that hold bare repositories laid out as
+// <dir>/<shard>/<name>.git (snippets). Snapshots bundle each repository, as
+// they do for <data>/repos, instead of copying its files: a plain copy taken
+// while a push is landing can hold refs that point at missing objects.
+var gitDataDirs []string
+
+// RegisterGitDataDir adds a directory of bare repositories (relative to the
+// data dir) to every snapshot and full restore. Call it from an init() function.
+func RegisterGitDataDir(name string) {
+	RegisterDataDir(name)
+	for _, d := range gitDataDirs {
+		if d == name {
+			return
+		}
+	}
+	gitDataDirs = append(gitDataDirs, name)
+}
+
+func isGitDataDir(name string) bool {
+	for _, d := range gitDataDirs {
+		if d == name {
+			return true
+		}
+	}
+	return false
+}
+
 // DataDirs lists the directories snapshots include.
 func DataDirs() []string { return append([]string(nil), dataDirs...) }
 
@@ -47,6 +74,9 @@ func (o Options) dataRoot() string {
 func collectDataDirs(root string, m *Manifest) (map[string]string, error) {
 	src := map[string]string{}
 	for _, d := range dataDirs {
+		if isGitDataDir(d) {
+			continue // bundled with the repositories instead
+		}
 		base := filepath.Join(root, d)
 		var files []string
 		err := filepath.WalkDir(base, func(p string, e fs.DirEntry, err error) error {

@@ -652,25 +652,17 @@ func (a *App) insightsAccount(w http.ResponseWriter, r *http.Request) {
 	repos := a.readableRepos(ctx, a.actor(r), all)
 	d := &insAccountData{Repos: len(repos)}
 
-	// Calendar: 53 weeks ending today, from each repository's cached stats.
+	// Calendar: 53 weeks ending today, counted the same way as the Embers on
+	// home and profiles (contributions.go): commits on each default branch.
 	today := time.Now()
-	start := insWeekStart(today).AddDate(0, 0, -52*7)
-	counts := map[string]int{}
+	start := contribStart(today)
+	counts, perRepo := a.contributionDays(ctx, repos, start)
 	monthAgo := today.AddDate(0, 0, -30).Format("2006-01-02")
 	for _, rp := range repos {
-		res := a.insStatsFor(ctx, rp, 0)
-		if res.Updating {
-			d.Updating++
-		}
-		act := insRepoActivity{Repo: rp, Updating: res.Updating}
-		if res.Stats != nil {
-			for day, n := range res.Stats.Days {
-				if day >= start.Format("2006-01-02") {
-					counts[day] += n
-				}
-				if day >= monthAgo {
-					act.Commits += n
-				}
+		act := insRepoActivity{Repo: rp}
+		for day, n := range perRepo[rp.ID] {
+			if day >= monthAgo {
+				act.Commits += n
 			}
 		}
 		if act.Commits > 0 {
@@ -680,7 +672,7 @@ func (a *App) insightsAccount(w http.ResponseWriter, r *http.Request) {
 	var cells []insCalCell
 	streak := 0
 	for day := start; !day.After(today); day = day.AddDate(0, 0, 1) {
-		n := counts[day.Format("2006-01-02")]
+		n := counts[insDayKey(day)]
 		cells = append(cells, insCalCell{Day: day, Count: n})
 		d.YearTotal += n
 		if n > 0 {

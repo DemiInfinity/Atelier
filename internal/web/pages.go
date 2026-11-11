@@ -101,29 +101,22 @@ func (a *App) home(w http.ResponseWriter, r *http.Request) {
 	th := a.tetherHomeData(ctx, a.actor(r).PersonID, r.URL.Query().Get("lang"), acct)
 	a.render(w, r, "home", page{Title: "Home", Nav: "home", Data: map[string]any{
 		"Owners": owners, "Active": active, "Repos": repos, "Activity": acts,
-		"Embers": cells, "EmberTotal": total, "Tether": th, "Feed": blendHomeFeed(acts, th.Feed, 24),
+		"Embers": cells, "EmberTotal": total, "Tether": th, "Feed": a.connectHomeFeed(ctx, who, blendHomeFeed(acts, th.Feed, 24), 24),
 	}})
 }
 
 // embers builds a 53-week contribution grid (column = week, Sunday first).
 func (a *App) embers(ctx context.Context, repos []store.Repo) ([]emberCell, int) {
-	today := time.Now().Truncate(24 * time.Hour)
-	start := today.AddDate(0, 0, -(52*7 + int(today.Weekday())))
-	counts := map[string]int{}
+	today := time.Now()
+	start := contribStart(today)
+	counts, _ := a.contributionDays(ctx, repos, start)
 	total := 0
-	for _, rp := range repos {
-		g, err := a.git.Open(rp.Owner, rp.Name)
-		if err != nil {
-			continue
-		}
-		for _, t := range g.CommitTimes(ctx, start) {
-			counts[t.Format("2006-01-02")]++
-			total++
-		}
+	for _, n := range counts {
+		total += n
 	}
 	var cells []emberCell
 	for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
-		n := counts[d.Format("2006-01-02")]
+		n := counts[insDayKey(d)]
 		lv := 0
 		switch {
 		case n >= 10:

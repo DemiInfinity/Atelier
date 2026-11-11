@@ -23,6 +23,7 @@
       {{else if eq $is.StateReason "not_planned"}}<span class="state-badge state-not-planned">{{template "issue-icon" $is}} Closed as not planned</span>
       {{else}}<span class="state-badge state-closed">{{template "issue-icon" $is}} Closed</span>{{end}}
       <p class="muted"><strong class="text-2">{{$is.AuthorName}}</strong> {{template "actor-chip" (actorKind $is.AuthorKind $is.AuthorName)}} opened this issue <time datetime="{{$is.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime $is.CreatedAt}}">{{ago $is.CreatedAt}}</time> · {{$is.Comments}} comment{{if ne $is.Comments 1}}s{{end}}</p>
+      {{with tetherIssueGH $is.RepoID $is.Number}}<span class="tt-via">{{template "tether-icon" 12}} {{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">GitHub #{{.Number}}</a>{{else}}GitHub #{{.Number}}{{end}}</span>{{end}}
     </div>
   </header>
   {{template "flash" .}}

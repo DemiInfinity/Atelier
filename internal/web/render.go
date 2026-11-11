@@ -112,7 +112,7 @@ func (a *App) loadTemplates() error {
 	for _, name := range names {
 		patterns := append([]string{"templates/layout.html"}, partials...)
 		patterns = append(patterns, "templates/"+name+".html")
-		t, err := template.New("layout.html").Funcs(funcs).ParseFS(templateFS, patterns...)
+		t, err := template.New("layout.html").Funcs(funcs).ParseFS(versionedTemplateFS(), patterns...)
 		if err != nil {
 			return fmt.Errorf("template %s: %w", name, err)
 		}

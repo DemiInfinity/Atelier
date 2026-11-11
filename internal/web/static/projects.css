@@ -25,6 +25,13 @@
 .proj-pill.proj-c-green { background: #1e2a22; color: #a6e3b8; }
 .proj-pill.proj-c-violet { background: #24203a; color: var(--violet); }
 .proj-pill.proj-c-red { background: #2b1a17; color: var(--danger); }
+.proj-pill.proj-iter { border-color: var(--border); background: transparent; }
+.proj-pill.proj-iter.is-current { border-color: var(--amber); color: var(--amber); }
+.proj-iter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.proj-iter-row input[type="text"], .proj-iter-row input:not([type]) { flex: 1 1 140px; min-width: 0; }
+.proj-iter-row input[type="number"] { width: 5.5em; }
+.proj-duration { display: flex; gap: 8px; align-items: center; }
+.proj-duration input { width: 5.5em; }
 
 /* ---------- header ---------- */
 

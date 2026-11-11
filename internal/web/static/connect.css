@@ -1,0 +1,60 @@
+/* Atelier Connect: other studios. Violet is the Connect accent (with a soft
+   violet surface), so "via Connect" reads apart from Local (amber) and GitHub (Tether blue). */
+:root {
+  --connect: var(--violet);
+  --connect-surface: #1c1826;
+  --connect-border: #443860;
+}
+
+.cn-mark { color: var(--connect); display: inline-flex; }
+.cn-pill, .pill.cn-pill { background: var(--violet-chip); color: var(--connect); border-color: var(--connect-border); }
+.pill.cn-block { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+.btn.cn-btn:not(:disabled) { border-color: var(--connect-border); color: var(--connect); background: var(--connect-surface); }
+.btn.cn-btn.btn-primary:not(:disabled) { background: var(--connect); color: #17121f; border-color: var(--connect); }
+
+/* Home feed */
+.feed-item.cn-feed { border-left: 3px solid var(--connect); padding-left: 12px; background: linear-gradient(90deg, var(--connect-surface), transparent 60%); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.cn-feed .feed-chip { background: var(--connect-surface); color: var(--connect); border-color: var(--connect-border); }
+.cn-feed .feed-source { color: var(--connect); border-color: var(--connect-border); background: var(--connect-surface); }
+.cn-feed .feed-body a { color: var(--connect); }
+.cn-handle { overflow-wrap: anywhere; }
+.cn-detail { color: var(--text-2); overflow-wrap: anywhere; }
+.cn-star-form { margin-top: 6px; }
+.btn.cn-star { padding: 2px 10px; color: var(--connect); border-color: var(--connect-border); background: transparent; }
+.btn.cn-star.is-on { background: var(--violet-chip); }
+
+/* Settings */
+.cn-status.cn-on { border-color: var(--connect-border); background: linear-gradient(180deg, var(--connect-surface), var(--surface) 70%); }
+.cn-why { padding: 10px 12px; border: 1px dashed var(--connect-border); border-radius: var(--r-sm); color: var(--text-2); }
+.cn-facts { display: grid; gap: 8px; margin: 0; }
+.cn-facts div { display: grid; grid-template-columns: 90px 1fr; gap: 12px; align-items: baseline; }
+.cn-facts dt { color: var(--muted); font-size: 0.85rem; }
+.cn-facts dd { margin: 0; }
+.cn-input { flex: 1 1 260px; min-width: 0; }
+.cn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.cn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cn-list > li { padding: 6px 0; border-top: 1px solid var(--border); }
+.cn-list > li:first-child { border-top: 0; }
+.cn-actor { display: flex; align-items: center; gap: 8px; min-width: 0; list-style: none; }
+.cn-list .cn-actor { padding: 0; border: 0; }
+.cn-avatar { width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
+  background: var(--violet-chip); color: var(--connect); border: 1px solid var(--connect-border); font-weight: 600; font-size: 0.8rem; }
+.cn-actor-names { min-width: 0; overflow-wrap: anywhere; }
+.cn-out { color: var(--connect); }
+.cn-offer-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.cn-table { width: 100%; }
+.cn-st { font-weight: 500; }
+.cn-st-sent { color: var(--ok); }
+.cn-st-failed, .cn-st-dropped { color: var(--danger); }
+.cn-st-queued { color: var(--amber); }
+
+/* Profile */
+.cn-profile { padding: 10px 12px; border: 1px solid var(--connect-border); border-radius: var(--r); background: var(--connect-surface); }
+.cn-profile-head { color: var(--connect); }
+.cn-profile summary { cursor: pointer; color: var(--connect); }
+.cn-actors { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.cn-link { color: var(--connect); }
+
+/* GitHub profiles */
+.btn.cn-follow { display: inline-flex; gap: 6px; align-items: center; color: var(--connect); border-color: var(--connect-border); background: var(--connect-surface); }
+.btn.cn-follow.is-on { background: var(--violet-chip); }

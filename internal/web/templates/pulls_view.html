@@ -147,6 +147,7 @@ git push</code></pre>
         {{else if eq .Event.Kind "branch_deleted"}}<span class="pr-event-icon" aria-hidden="true">⌫</span><strong>{{.Event.ActorName}}</strong> deleted the {{template "pulls-branch" .Event.Data}} branch
         {{else if eq .Event.Kind "force_pushed"}}<span class="pr-event-icon is-warn" aria-hidden="true">↯</span>{{template "pulls-branch" $p.Head}} was force-pushed from <span class="mono">{{short .Method}}</span> to <span class="mono">{{short .SHA}}</span>
         {{else if eq .Event.Kind "tether_mirrored"}}<span class="pr-event-icon" aria-hidden="true">↗</span>Mirrored to GitHub for bot review · {{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer" target="_blank">#{{.SHA}}</a>{{else}}#{{.SHA}}{{end}} <span class="pill pill-tether">via Tether</span>
+        {{else if eq .Event.Kind "tether_review"}}<span class="pr-event-icon{{if eq .Event.Data "approved"}} is-open{{else if eq .Event.Data "changes_requested"}} is-closed{{end}}" aria-hidden="true">{{if eq .Event.Data "approved"}}✓{{else if eq .Event.Data "changes_requested"}}±{{else}}✎{{end}}</span><strong>{{.Event.ActorName}}</strong> {{if eq .Event.Data "approved"}}approved these changes{{else if eq .Event.Data "changes_requested"}}requested changes{{else}}reviewed{{end}} on GitHub <span class="pill pill-tether">via Tether</span>
         {{else}}{{.Event.Kind}}{{end}}
         <time class="muted" datetime="{{.When.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .When}}">{{ago .When}}</time>
       </p>

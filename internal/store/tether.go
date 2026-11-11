@@ -370,7 +370,8 @@ func (s *Store) TetherLinks(ctx context.Context) ([]TetherLink, error) {
 // DeleteTetherLink unlinks a repository and forgets its synced state.
 func (s *Store) DeleteTetherLink(ctx context.Context, repoID int64) error {
 	return s.inTx(ctx, func(tx *sql.Tx) error {
-		for _, t := range []string{"tether_links", "tether_items", "tether_comments", "tether_statuses"} {
+		for _, t := range []string{"tether_links", "tether_items", "tether_comments", "tether_statuses",
+			"tether_issue_sync", "tether_reviews", "tether_link_sync"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+t+` WHERE repo_id=?`, repoID); err != nil {
 				return err
 			}

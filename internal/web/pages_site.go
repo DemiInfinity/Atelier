@@ -26,17 +26,21 @@ import (
 //	pages_site_serve.go    the Pages host: host dispatch and serving files
 //	pages_site_settings.go /{owner}/{repo}/settings/pages
 //	pages_site_api.go      POST /api/pages/deploy, used by atelier/deploy-pages with a job token
+//	pages_site_domain.go   custom domains: claims, verification, serving at "/"
+//	pages_site_private.go  private sites on a custom domain: sign-in handoff, site sessions
+//	pages_site_preview.go  pull request previews
 //
 // Sites are served only on the host of ATELIER_PAGES_URL, never on the app's
 // host, so a site's HTML can't reach Atelier's session cookie. Addresses are
 // path-based: <pages>/<owner>/<repo>/, and the repository named
 // <owner>.pages is the owner's site at <pages>/<owner>/.
 //
-// Only public repositories publish. Private sites would need a sign-in
-// handoff on the Pages origin, and since every site shares that one origin,
+// On the shared Pages origin only public repositories are served. A private
+// site would need a sign-in there, and since every site shares that origin,
 // any published site's script could read a private site's pages with the
-// visitor's credentials. Rather than do that badly, private repositories
-// can't publish, and a site goes dark as soon as its repository turns private.
+// visitor's credentials. A verified custom domain is the site's own origin,
+// so a private repository may publish once it has one, and is then served
+// only there, to people who can read the repository (pages_site_private.go).
 
 func init() {
 	registerFeature(feature{
@@ -69,6 +73,7 @@ func init() {
 		go func() {
 			defer pagesBG.Done()
 			a.pagesOnPush(ctx, rp, ev.Push.Ref, ev.Push.New, ev.Push.Pusher)
+			a.pagesPreviewOnPush(ctx, rp, ev.Push.Ref, ev.Push.New)
 		}()
 	})
 }
@@ -181,12 +186,23 @@ func (a *App) pagesSiteURL(rp store.Repo) string {
 
 // ---------- deploys ----------
 
-var errPagesPrivate = errors.New("private repositories can't publish Pages")
+var errPagesPrivate = errors.New("private repositories can't publish Pages without a verified custom domain")
+
+// pagesMayPublish reports whether the repository's site may be deployed and
+// served: public repositories always, private ones only on a verified
+// custom domain (their own origin).
+func (a *App) pagesMayPublish(ctx context.Context, rp store.Repo) bool {
+	if !rp.Private {
+		return true
+	}
+	d, err := a.db.PagesDomain(ctx, rp.ID)
+	return err == nil && d.Verified()
+}
 
 // pagesOnPush publishes the site when a push moves its branch. Call it for
 // every ref update; it ignores the ones that don't concern Pages.
 func (a *App) pagesOnPush(ctx context.Context, rp store.Repo, ref, newSHA, pusher string) {
-	if actZeroSHA(newSHA) || rp.Private {
+	if actZeroSHA(newSHA) || !a.pagesMayPublish(ctx, rp) {
 		return
 	}
 	ps, err := a.db.PagesSite(ctx, rp.ID)
@@ -201,7 +217,7 @@ func (a *App) pagesOnPush(ctx context.Context, rp store.Repo, ref, newSHA, pushe
 // pagesDeployBranch publishes ps.Folder of ps.Branch (at sha, or the branch
 // head when sha is "") as a new deploy and makes it live.
 func (a *App) pagesDeployBranch(ctx context.Context, rp store.Repo, ps store.PagesSite, sha, actor string) (store.PagesDeploy, error) {
-	if rp.Private {
+	if !a.pagesMayPublish(ctx, rp) {
 		return store.PagesDeploy{}, errPagesPrivate
 	}
 	g, err := a.git.Open(rp.Owner, rp.Name)
@@ -215,20 +231,30 @@ func (a *App) pagesDeployBranch(ctx context.Context, rp store.Repo, ps store.Pag
 		}
 	}
 	d.SHA = sha
-	folder, ok := pagesdeploy.CleanFolder(ps.Folder)
+	feed, err := pagesFolderFeed(ctx, g, sha, ps.Folder, ps.Branch)
+	if err != nil {
+		return a.pagesFail(ctx, rp, d, err)
+	}
+	return a.pagesPublish(ctx, rp, d, feed)
+}
+
+// pagesFolderFeed streams folder of commit sha as a tar archive. where names
+// the commit in error messages (a branch name).
+func pagesFolderFeed(ctx context.Context, g *gitrepo.Repo, sha, folder, where string) (func(extract func(io.Reader) error) error, error) {
+	folder, ok := pagesdeploy.CleanFolder(folder)
 	if !ok {
-		return a.pagesFail(ctx, rp, d, fmt.Errorf("invalid folder %q", ps.Folder))
+		return nil, fmt.Errorf("invalid folder %q", folder)
 	}
 	treeish := sha
 	if folder != "" {
 		if g.ObjectType(ctx, sha, folder) != "tree" {
-			return a.pagesFail(ctx, rp, d, fmt.Errorf("folder /%s doesn't exist on %s", folder, ps.Branch))
+			return nil, fmt.Errorf("folder /%s doesn't exist on %s", folder, where)
 		}
 		treeish = sha + ":" + folder
 	}
-	return a.pagesPublish(ctx, rp, d, func(extract func(io.Reader) error) error {
+	return func(extract func(io.Reader) error) error {
 		return g.StreamGit(ctx, 10*time.Minute, extract, "archive", "--format=tar", treeish)
-	})
+	}, nil
 }
 
 // pagesFail records a deploy that couldn't start.
@@ -248,6 +274,20 @@ func (a *App) pagesPublish(ctx context.Context, rp store.Repo, d store.PagesDepl
 	unlock := pagesLock(rp.ID)
 	defer unlock()
 	ctx = context.WithoutCancel(ctx)
+	d, err := a.pagesBuild(ctx, rp, d, feed)
+	if err != nil {
+		return d, err
+	}
+	if err := a.db.SetPagesLive(ctx, rp.ID, d.ID); err != nil {
+		return d, err
+	}
+	a.pagesPrune(ctx, rp.ID)
+	return d, nil
+}
+
+// pagesBuild records a deploy and fills its snapshot, leaving it ready (or
+// failed, with the snapshot removed). The caller holds pagesLock.
+func (a *App) pagesBuild(ctx context.Context, rp store.Repo, d store.PagesDeploy, feed func(extract func(io.Reader) error) error) (store.PagesDeploy, error) {
 	d, err := a.db.CreatePagesDeploy(ctx, d)
 	if err != nil {
 		return d, err
@@ -274,10 +314,6 @@ func (a *App) pagesPublish(ctx context.Context, rp store.Repo, d store.PagesDepl
 		return d, err
 	}
 	d.Status, d.Files, d.Bytes = "ready", res.Files, res.Bytes
-	if err := a.db.SetPagesLive(ctx, rp.ID, d.ID); err != nil {
-		return d, err
-	}
-	a.pagesPrune(ctx, rp.ID)
 	return d, nil
 }
 
@@ -338,8 +374,12 @@ func (a *App) pagesCleanup(ctx context.Context) {
 		if err != nil {
 			continue
 		}
+		pds, err := a.db.PagesPreviewDeploys(ctx, repoID)
+		if err != nil {
+			continue
+		}
 		keep := map[int64]bool{}
-		for _, d := range ds {
+		for _, d := range append(ds, pds...) {
 			if d.Status == "ready" {
 				keep[d.ID] = true
 			}
@@ -358,7 +398,7 @@ func (a *App) pagesCleanup(ctx context.Context) {
 
 // pagesRollbackTo makes an earlier ready deploy live again.
 func (a *App) pagesRollbackTo(ctx context.Context, rp store.Repo, deployID int64) error {
-	if rp.Private {
+	if !a.pagesMayPublish(ctx, rp) {
 		return errPagesPrivate
 	}
 	unlock := pagesLock(rp.ID)
@@ -366,6 +406,9 @@ func (a *App) pagesRollbackTo(ctx context.Context, rp store.Repo, deployID int64
 	d, err := a.db.PagesDeploy(ctx, rp.ID, deployID)
 	if err != nil {
 		return err
+	}
+	if d.Source == store.PagesFromPreview {
+		return store.ErrNotFound // previews never become the site
 	}
 	if d.Status != "ready" {
 		return errors.New("that deploy can't be served")

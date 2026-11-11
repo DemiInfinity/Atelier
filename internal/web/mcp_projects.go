@@ -43,7 +43,7 @@ func mcpProjectTools() []*mcpTool {
 			Desc: "Add a draft card (a title and an optional Markdown body) to a project, optionally setting its Status by option name."},
 			mcpProjectsAddDraft),
 		mcpDef(mcpTool{Name: "projects.set_field", Title: "Set a project field", Write: true,
-			Desc: "Set one field of a project item: Status or any custom field, by field name. Single-select values are option names; numbers are numbers; dates are YYYY-MM-DD; an empty value clears the field. projects.get lists the fields and options."},
+			Desc: "Set one field of a project item: Status or any custom field, by field name. Single-select values are option names; iteration values are iteration names or @current, @next or @previous; numbers are numbers; dates are YYYY-MM-DD; an empty value clears the field. projects.get lists the fields and options."},
 			mcpProjectsSetField),
 		mcpDef(mcpTool{Name: "projects.move_item", Title: "Move a project item", Write: true,
 			Desc: "Reorder an item: put it before or after another item (neither = the end). Pass status (an option name, or empty for No status) to move it to another board column at the same time."},
@@ -259,11 +259,20 @@ func mcpProjectsGet(ctx context.Context, c *mcpCall, in mcpProjectIn) (any, erro
 		Name  string `json:"name"`
 		Color string `json:"color,omitempty"`
 	}
+	type iterOut struct {
+		Name    string `json:"name"`
+		Start   string `json:"start"` // YYYY-MM-DD
+		End     string `json:"end"`   // last day, YYYY-MM-DD
+		Days    int    `json:"days"`
+		Current bool   `json:"current,omitempty"`
+	}
 	type fieldOut struct {
-		Name    string   `json:"name"`
-		Kind    string   `json:"kind"` // single_select, text, number, date
-		Builtin bool     `json:"builtin,omitempty"`
-		Options []optOut `json:"options,omitempty"`
+		Name       string    `json:"name"`
+		Kind       string    `json:"kind"` // single_select, text, number, date, iteration
+		Builtin    bool      `json:"builtin,omitempty"`
+		Options    []optOut  `json:"options,omitempty"`
+		Duration   int       `json:"duration_days,omitempty"` // iteration: default length
+		Iterations []iterOut `json:"iterations,omitempty"`
 	}
 	type viewOut struct {
 		Name   string `json:"name"`
@@ -284,6 +293,12 @@ func mcpProjectsGet(ctx context.Context, c *mcpCall, in mcpProjectIn) (any, erro
 		o := fieldOut{Name: f.Name, Kind: f.Kind, Builtin: f.IsStatus()}
 		for _, opt := range f.Options {
 			o.Options = append(o.Options, optOut{Name: opt.Name, Color: opt.Color})
+		}
+		if f.IsIteration() {
+			o.Duration = f.Duration
+			for _, it := range f.Iterations {
+				o.Iterations = append(o.Iterations, iterOut{Name: it.Name, Start: it.StartDate(), End: it.EndDate(), Days: it.Days, Current: it.Current()})
+			}
 		}
 		fo = append(fo, o)
 	}
@@ -372,6 +387,12 @@ func projValueErr(f store.ProjField) error {
 			names = append(names, o.Name)
 		}
 		return userErr("that isn't an option of %s; its options are: %s", f.Name, strings.Join(names, ", "))
+	case store.ProjFieldIteration:
+		var names []string
+		for _, it := range f.Iterations {
+			names = append(names, it.Name)
+		}
+		return userErr("that isn't an iteration of %s; use @current, @next, @previous or one of: %s", f.Name, strings.Join(names, ", "))
 	case store.ProjFieldNumber:
 		return userErr("%s is a number field", f.Name)
 	case store.ProjFieldDate:
@@ -484,7 +505,7 @@ type mcpProjectsSetFieldIn struct {
 	Project int64  `json:"project" jsonschema:"the project id"`
 	Item    int64  `json:"item" jsonschema:"the item id (projects.items shows it)"`
 	Field   string `json:"field" jsonschema:"the field name, e.g. Status or Priority"`
-	Value   string `json:"value" jsonschema:"the new value: an option name, a number, a date as YYYY-MM-DD or text; empty clears the field"`
+	Value   string `json:"value" jsonschema:"the new value: an option name, an iteration name (or @current), a number, a date as YYYY-MM-DD or text; empty clears the field"`
 }
 
 func mcpProjectsSetField(ctx context.Context, c *mcpCall, in mcpProjectsSetFieldIn) (any, error) {

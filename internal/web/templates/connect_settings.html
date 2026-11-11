@@ -1,0 +1,178 @@
+{{define "head"}}<link rel="stylesheet" href="/static/connect.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Settings}}
+<main class="wrap">
+  <div class="layout-2">
+    <aside class="col-side">{{template "accountnav" "connect"}}</aside>
+    <div class="col-main stack-lg">
+      <div>
+        <h1 class="display row gap-sm"><span class="cn-mark">{{template "connect-icon" 26}}</span> Connect</h1>
+        <p class="muted">Follow people on other Atelier studios and let them follow you, with no central server: studios talk to each other directly, signed with your studio's key. Only public repositories are ever shared, and federation never gives anyone access to your repositories.</p>
+      </div>
+      {{template "flash" .}}
+      {{if $d.Saved}}<div class="flash flash-ok" role="status">Saved.</div>{{end}}
+      {{with $d.Notice}}<div class="flash flash-ok" role="status">{{.}}</div>{{end}}
+
+      <section class="card stack cn-status {{if $d.Active}}cn-on{{end}}" aria-labelledby="cn-status-h">
+        <div class="row-between wrap-gap">
+          <h2 class="h-sm" id="cn-status-h">Your studio</h2>
+          <span class="pill {{if $d.Active}}cn-pill{{end}}">{{if $d.Active}}On{{else if $c.Enabled}}Waiting for a public address{{else}}Off{{end}}</span>
+        </div>
+        {{if $d.Base}}
+        <dl class="cn-facts">
+          <div><dt>Handle</dt><dd class="mono">{{$d.Handle}}</dd></div>
+          <div><dt>Actor</dt><dd class="mono break">{{$d.ActorURL}}</dd></div>
+          <div><dt>Address</dt><dd class="mono break">{{$d.Base}}</dd></div>
+        </dl>
+        {{else}}
+        <p class="cn-why">{{$d.Why}} Until then nothing is sent and other studios can't see this one.</p>
+        {{end}}
+        {{if $d.Fingerprint}}<p class="small muted">Studio key (Ed25519) <span class="mono">{{$d.Fingerprint}}</span>. It lives in your data folder with mode 0600 and is included in backups.</p>{{end}}
+        {{with $d.KeyErr}}<p class="flash flash-error" role="alert">The studio key couldn't be loaded: {{.}}</p>{{end}}
+        {{if $d.AllowLocal}}<p class="hint">Local development mode (ATELIER_CONNECT_ALLOW_LOCAL=1): plain http and local addresses are allowed. Never use it on a real server.</p>{{end}}
+        <form method="post" action="/settings/connect" class="row-end">
+          {{if $c.Enabled}}
+          <input type="hidden" name="action" value="off"><button class="btn btn-danger" type="submit">Turn Connect off</button>
+          {{else}}
+          <input type="hidden" name="action" value="on"><button class="btn btn-primary cn-btn" type="submit">Turn Connect on</button>
+          {{end}}
+        </form>
+      </section>
+
+      <form method="post" action="/settings/connect" class="card stack-sm" aria-labelledby="cn-opts-h">
+        <h2 class="h-sm" id="cn-opts-h">Who can reach you</h2>
+        <label class="choice"><input type="checkbox" name="auto_accept" value="1" {{if $c.AutoAccept}}checked{{end}}><span><strong>Accept follow requests automatically</strong><span class="small muted">Off: each request waits for you below.</span></span></label>
+        <label class="choice"><input type="checkbox" name="allowlist_only" value="1" {{if $c.AllowlistOnly}}checked{{end}}><span><strong>Only studios on my allowlist</strong><span class="small muted">Everyone else's activities, follows and stars are refused.</span></span></label>
+        <div class="row-end"><button class="btn" type="submit">Save</button></div>
+      </form>
+
+      <section class="card stack-sm" aria-labelledby="cn-follow-h">
+        <h2 class="h-sm" id="cn-follow-h">Follow someone</h2>
+        <form method="post" action="/settings/connect/follow" class="row gap-sm wrap-gap">
+          <input name="target" placeholder="@name@studio.example or https://studio.example/name" aria-label="Who to follow" maxlength="2048" class="cn-input" spellcheck="false" autocomplete="off" required>
+          <button class="btn btn-primary cn-btn" type="submit" {{if not $d.Active}}disabled{{end}}>Follow</button>
+        </form>
+        <p class="hint">Their public repositories, pushes, releases and stars appear on your Home, marked "via Connect". You'll also find "Follow on Atelier" on GitHub profiles whose Atelier badge names a studio.</p>
+      </section>
+
+      {{if $d.Pending}}
+      <section class="card stack-sm" aria-labelledby="cn-pending-h">
+        <h2 class="h-sm" id="cn-pending-h">Follow requests <span class="pill cn-pill">{{len $d.Pending}}</span></h2>
+        <ul class="cn-list">
+          {{range $d.Pending}}
+          <li class="row-between wrap-gap">{{template "connect-actor-row" .}}
+            <span class="row gap-sm">
+              <form method="post" action="/settings/connect/followers/{{.ID}}/accept"><button class="btn btn-sm btn-primary cn-btn" type="submit">Accept</button></form>
+              <form method="post" action="/settings/connect/followers/{{.ID}}/reject"><button class="btn btn-sm" type="submit">Decline</button></form>
+            </span>
+          </li>
+          {{end}}
+        </ul>
+      </section>
+      {{end}}
+
+      <div class="cn-grid">
+        <section class="card stack-sm" aria-labelledby="cn-followers-h">
+          <h2 class="h-sm" id="cn-followers-h">Followers <span class="pill">{{len $d.Followers}}</span></h2>
+          <ul class="cn-list">
+            {{range $d.Followers}}
+            <li class="row-between wrap-gap">{{template "connect-actor-row" .}}
+              <form method="post" action="/settings/connect/followers/{{.ID}}/remove"><button class="btn btn-sm btn-ghost" type="submit">Remove</button></form>
+            </li>
+            {{else}}<li class="small muted">Nobody yet.</li>{{end}}
+          </ul>
+        </section>
+        <section class="card stack-sm" aria-labelledby="cn-following-h">
+          <h2 class="h-sm" id="cn-following-h">Following <span class="pill">{{len $d.Following}}</span></h2>
+          <ul class="cn-list">
+            {{range $d.Following}}
+            <li class="row-between wrap-gap">{{template "connect-actor-row" .}}
+              <span class="row gap-sm">
+                {{if eq .State "pending"}}<span class="pill">Pending</span>{{else if eq .State "rejected"}}<span class="pill">Declined</span>{{end}}
+                <form method="post" action="/settings/connect/unfollow"><input type="hidden" name="actor" value="{{.ActorURI}}"><button class="btn btn-sm btn-ghost" type="submit">Unfollow</button></form>
+              </span>
+            </li>
+            {{else}}<li class="small muted">Nobody yet.</li>{{end}}
+          </ul>
+        </section>
+      </div>
+
+      <section class="card stack-sm" aria-labelledby="cn-stars-h">
+        <h2 class="h-sm" id="cn-stars-h">Stars</h2>
+        <form method="post" action="/settings/connect/star" class="row gap-sm wrap-gap">
+          <input name="repo" placeholder="A repository's Connect address, https://studio.example/connect/repos/name/repo" aria-label="Repository to star" maxlength="2048" class="cn-input" spellcheck="false" autocomplete="off" required>
+          <button class="btn cn-btn" type="submit" {{if not $d.Active}}disabled{{end}}>☆ Star</button>
+        </form>
+        {{if $d.Starred}}
+        <p class="small muted">You starred</p>
+        <ul class="cn-list">
+          {{range $d.Starred}}
+          <li class="row-between wrap-gap"><span>★ {{if .URL}}<a href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Name}}</a>{{else}}{{.Name}}{{end}} <span class="small muted">{{ago .CreatedAt}}</span></span>
+            <form method="post" action="/settings/connect/unstar"><input type="hidden" name="repo" value="{{.ObjectURI}}"><button class="btn btn-sm btn-ghost" type="submit">Unstar</button></form>
+          </li>
+          {{end}}
+        </ul>
+        {{end}}
+        {{if $d.Stars}}
+        <p class="small muted">Stars on your public repositories from other studios</p>
+        <ul class="cn-list">{{range $d.Stars}}<li><a href="/{{.Repo.FullName}}">{{.Repo.FullName}}</a> <span class="pill cn-pill">★ {{.Count}}</span></li>{{end}}</ul>
+        {{end}}
+      </section>
+
+      <form method="post" action="/settings/connect/offer" class="card stack-sm" aria-labelledby="cn-offer-h">
+        <h2 class="h-sm" id="cn-offer-h">Offer a branch <span class="pill">Pull request</span></h2>
+        <p class="small muted">Send a branch of one of your public repositories to a repository on another studio. Their studio fetches it from your public clone address and opens a pull request; its Actions wait for their owner's approval.</p>
+        <div class="cn-offer-fields">
+          <div class="field"><label for="cn-o-repo">Your repository</label>
+            <select id="cn-o-repo" name="repo">{{range $d.PublicRepos}}<option value="{{.FullName}}">{{.FullName}}</option>{{else}}<option value="">No public repositories</option>{{end}}</select></div>
+          <div class="field"><label for="cn-o-branch">Branch</label><input id="cn-o-branch" name="branch" placeholder="feature/idea" maxlength="250" spellcheck="false" required></div>
+        </div>
+        <div class="field"><label for="cn-o-target">Their repository</label><input id="cn-o-target" name="target" placeholder="https://studio.example/connect/repos/name/repo" maxlength="2048" spellcheck="false" required></div>
+        <div class="field"><label for="cn-o-title">Title</label><input id="cn-o-title" name="title" maxlength="200"></div>
+        <div class="field"><label for="cn-o-body">Description <span class="muted">(Markdown)</span></label><textarea id="cn-o-body" name="body" rows="3" maxlength="8000"></textarea></div>
+        <div class="row-end"><button class="btn cn-btn" type="submit" {{if not $d.Active}}disabled{{end}}>Offer branch</button></div>
+      </form>
+
+      <section class="card stack-sm" aria-labelledby="cn-rules-h">
+        <h2 class="h-sm" id="cn-rules-h">Blocked and allowed studios</h2>
+        <form method="post" action="/settings/connect/rules" class="row gap-sm wrap-gap">
+          <input name="host" placeholder="studio.example" aria-label="Studio host" maxlength="260" class="cn-input" spellcheck="false" autocomplete="off" required>
+          <button class="btn btn-danger btn-sm" type="submit" name="kind" value="block">Block</button>
+          <button class="btn btn-sm" type="submit" name="kind" value="allow">Allow</button>
+        </form>
+        <p class="hint">Blocking a studio removes its follows both ways, its feed items and stars, and refuses everything it sends.</p>
+        {{if $d.Rules}}
+        <ul class="cn-list">
+          {{range $d.Rules}}
+          <li class="row-between wrap-gap"><span><span class="pill {{if eq .Kind "block"}}cn-block{{else}}cn-pill{{end}}">{{if eq .Kind "block"}}Blocked{{else}}Allowed{{end}}</span> <span class="mono">{{.Host}}</span></span>
+            <form method="post" action="/settings/connect/rules"><input type="hidden" name="host" value="{{.Host}}"><button class="btn btn-sm btn-ghost" type="submit" name="kind" value="remove">Remove</button></form>
+          </li>
+          {{end}}
+        </ul>
+        {{end}}
+      </section>
+
+      <section class="list-card" aria-labelledby="cn-log-h">
+        <div class="list-head" id="cn-log-h">Delivery log <span class="muted small">· what this studio sent, last 14 days</span></div>
+        <div class="table-scroll">
+          <table class="cn-table">
+            <thead><tr><th scope="col">Time</th><th scope="col">Activity</th><th scope="col">To</th><th scope="col">Result</th></tr></thead>
+            <tbody>
+            {{range $d.Log}}
+            <tr>
+              <td class="nowrap">{{datetime .CreatedAt}}</td>
+              <td><span class="pill">{{.Kind}}</span></td>
+              <td class="mono small break">{{.Host}}</td>
+              <td><span class="cn-st cn-st-{{.Status}}">{{.Status}}</span>{{if .Attempts}} <span class="small muted">· {{.Attempts}} {{if eq .Attempts 1}}try{{else}}tries{{end}}</span>{{end}}{{with .LastError}}<br><span class="small muted break">{{.}}</span>{{end}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="4" class="muted">Nothing sent yet.</td></tr>
+            {{end}}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+{{end}}

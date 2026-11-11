@@ -298,8 +298,10 @@ type tunnelView struct {
 	Sessions   int
 	Log        []store.TunnelLogEntry
 	EnrollLink string
-	Saved      bool
-	Error      string
+	// ConnectExposed: the Connect class (connect.go) is stored with Connect's settings.
+	ConnectExposed bool
+	Saved          bool
+	Error          string
 }
 
 func (a *App) tunnelData(r *http.Request) (tunnelView, error) {
@@ -328,6 +330,9 @@ func (a *App) tunnelData(r *http.Request) (tunnelView, error) {
 	v.Sessions, _ = a.db.RemoteSessionCount(ctx)
 	m.flush(ctx)
 	v.Log, _ = a.db.TunnelLog(ctx, tunnelLogShown)
+	if cs, err := a.db.ConnectSettings(ctx); err == nil {
+		v.ConnectExposed = cs.ExposeTunnel
+	}
 	return v, nil
 }
 
@@ -429,6 +434,13 @@ func (a *App) tunnelSave(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	if cs, err := a.db.ConnectSettings(ctx); err == nil && cs.ExposeTunnel != on("expose_connect") {
+		cs.ExposeTunnel = on("expose_connect")
+		if err := a.db.SaveConnectSettings(ctx, cs, a.actor(r).Name); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
 	a.tunnel().apply(ctx)
 	http.Redirect(w, r, "/settings/remote?saved=1", http.StatusSeeOther)
 }
@@ -456,7 +468,7 @@ func (a *App) tunnelOn(w http.ResponseWriter, r *http.Request) {
 		fail("A named tunnel needs its token and public hostname. Save them first.")
 		return
 	}
-	if !c.ExposeWeb && !c.ExposeGit && !c.ExposeMCP && !c.ExposePages && !c.ExposeAPI {
+	if !c.ExposeWeb && !c.ExposeGit && !c.ExposeMCP && !c.ExposePages && !c.ExposeAPI && !a.connectTunnelExposed(ctx) {
 		fail("Choose at least one thing to expose.")
 		return
 	}

@@ -28,6 +28,7 @@
             <button class="btn btn-xs" type="submit" data-proj-js-hide>Save</button>
           </form>
           {{else if $cell.Color}}<span class="proj-pill proj-c-{{$cell.Color}}">{{$cell.Display}}</span>
+          {{else if $cell.Range}}{{template "proj-iter-pill" $cell}}
           {{else if $cell.Display}}{{$cell.Display}}{{else}}<span class="muted">Empty</span>{{end}}
         </dd>
       </div>

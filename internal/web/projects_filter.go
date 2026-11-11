@@ -3,6 +3,7 @@ package web
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"atelier/internal/store"
 )
@@ -16,6 +17,8 @@ import (
 //	label:bug                an issue label
 //	no:status no:label       empty field / no labels
 //	estimate:>3 target-date:<2026-12-01   comparisons for number and date fields
+//	iteration:@current       an iteration field: @current, @next, @previous or a name
+//	                         ("iteration:" finds the first iteration field whatever its name)
 //	-label:wontfix           any qualifier can be negated
 //	anything else            words that must appear in the title
 //
@@ -100,6 +103,15 @@ func projFindField(fields []store.ProjField, key string) (store.ProjField, bool)
 	for _, f := range fields {
 		if projFieldKey(f.Name) == key || strings.EqualFold(f.Name, key) {
 			return f, true
+		}
+	}
+	// "iteration" also names the first iteration field, like GitHub's
+	// iteration:@current, whatever the field is called (e.g. "Sprint").
+	if key == "iteration" {
+		for _, f := range fields {
+			if f.IsIteration() {
+				return f, true
+			}
 		}
 	}
 	return store.ProjField{}, false
@@ -212,6 +224,16 @@ func projValueMatch(f store.ProjField, have, want string) bool {
 	case store.ProjFieldSelect:
 		o, ok := f.Option(have)
 		return ok && strings.EqualFold(o.Name, want)
+	case store.ProjFieldIteration:
+		it, ok := f.Iteration(have)
+		if !ok {
+			return false
+		}
+		if strings.HasPrefix(want, "@") {
+			at, ok := f.IterationAt(want, time.Now())
+			return ok && at.ID == it.ID
+		}
+		return strings.EqualFold(it.Name, want)
 	case store.ProjFieldText:
 		return have != "" && strings.Contains(strings.ToLower(have), strings.ToLower(want))
 	case store.ProjFieldNumber, store.ProjFieldDate:

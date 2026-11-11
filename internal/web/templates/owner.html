@@ -1,4 +1,4 @@
-{{define "head"}}<link rel="stylesheet" href="/static/profiles.css"><script src="/static/profiles.js" defer></script>{{end}}
+{{define "head"}}<link rel="stylesheet" href="/static/profiles.css"><link rel="stylesheet" href="/static/connect.css"><script src="/static/profiles.js" defer></script>{{end}}
 {{define "content"}}
 {{$v := .Data}}{{$o := $v.Owner}}{{$p := $v.Profile}}
 <main class="wrap layout-2 prof {{if $o.IsCompany}}prof-company{{end}}">
@@ -23,6 +23,7 @@
       <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10 H20 M9 3 V7 M15 3 V7"/></svg>Joined {{date $o.CreatedAt}}</li>
       <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 4 H15 a4 4 0 0 1 4 4 V20 H9 a4 4 0 0 1-4-4 Z"/><path d="M9 20 a4 4 0 0 1 0-8 H19"/></svg>{{$v.RepoCountLabel}}</li>
     </ul>
+    {{with connectProfile $o $v.CanEdit}}{{template "connect-profile" .}}{{end}}
     {{if $v.CanEdit}}<a class="btn btn-ghost btn-sm prof-new" href="/new?owner={{$o.Name}}">+ New repository</a>{{end}}
   </aside>
 

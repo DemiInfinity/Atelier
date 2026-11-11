@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"testing"
 
@@ -146,7 +145,9 @@ func TestAppsTetherReviewFlow(t *testing.T) {
 	page = expectStatus(t, do(t, f.a, "GET", "/settings/apps", nil, f.ck), 200, "apps page")
 	mustContain(t, page, "installed", "coderabbitai[bot]", "cursor[bot]", "via Tether", "zoe/demo/settings/apps")
 
-	// Merging closes the mirror; closing does too; a PR that was never mirrored isn't touched.
+	// Merging marks the mirror closed; a PR that was never mirrored isn't touched. Closing the
+	// GitHub side is Tether's own event handler's job (one call: see
+	// TestTetherCloseOnMergeIsOneCall), so the bridge's ClosePull isn't called from here.
 	head, _ := gitBranch(t, f.a, "three")
 	rec = do(t, f.a, "POST", "/zoe/demo/pulls/3/merge", url.Values{"method": {"squash"}, "expected_head": {head}}, f.ck)
 	if rec.Code != http.StatusSeeOther {
@@ -155,8 +156,8 @@ func TestAppsTetherReviewFlow(t *testing.T) {
 	do(t, f.a, "POST", "/zoe/demo/pulls/1/state", url.Values{"action": {"close"}}, f.ck)
 	wait()
 	_, closes := br.snapshot()
-	if len(closes) != 1 || !strings.HasPrefix(closes[0], "3 merged=true sha=40") {
-		t.Errorf("closes = %v", closes)
+	if len(closes) != 0 {
+		t.Errorf("the apps bridge closed the mirror itself: %v", closes)
 	}
 	if mm, _ := f.a.db.TetherMirror(ctx, p3.ID); !mm.Closed {
 		t.Error("mirror not marked closed")

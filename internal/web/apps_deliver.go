@@ -228,7 +228,17 @@ func (st *appsState) client(allowLocal bool) *http.Client {
 	}
 }
 
-// ---------- signing ----------
+// ---------- encoding and signing ----------
+
+// appsEncodeBody is the exact body sent for a JSON payload and its content
+// type: the JSON itself, or GitHub's form encoding (payload=<JSON>). The
+// signature is always computed over these bytes.
+func appsEncodeBody(contentType, payload string) ([]byte, string) {
+	if contentType == "form" {
+		return []byte(url.Values{"payload": {payload}}.Encode()), "application/x-www-form-urlencoded"
+	}
+	return []byte(payload), "application/json"
+}
 
 // appsSign is GitHub's X-Hub-Signature-256 value for body.
 func appsSign(secret string, body []byte) string {
@@ -387,13 +397,15 @@ func (a *App) appsAttempt(ctx context.Context, d store.Delivery) {
 		res.Error = err.Error()
 		return
 	}
-	body := []byte(d.Payload)
+	// The payload is kept as JSON and encoded for the hook's current content
+	// type at send time, so redeliveries follow the hook's setting too.
+	body, ctype := appsEncodeBody(h.ContentType, d.Payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.URL, bytes.NewReader(body))
 	if err != nil {
 		res.Error = "Bad URL: " + err.Error()
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", ctype)
 	req.Header.Set("User-Agent", appsUserAgent)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("X-GitHub-Event", d.Event)

@@ -44,8 +44,9 @@ const (
 )
 
 func init() {
-	// Snapshots copy <data>/snippets/ file by file, beside releases/ and lfs/.
-	backup.RegisterDataDir(snippetDir)
+	// Snapshots bundle every snippet repository, like <data>/repos, so a push
+	// landing mid-snapshot can't leave an inconsistent copy (issue #12).
+	backup.RegisterGitDataDir(snippetDir)
 }
 
 var snippetUIDRe = regexp.MustCompile(`^[0-9a-f]{20}$`)
@@ -360,6 +361,44 @@ func (a *App) serveSnippetGit(w http.ResponseWriter, r *http.Request, uid, rest 
 	if write && rest == "git-receive-pack" {
 		a.refreshSnippetFiles(context.WithoutCancel(ctx), sn)
 	}
+}
+
+// ---------- git over SSH ----------
+
+// sshSnippet is the SSH server's hook for snippets/<uid>.git: the same App.can
+// decision as HTTPS (read to clone, write to push), with the key acting as the
+// person it belongs to. A snippet the person can't read is "not found".
+func (a *App) sshSnippet(ctx context.Context, keyID int64, uid string, write bool) (string, func(), error) {
+	notFound := fmt.Errorf("snippet '%s' not found", uid)
+	if !validSnippetUID(uid) {
+		return "", nil, notFound
+	}
+	sn, err := a.db.SnippetByUID(ctx, uid)
+	if err != nil {
+		return "", nil, notFound
+	}
+	personID, err := a.db.SSHKeyPerson(ctx, keyID)
+	if err != nil {
+		return "", nil, notFound
+	}
+	p, err := a.db.Person(ctx, personID)
+	if err != nil {
+		return "", nil, notFound
+	}
+	who := Actor{Kind: ActorOwner, Name: p.Name, PersonID: p.ID}
+	repo := snippetRepo(sn)
+	if !a.can(ctx, who, repo, PermRead) {
+		return "", nil, notFound
+	}
+	if write && !a.can(ctx, who, repo, PermWrite) {
+		return "", nil, fmt.Errorf("you don't have permission to push to snippet '%s'", uid)
+	}
+	if _, err := a.openSnippet(uid); err != nil {
+		return "", nil, notFound
+	}
+	dir := a.snippetGit().Path(snippetShard(uid), uid)
+	after := func() { a.refreshSnippetFiles(context.WithoutCancel(ctx), sn) }
+	return dir, after, nil
 }
 
 // snippetRepo is the stand-in repository App.can decides snippet access on:

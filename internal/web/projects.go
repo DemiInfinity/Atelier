@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"atelier/internal/store"
 )
@@ -451,7 +452,24 @@ func (a *App) projFieldCreate(w http.ResponseWriter, r *http.Request) {
 			opts = append(opts, s)
 		}
 	}
-	_, err := a.db.CreateField(r.Context(), p.ID, r.FormValue("name"), r.FormValue("kind"), opts)
+	var err error
+	if r.FormValue("kind") == store.ProjFieldIteration {
+		in := store.NewIterationField{Name: r.FormValue("name"), Lines: opts}
+		in.Days, ok = projDurationDays(r)
+		if !ok {
+			a.renderProjSettings(w, r, p, "Give iterations a length between 1 day and 52 weeks.", "")
+			return
+		}
+		if v := strings.TrimSpace(r.FormValue("start")); v != "" {
+			if in.Start, err = time.Parse("2006-01-02", v); err != nil {
+				a.renderProjSettings(w, r, p, "Give the first iteration's start as a date.", "")
+				return
+			}
+		}
+		_, err = a.db.CreateIterationField(r.Context(), p.ID, in)
+	} else {
+		_, err = a.db.CreateField(r.Context(), p.ID, r.FormValue("name"), r.FormValue("kind"), opts)
+	}
 	if errors.Is(err, store.ErrProjInvalid) {
 		a.renderProjSettings(w, r, p, "Use a new field name (up to 60 characters, no quotes or colons) that isn't a built-in column such as Title, Repository or Labels.", "")
 		return
@@ -527,7 +545,56 @@ func (a *App) projFieldEdit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if f.IsIteration() {
+		days, ok := projDurationDays(r)
+		if !ok {
+			a.renderProjSettings(w, r, p, "Give iterations a length between 1 day and 52 weeks.", "")
+			return
+		}
+		var edits []store.IterationEdit
+		for _, it := range f.Iterations {
+			k := strconv.FormatInt(it.ID, 10)
+			e := store.IterationEdit{ID: it.ID, Name: r.FormValue("it_" + k), Start: r.FormValue("it_start_" + k), Delete: r.FormValue("it_del_"+k) == "1"}
+			if v := strings.TrimSpace(r.FormValue("it_days_" + k)); v != "" {
+				n, err := strconv.Atoi(v)
+				if err != nil || !store.ValidIterationDays(n) {
+					a.renderProjSettings(w, r, p, "Give each iteration a length between 1 and 365 days.", "")
+					return
+				}
+				e.Days = n
+			}
+			edits = append(edits, e)
+		}
+		if n, st := strings.TrimSpace(r.FormValue("new_iter")), strings.TrimSpace(r.FormValue("new_iter_start")); n != "" || st != "" {
+			edits = append(edits, store.IterationEdit{Name: n, Start: st})
+		}
+		if err := a.db.EditIterations(ctx, p.ID, f.ID, days, edits); err != nil {
+			if errors.Is(err, store.ErrProjInvalid) {
+				a.renderProjSettings(w, r, p, "Each iteration needs a different name (up to 60 characters), a start date and a length between 1 and 365 days.", "")
+				return
+			}
+			a.fail(w, r, err)
+			return
+		}
+	}
 	http.Redirect(w, r, projURL(p)+"/settings?saved=1#field-"+strconv.FormatInt(f.ID, 10), http.StatusSeeOther)
+}
+
+// projDurationDays reads an iteration length from duration and
+// duration_unit (days or weeks). A missing duration is 0: the default.
+func projDurationDays(r *http.Request) (int, bool) {
+	v := strings.TrimSpace(r.FormValue("duration"))
+	if v == "" {
+		return 0, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	if r.FormValue("duration_unit") == "weeks" {
+		n *= 7
+	}
+	return n, store.ValidIterationDays(n)
 }
 
 func (a *App) projFieldDelete(w http.ResponseWriter, r *http.Request) {

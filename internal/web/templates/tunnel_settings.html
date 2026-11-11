@@ -107,6 +107,7 @@
           <label class="choice"><input type="checkbox" name="expose_mcp" value="1" {{if $c.ExposeMCP}}checked{{end}}><span><strong>MCP</strong><span class="small muted">The <span class="mono">/mcp</span> endpoint, with MCP tokens.</span></span></label>
           <label class="choice"><input type="checkbox" name="expose_pages" value="1" {{if $c.ExposePages}}checked{{end}}><span><strong>Pages</strong><span class="small muted">Named tunnels with a Pages hostname only.</span></span></label>
           <label class="choice"><input type="checkbox" name="expose_api" value="1" {{if $c.ExposeAPI}}checked{{end}}><span><strong>API and inbound webhooks</strong><span class="small muted"><span class="mono">/api/…</span> with tokens, including runners.</span></span></label>
+          <label class="choice"><input type="checkbox" name="expose_connect" value="1" {{if $d.ConnectExposed}}checked{{end}}><span><strong>Connect</strong><span class="small muted">Atelier Connect: your studio's identity, inbox and public clone URLs for other studios. Also needs Connect turned on under <a href="/settings/connect">Settings → Connect</a>.</span></span></label>
           <label class="choice tn-never"><input type="checkbox" disabled><span><strong>Container and package registries</strong><span class="small muted">Never exposed.</span></span></label>
           <p class="hint">Everything else answers 404 through the tunnel.</p>
         </fieldset>

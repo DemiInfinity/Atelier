@@ -82,8 +82,18 @@ posts it to `POST /api/pages/deploy` with the job token. Its output
 - the token is a running Actions job's token, for **its own repository**
   (not another repository it can read, and never an agentic job's);
 - the repository's Pages source is "An Actions workflow";
-- the run came from a **push to the configured branch** (pull requests and
-  other branches are refused).
+- the run came from a **push to the configured branch** (other branches are
+  refused), or from a **pull request**, in which case the upload becomes that
+  pull request's [preview](#pull-request-previews), never the site.
+
+To get previews from a workflow, add `pull_request` to its triggers:
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+```
 
 Without the built-in action, any job can do the same with curl:
 
@@ -120,15 +130,136 @@ missing folder) is listed with its reason and never replaces the live site.
 - Paths with `..`, backslashes or NUL are refused; files are opened through
   a root confined to the snapshot.
 
+## Custom domains
+
+A site can have one host name of its own, such as `docs.example.com`, set in
+**Settings → Pages → Custom domain**. The site is then served at the root of
+that name (`https://docs.example.com/`, not under `/<owner>/<repo>/`); its
+Pages address keeps working too.
+
+### Verification
+
+Nothing is served on a name until it's verified. Adding the name gives the
+site a random token; prove the name is yours with either:
+
+- a **TXT record** named `_atelier-pages.docs.example.com` whose value is the
+  token (recommended; keep it in place), or
+- a **file** at `https://docs.example.com/.well-known/atelier-pages/<token>`
+  containing the token, served by whatever answers for the name today. If
+  that's this site, commit `.well-known/atelier-pages/<token>` into it.
+  Atelier fetches it over HTTPS through the same guard as webhooks: names
+  that resolve to private, loopback or link-local addresses are refused, so
+  a LAN-only name can only use the TXT record.
+
+Press **Verify**. Pending names are also re-checked hourly for a week, and
+verified names daily; after **three failed checks in a row** the name stops
+being served until it verifies again. DNS lookups have an 8-second timeout
+and only read TXT records.
+
+Rules:
+
+- Host names are matched exactly, ignoring case, the port and a trailing dot.
+  `docs.example.com` doesn't cover `www.docs.example.com` or `example.com`;
+  there are no wildcards.
+- Atelier's own host name (`ATELIER_PUBLIC_URL`, which must be set to use
+  custom domains), the Pages host and the tunnel's host names can't be
+  claimed. A name another site has verified can't be claimed either.
+- A name that isn't verified is an ordinary request to Atelier, as before.
+- The custom domain serves the site and nothing else: no app pages, git,
+  sign-in or app cookies. Responses carry the same headers as on the Pages
+  host, except that the sandbox keeps the page's origin
+  (`allow-same-origin`): the domain belongs to this one site, and private
+  sites need their own requests to carry their cookie.
+
+### TLS
+
+Atelier doesn't terminate TLS. Pick the route on the settings page; it shows
+these steps with your names filled in.
+
+**Nginx Proxy Manager**
+
+1. DNS: point `docs.example.com` (an A or CNAME record) at the machine running
+   Nginx Proxy Manager, and add the TXT record.
+2. Proxy Hosts → Add Proxy Host:
+   - Domain names: `docs.example.com`
+   - Scheme `http`, forward hostname/IP and port: the same as the app's proxy
+     host (the Atelier container, port `3000` on a shared Docker network or
+     `3010` on the host in `deploy/portainer/stack.yml`).
+   - Don't add anything that rewrites the `Host` header.
+3. SSL tab: request a Let's Encrypt certificate (the name must resolve
+   publicly, or use a DNS challenge), tick Force SSL and HTTP/2 Support.
+4. Press **Verify**.
+
+**The named Cloudflare tunnel** (for names on a Cloudflare zone)
+
+1. Remote access (Settings → Remote access) uses a **named tunnel**, with
+   **Pages** ticked under what's exposed.
+2. Cloudflare Zero Trust → Networks → Tunnels → your Atelier tunnel →
+   Public Hostname → Add: hostname `docs.example.com`, service type `HTTP`,
+   URL the remote listener (`ATELIER_TUNNEL_LISTEN`, `127.0.0.1:3001`, the
+   same service as the tunnel's other hostnames). Cloudflare creates the DNS
+   record and the certificate.
+3. Add the TXT record in Cloudflare DNS, then press **Verify**.
+
 ## Private repositories
 
-Private repositories **can't publish**. A private site would need a sign-in
-on the Pages host, and every site shares that host: any published site's
-script could then read a private site with the visitor's credentials. Rather
-than build that badly, Pages refuses private repositories, and a site goes
-offline the moment its repository is made private.
+On the shared Pages host only public repositories are served. A private site
+there would need a sign-in on that host, and every site shares it: any
+published site's script could then read a private site with the visitor's
+credentials. So a site goes offline there the moment its repository is made
+private.
 
-## Not done yet
+A **verified custom domain** is the site's own origin, so a private
+repository can publish once it has one, and is served only there, only to
+people who can read the repository:
 
-- Custom domains.
-- Pull request previews.
+1. A visitor without a site session is redirected to the app,
+   `/-/pages/signin?host=<name>&return=<path>`, which needs an ordinary
+   Atelier sign-in (a passkey through the tunnel) and read access.
+2. The app redirects back to
+   `https://<name>/.well-known/atelier-pages/_signin?token=…` with a random
+   token stored hashed, bound to that name and person, valid for one minute
+   and usable once.
+3. The site host checks the token and read access again and sets its own
+   cookie: host-only (no `Domain`), `Path=/`, `HttpOnly`, `SameSite=Lax`, and
+   `Secure` with the `__Host-` prefix over HTTPS. It lasts 8 hours.
+4. Every request re-checks the session and read access, so losing access
+   counts at once. Private responses are `Cache-Control: private` and never
+   carry `Access-Control-Allow-Origin`.
+   `/.well-known/atelier-pages/_signout` signs out; changing or removing the
+   domain signs everyone out and takes the site offline.
+
+The app's session cookie never reaches the custom domain, and the site's
+cookie means nothing to the app.
+
+## Pull request previews
+
+With previews on (the default; **Settings → Pages → Pull request previews**),
+each open pull request's site is published at
+
+    <pages>/~preview/<owner>/<repo>/<number>/
+
+`~preview` sits where an owner name goes, and owner names must start with a
+letter or digit, so the address can't collide with any site or any file in a
+site (a path such as `<pages>/<owner>/<repo>/_preview/` could). Links in the
+site should be relative for the preview to work.
+
+- **Branch source:** the configured folder is published from the pull
+  request's head when it opens or reopens and on every push to its branch.
+- **Actions source:** a `pull_request` run's `atelier/deploy-pages` step
+  uploads the preview.
+- One comment on the pull request carries the link, edited in place on every
+  push (and when a build fails, which keeps the previous preview up).
+- Closing or merging the pull request removes the preview, and the comment
+  says so. Turning previews off removes them all.
+- **Pull requests from anyone but the owner** (imported, or from bots) wait,
+  like their Actions runs: a branch-source preview is published once an admin
+  presses **Approve and publish** in Settings → Pages, for that head commit
+  only (a later push waits again); an Actions job only runs after approval,
+  and an upload from a job still waiting is refused.
+- Previews have the same size limits and snapshot handling as deploys and
+  never become the live site or a rollback target. Each pull request keeps
+  only its current preview, and at most `ATELIER_PAGES_KEEP` previews are
+  kept per repository, separately from the site's deploys; the least
+  recently updated goes first (its comment says so).
+- Only public repositories get previews.

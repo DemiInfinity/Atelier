@@ -74,15 +74,15 @@ func (a *App) tetherFindItem(ctx context.Context, rp store.Repo, l store.TetherL
 
 // ---------- issues ----------
 
-func (a *App) tetherSyncIssues(ctx context.Context, c *tether.Client, rp store.Repo, l *store.TetherLink) error {
+func (a *App) tetherSyncIssues(ctx context.Context, run *tetherIssueRun, l *store.TetherLink) error {
 	since := l.IssuesSince
 	if !since.IsZero() {
 		since = since.Add(-time.Second)
 	}
-	issues, err := c.IssuesSince(ctx, l.GHRepo, since)
+	issues, err := run.c.IssuesSince(ctx, l.GHRepo, since)
 	for _, is := range issues {
 		if !is.IsPull() { // pull requests are handled from the pulls list
-			if serr := a.tetherSyncIssue(ctx, rp, *l, is); serr != nil {
+			if serr := a.tetherSyncIssue(ctx, run, is); serr != nil {
 				return serr // the cursor stays: the rest is tried again next time
 			}
 		}
@@ -93,38 +93,49 @@ func (a *App) tetherSyncIssues(ctx context.Context, c *tether.Client, rp store.R
 	return err
 }
 
-func (a *App) tetherSyncIssue(ctx context.Context, rp store.Repo, l store.TetherLink, is tether.Issue) error {
+// tetherSyncIssue brings one GitHub issue in: a new one is created (with its
+// labels and milestone), a known one is compared with Atelier's side.
+// Problems writing to GitHub don't stop the inbound pass (they're reported).
+func (a *App) tetherSyncIssue(ctx context.Context, run *tetherIssueRun, is tether.Issue) error {
+	rp, l := run.rp, run.l
 	it, ok := a.tetherFindItem(ctx, rp, l, is.Number, "issue")
 	if ok {
-		if it.Kind != "issue" || it.Origin != "github" {
+		if it.Kind != "issue" {
 			return nil
 		}
-		local, err := a.db.IssueByNumber(ctx, rp.ID, it.Number)
-		if err != nil {
-			return nil
-		}
-		switch {
-		case is.State == "closed" && local.IsOpen():
-			reason := store.ReasonCompleted
-			if is.StateReason == "not_planned" {
-				reason = store.ReasonNotPlanned
+		if it.GHState != is.State {
+			it.GHState = is.State
+			if err := a.db.SaveTetherItem(ctx, it); err != nil {
+				return err
 			}
-			_ = a.db.CloseIssue(ctx, local.ID, importer.AuthorImport, "github", reason)
-		case is.State == "open" && !local.IsOpen():
-			_ = a.db.ReopenIssue(ctx, local.ID, importer.AuthorImport, "github")
 		}
-		it.GHState = is.State
-		return a.db.SaveTetherItem(ctx, it)
+		if err := a.tetherReconcileIssue(ctx, run, it, &is); err != nil {
+			run.problem(fmt.Errorf("issue #%d: %w", it.Number, err))
+		}
+		return nil
 	}
 	n, err := a.tetherNumberFor(ctx, rp.ID, is.Number)
 	if err != nil {
 		return err
 	}
-	in := store.ImportedIssue{RepoID: rp.ID, Number: n, Title: eventExcerpt(is.Title, 256), Body: is.Body, State: is.State,
+	in := store.ImportedIssue{RepoID: rp.ID, Number: n, Title: tetherTitle(is.Title), Body: tetherBody(is.Body), State: is.State,
 		StateReason: is.StateReason, AuthorKind: importer.AuthorImport, AuthorName: tetherAuthor(is.User.Login),
 		CreatedAt: is.CreatedAt, UpdatedAt: is.UpdatedAt, ClosedAt: is.ClosedAt}
 	if in.StateReason != "completed" && in.StateReason != "not_planned" && in.StateReason != "reopened" {
 		in.StateReason = ""
+	}
+	for i := range is.Labels {
+		if !tetherLabelOK(is.Labels[i].Name) {
+			continue
+		}
+		if lb, ok := run.localLabel(ctx, tetherKey(is.Labels[i].Name), &is.Labels[i]); ok {
+			in.LabelIDs = append(in.LabelIDs, lb.ID)
+		}
+	}
+	if is.Milestone != nil {
+		if m, ok := run.localMilestone(ctx, *is.Milestone); ok {
+			in.MilestoneID = m.ID
+		}
 	}
 	local, err := a.db.ImportIssue(ctx, in)
 	if err != nil {
@@ -132,6 +143,11 @@ func (a *App) tetherSyncIssue(ctx context.Context, rp store.Repo, l store.Tether
 	}
 	if err := a.db.SaveTetherItem(ctx, store.TetherItem{RepoID: rp.ID, Kind: "issue", Number: local.Number, GHNumber: is.Number,
 		GHURL: a.tetherHTMLURL(is.HTMLURL, fmt.Sprintf("%s/issues/%d", l.GHRepo, is.Number)), Origin: "github", GHState: is.State}); err != nil {
+		return err
+	}
+	run.done[local.Number] = true
+	// What both sides now agree on: the issue as it arrived.
+	if err := a.tetherSaveSnapshot(ctx, rp.ID, local.Number, tetherLocalSide(local), is.UpdatedAt, local.UpdatedAt); err != nil {
 		return err
 	}
 	if is.State == "open" {

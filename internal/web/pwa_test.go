@@ -157,8 +157,8 @@ func TestLayoutHasAppTags(t *testing.T) {
 	f := newGitFixture(t)
 	body := expectStatus(t, do(t, f.a, "GET", "/zoe/demo", nil, pullsCookie(t, f.a)), 200, "repo page")
 	mustContain(t, body, "layout", `<link rel="manifest" href="/manifest.webmanifest">`,
-		`<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">`, `<meta name="theme-color" content="#1a1917">`,
-		`viewport-fit=cover`, `<script src="/static/pwa.js" defer></script>`, `href="/zoe/demo/insights"`)
+		`<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png?v=`+buildVersion()+`">`, `<meta name="theme-color" content="#1a1917">`,
+		`viewport-fit=cover`, `<script src="/static/pwa.js?v=`+buildVersion()+`" defer></script>`, `href="/zoe/demo/insights"`)
 	head := body[:strings.Index(body, "</head>")]
 	if i := strings.LastIndex(head, "/static/mobile.css"); i < 0 || strings.Contains(head[i:], `rel="stylesheet"`) {
 		t.Error("mobile.css must be the last stylesheet in <head>")

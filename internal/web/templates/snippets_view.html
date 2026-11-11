@@ -1,4 +1,4 @@
-{{define "head"}}<link rel="stylesheet" href="/static/snippets.css">{{end}}
+{{define "head"}}<link rel="stylesheet" href="/static/snippets.css"><link rel="stylesheet" href="/static/issues.css"><script src="/static/issues.js" defer></script>{{if .Data.SSHCloneURL}}<link rel="stylesheet" href="/static/sshkeys.css">{{end}}{{end}}
 {{define "content"}}
 {{$d := .Data}}
 {{if $d.Anon}}{{template "snippetanonbar"}}{{end}}
@@ -9,11 +9,16 @@
       <a href="{{$d.Base}}" aria-current="page">Code</a>
       <a href="{{$d.Base}}/revisions">Revisions <span class="snip-count">{{$d.Count}}</span></a>
     </nav>
-    <div class="clone snip-clone">
+    <div class="clone snip-clone" data-clone-https="{{$d.CloneURL}}"{{with $d.SSHCloneURL}} data-clone-ssh="{{.}}"{{end}}>
       <span class="clone-label">Clone</span>
-      <input class="clone-url" id="snip-clone-url" value="{{$d.CloneURL}}" readonly aria-label="Clone URL (HTTPS)">
+      <span class="clone-proto" role="group" aria-label="Clone over"{{if not $d.SSHCloneURL}} hidden{{end}}>
+        <button type="button" data-clone-proto="https" aria-pressed="true">HTTPS</button>
+        <button type="button" data-clone-proto="ssh" aria-pressed="false">SSH</button>
+      </span>
+      <input class="clone-url" id="snip-clone-url" value="{{$d.CloneURL}}" readonly aria-label="Clone URL">
       <button type="button" class="clone-copy" data-copy="#snip-clone-url" aria-label="Copy clone URL"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
     </div>
+    {{if $d.SSHCloneURL}}<script src="/static/sshkeys.js" defer></script>{{end}}
     <div class="snip-buttons">
       {{if $d.Tip}}<a class="btn btn-sm" href="{{$d.Base}}/archive.zip">Download zip</a>{{end}}
       {{if $d.CanStar}}
@@ -70,5 +75,53 @@
   {{else}}
   <div class="card empty"><p><strong>This snippet has no files yet.</strong></p><p class="muted">Push to <span class="mono">{{$d.CloneURL}}</span> to add some.</p></div>
   {{end}}
+
+  <section class="stack snip-comments" id="comments" aria-labelledby="snip-comments-h">
+    <h2 class="h-sm" id="snip-comments-h">Comments{{with $d.Comments.List}} <span class="snip-count">{{len .}}</span>{{end}}</h2>
+    {{range $d.Comments.List}}
+    <article class="tl-comment" id="snippet-comment-{{.ID}}">
+      <header class="tl-comment-head">
+        {{personAvatar .AuthorName}}
+        <strong>{{.AuthorName}}</strong> {{template "actor-chip" (actorKind .AuthorKind .AuthorName)}}
+        <a class="muted-link small" href="#snippet-comment-{{.ID}}"><time datetime="{{.CreatedAt.UTC.Format "2006-01-02T15:04:05Z"}}" title="{{datetime .CreatedAt}}">{{ago .CreatedAt}}</time></a>
+        {{if .Edited}}<span class="small muted" title="Edited {{datetime .UpdatedAt}}">· edited</span>{{end}}
+      </header>
+      <div class="tl-comment-body">
+        <div class="markdown">{{.HTML}}</div>
+        {{if or .CanEdit .CanDelete}}
+        <div class="row gap-sm comment-actions">
+          {{if .CanEdit}}
+          <details class="inline-edit grow">
+            <summary class="btn btn-xs btn-ghost">Edit</summary>
+            <form method="post" action="{{$d.Base}}/comments/{{.ID}}/edit" class="stack-sm">
+              <label for="edit-sc{{.ID}}" class="sr-only">Edit comment</label>
+              <textarea id="edit-sc{{.ID}}" name="body" rows="6" required class="issue-textarea">{{.Body}}</textarea>
+              <div class="row-end"><button class="btn btn-primary btn-sm" type="submit">Update comment</button></div>
+            </form>
+          </details>
+          {{end}}
+          {{if .CanDelete}}
+          <form method="post" action="{{$d.Base}}/comments/{{.ID}}/delete" data-confirm="Delete this comment? This can't be undone.">
+            <button class="btn btn-xs btn-ghost danger-ink" type="submit">Delete</button>
+          </form>
+          {{end}}
+        </div>
+        {{end}}
+      </div>
+    </article>
+    {{else}}
+    <p class="small muted">No comments yet.</p>
+    {{end}}
+    {{if $d.Comments.CanComment}}
+    {{if $d.CommentEmpty}}<div class="flash flash-error" role="alert">Write something before commenting.</div>{{end}}
+    <form method="post" action="{{$d.Base}}/comments" class="tl-comment comment-box">
+      <div class="tl-comment-body stack-sm">
+        <label for="snip-comment-body" class="h-sm">Add a comment</label>
+        <textarea id="snip-comment-body" name="body" rows="5" class="issue-textarea" placeholder="Leave a comment. Markdown works." required></textarea>
+        <div class="row-end"><button class="btn btn-primary" type="submit">Comment</button></div>
+      </div>
+    </form>
+    {{end}}
+  </section>
 </main>
 {{end}}

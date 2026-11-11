@@ -109,7 +109,7 @@ const (
 )
 
 // ProjFieldKinds lists the kinds a person can create, in menu order.
-var ProjFieldKinds = []string{ProjFieldSelect, ProjFieldText, ProjFieldNumber, ProjFieldDate}
+var ProjFieldKinds = []string{ProjFieldSelect, ProjFieldText, ProjFieldNumber, ProjFieldDate, ProjFieldIteration}
 
 // ProjColors are the colours a single-select option may use.
 var ProjColors = []string{"gray", "blue", "amber", "green", "violet", "red"}
@@ -153,6 +153,10 @@ type ProjField struct {
 	Builtin   string // "status" for the built-in Status field
 	Position  int
 	Options   []ProjOption
+	// Iteration fields (projects_iterations.go): the default length in
+	// days and the iterations, by start date.
+	Duration   int
+	Iterations []ProjIteration
 }
 
 func (f ProjField) IsStatus() bool { return f.Builtin == "status" }
@@ -172,6 +176,8 @@ func ProjKindLabel(k string) string {
 		return "Number"
 	case ProjFieldDate:
 		return "Date"
+	case ProjFieldIteration:
+		return "Iteration"
 	}
 	return k
 }
@@ -416,6 +422,9 @@ func (s *Store) ProjectFields(ctx context.Context, projectID int64) ([]ProjField
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if err := s.loadIterations(ctx, projectID, out, idx); err != nil {
+		return nil, err
+	}
 	orows, err := s.db.QueryContext(ctx, `SELECT o.id, o.field_id, o.name, o.color, o.position FROM proj_options o
 		JOIN proj_fields f ON f.id = o.field_id WHERE f.project_id=? ORDER BY o.position, o.id`, projectID)
 	if err != nil {
@@ -489,6 +498,9 @@ func (s *Store) CreateField(ctx context.Context, projectID int64, name, kind str
 	name = strings.TrimSpace(name)
 	if !ValidProjTitle(name, 60) || !validProjKind(kind) || projReservedNames[strings.ToLower(name)] || strings.ContainsAny(name, `":`) {
 		return ProjField{}, ErrProjInvalid
+	}
+	if kind == ProjFieldIteration {
+		return s.CreateIterationField(ctx, projectID, NewIterationField{Name: name, Lines: options})
 	}
 	var id int64
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
@@ -885,6 +897,8 @@ func NormalizeProjValue(f ProjField, value string) (string, error) {
 			return "", ErrProjInvalid
 		}
 		return d.Format("2006-01-02"), nil
+	case ProjFieldIteration:
+		return normalizeIteration(f, value)
 	}
 	return value, nil
 }

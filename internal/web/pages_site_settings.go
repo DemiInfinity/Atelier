@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,7 +22,8 @@ type pagesSettingsData struct {
 	On         bool // ATELIER_PAGES_URL is set and usable
 	SiteURL    string
 	PagesBase  string
-	Private    bool
+	Private    bool   // private and can't publish (no verified custom domain)
+	PrivSite   bool   // private, served only on its verified custom domain
 	UserSite   string // the <owner>.pages repository name
 	IsUserSite bool
 	Live       *store.PagesDeploy
@@ -31,6 +34,28 @@ type pagesSettingsData struct {
 	Workflow   string
 	Folder     string
 	BadBranch  bool
+
+	Domain       *pagesDomainView
+	Previews     bool
+	PreviewRows  []pagesPreviewView
+	AppHost      string
+	TunnelListen string
+}
+
+type pagesDomainView struct {
+	store.PagesDomain
+	URL     string
+	TXTName string
+	FileURL string
+	Forward string // where the proxy or tunnel forwards to
+}
+
+type pagesPreviewView struct {
+	store.PagesPreview
+	URL     string
+	Title   string
+	PullURL string
+	Short   string
 }
 
 type pagesDeployView struct {
@@ -73,9 +98,10 @@ func (a *App) pagesRender(w http.ResponseWriter, r *http.Request, errMsg string,
 		ps.Branch = v.Default
 	}
 	files := a.pagesFiles()
+	mayPublish := a.pagesMayPublish(ctx, v.Repo)
 	d := &pagesSettingsData{
-		V: v, Site: ps, On: a.pagesEnabled(), SiteURL: a.pagesSiteURL(v.Repo), PagesBase: a.pagesBase(),
-		Private: v.Repo.Private, UserSite: pagesUserSiteName(v.Repo.Owner),
+		V: v, Site: ps, On: a.pagesEnabled(), SiteURL: a.pagesPublicURL(ctx, v.Repo), PagesBase: a.pagesBase(),
+		Private: !mayPublish, PrivSite: v.Repo.Private && mayPublish, UserSite: pagesUserSiteName(v.Repo.Owner),
 		IsUserSite: strings.EqualFold(v.Repo.Name, pagesUserSiteName(v.Repo.Owner)),
 		MaxSize:    pagesdeploy.HumanBytes(files.Limits.MaxBytes), MaxFiles: files.Limits.MaxFiles, Keep: a.pagesKeep(),
 		Workflow: pagesWorkflowExample, Folder: "/" + ps.Folder,
@@ -86,13 +112,14 @@ func (a *App) pagesRender(w http.ResponseWriter, r *http.Request, errMsg string,
 	ds, _ := a.db.PagesDeploys(ctx, v.Repo.ID, 30)
 	for _, dp := range ds {
 		dv := pagesDeployView{PagesDeploy: dp, Live: dp.ID == ps.LiveID, Size: pagesdeploy.HumanBytes(dp.Bytes)}
-		dv.Rollback = !dv.Live && dp.Status == "ready" && !v.Repo.Private
+		dv.Rollback = !dv.Live && dp.Status == "ready" && mayPublish
 		if dv.Live {
 			live := dp
 			d.Live = &live
 		}
 		d.Deploys = append(d.Deploys, dv)
 	}
+	a.pagesSettingsExtras(ctx, r, v, d)
 	notice := ""
 	if r.URL.Query().Get("saved") != "" {
 		notice = "saved"
@@ -112,8 +139,8 @@ func (a *App) pagesSettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if v.Repo.Private {
-		a.pagesRender(w, r, errPagesPrivate.Error()+". Make the repository public first.", http.StatusBadRequest)
+	if !a.pagesMayPublish(ctx, v.Repo) {
+		a.pagesRender(w, r, errPagesPrivate.Error()+". Make the repository public, or verify a custom domain first.", http.StatusBadRequest)
 		return
 	}
 	ps, err := a.db.PagesSite(ctx, v.Repo.ID)
@@ -213,4 +240,44 @@ func (a *App) pagesUnpublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, v.Base+"/settings/pages?saved=1", http.StatusSeeOther)
+}
+
+// pagesSettingsExtras fills the custom domain and previews cards.
+func (a *App) pagesSettingsExtras(ctx context.Context, r *http.Request, v *repoView, d *pagesSettingsData) {
+	d.AppHost = a.pagesAppHostName()
+	d.TunnelListen = a.cfg.TunnelListen
+	if dom, err := a.db.PagesDomain(ctx, v.Repo.ID); err == nil {
+		dv := &pagesDomainView{PagesDomain: dom, URL: a.pagesDomainURL(dom), TXTName: pagesTXTPrefix + dom.Host,
+			FileURL: "https://" + dom.Host + pagesWellKnown + dom.Token}
+		if dom.Route == pagesRouteTunnel {
+			dv.Forward = "http://" + a.cfg.TunnelListen
+		} else {
+			dv.Forward = pagesForwardHint(a.cfg.PublicURL)
+		}
+		d.Domain = dv
+	}
+	d.Previews, _ = a.db.PagesPreviewsOn(ctx, v.Repo.ID)
+	pvs, _ := a.db.PagesPreviews(ctx, v.Repo.ID)
+	for _, pv := range pvs {
+		row := pagesPreviewView{PagesPreview: pv, PullURL: fmt.Sprintf("%s/pulls/%d", v.Base, pv.Number), Short: pv.SHA}
+		if len(row.Short) > 7 {
+			row.Short = row.Short[:7]
+		}
+		if pv.LiveID != 0 {
+			row.URL = a.pagesPreviewURL(v.Repo, pv.Number)
+		}
+		if pr, err := a.db.PullByNumber(ctx, v.Repo.ID, pv.Number); err == nil {
+			row.Title = pr.Title
+		}
+		d.PreviewRows = append(d.PreviewRows, row)
+	}
+}
+
+// pagesForwardHint is where a proxy host should forward: the same place the
+// app's proxy host forwards to.
+func pagesForwardHint(publicURL string) string {
+	if publicURL == "" {
+		return "the Atelier container and port"
+	}
+	return "the same forward host and port as " + strings.TrimRight(publicURL, "/")
 }

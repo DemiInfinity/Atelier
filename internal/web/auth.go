@@ -21,6 +21,7 @@ import (
 const (
 	settingPasswordHash = store.SettingPasswordHash
 	minPasswordLen      = 10
+	maxPasswordBytes    = 72 // bcrypt's limit
 	githubStateCookie   = "atelier_gh_state"
 )
 
@@ -63,6 +64,10 @@ func (a *App) setupSubmit(w http.ResponseWriter, r *http.Request) {
 	case len(pw) < minPasswordLen:
 		fail(fmt.Sprintf("Use at least %d characters for your password.", minPasswordLen))
 		return
+	case len(pw) > maxPasswordBytes:
+		// bcrypt only uses the first 72 bytes; non-ASCII letters take 2–4 each.
+		fail(fmt.Sprintf("Use at most %d bytes for your password (accented letters and emoji count as 2–4).", maxPasswordBytes))
+		return
 	case pw != pw2:
 		fail("The two passwords don't match.")
 		return
@@ -72,11 +77,14 @@ func (a *App) setupSubmit(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	if err := a.db.SetSetting(ctx, settingPasswordHash, string(hash)); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if _, err := a.db.CreateOwner(ctx, name, display, "user"); err != nil {
+	// Owner and password are written together, and only by the request that
+	// actually creates the owner (issue #19).
+	if _, err := a.db.CreateFirstOwner(ctx, name, display, string(hash)); err != nil {
+		if errors.Is(err, store.ErrAlreadySetUp) {
+			// Another setup post won the race; this one changed nothing.
+			http.Redirect(w, r, "/signin", http.StatusSeeOther)
+			return
+		}
 		a.fail(w, r, err)
 		return
 	}
@@ -120,19 +128,34 @@ func (a *App) signinData(r *http.Request, errMsg string) map[string]any {
 func (a *App) signinSubmit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ip := a.clientIP(r)
-	if !a.lim.allow(ip) {
+	// Sign-in has its own allowance: failed git, token or runner credentials
+	// from the same address (behind a proxy, that can be every device) must
+	// not lock the browser out (issue #19).
+	key := "signin:" + ip
+	if !a.lim.allow(key) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		a.render(w, r, "signin", page{Title: "Sign in", Bare: true, Data: a.signinData(r, "Too many attempts. Wait a minute and try again.")})
 		return
 	}
 	hash, err := a.db.Setting(ctx, settingPasswordHash)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(r.FormValue("password"))) != nil {
+	if errors.Is(err, store.ErrNotFound) {
+		log.Printf("sign-in from %s: no password is set; run `atelier reset-password`", ip)
+		w.WriteHeader(http.StatusUnauthorized)
+		a.render(w, r, "signin", page{Title: "Sign in", Bare: true, Data: a.signinData(r,
+			"No password is set for this Atelier. Set one with `atelier reset-password` on the server, or use a passkey.")})
+		return
+	}
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(r.FormValue("password"))) != nil {
 		log.Printf("sign-in failed from %s", ip)
 		w.WriteHeader(http.StatusUnauthorized)
 		a.render(w, r, "signin", page{Title: "Sign in", Bare: true, Data: a.signinData(r, "That password isn't right.")})
 		return
 	}
-	a.lim.reset(ip)
+	a.lim.reset(key)
 	if err := a.startSession(w, r); err != nil {
 		a.fail(w, r, err)
 		return

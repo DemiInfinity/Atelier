@@ -53,7 +53,10 @@ func registerAccessPolicy(p AccessPolicy) { accessPolicies = append(accessPolici
 
 // can reports whether who may do something needing perm on repo.
 func (a *App) can(ctx context.Context, who Actor, repo store.Repo, need Perm) bool {
-	if need == PermPush && who.Kind != ActorBot {
+	// Bots and Actions jobs keep PermPush: a bot's push permission, and a job's
+	// lockfile push on an update branch (security_deps_lockfiles.go), allow git
+	// push and nothing else that needs write.
+	if need == PermPush && who.Kind != ActorBot && who.Kind != ActorJob {
 		need = PermWrite
 	}
 	for _, p := range accessPolicies {

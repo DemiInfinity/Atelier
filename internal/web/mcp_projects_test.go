@@ -354,3 +354,50 @@ func TestMCPAgentToolsMatchServer(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPProjectsIterations(t *testing.T) {
+	f := newMCPFixture(t)
+	ctx := context.Background()
+	p := f.projectFor(t, "Sprints", true)
+	if _, err := f.a.db.CreateIterationField(ctx, p.ID, store.NewIterationField{Name: "Sprint", Days: 7,
+		Start: time.Now().AddDate(0, 0, -3), Lines: []string{"Alpha", "Beta"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := f.connect(t, f.writeT)
+	pid := p.ID
+
+	got := call(t, s, "projects.get", map[string]any{"project": pid})
+	var sprint map[string]any
+	for _, x := range got["fields"].([]any) {
+		if m := x.(map[string]any); m["name"] == "Sprint" {
+			sprint = m
+		}
+	}
+	if sprint == nil || sprint["kind"] != "iteration" || sprint["duration_days"] != float64(7) {
+		t.Fatalf("projects.get Sprint = %v", sprint)
+	}
+	its := sprint["iterations"].([]any)
+	if len(its) != 2 || its[0].(map[string]any)["name"] != "Alpha" || its[0].(map[string]any)["current"] != true {
+		t.Fatalf("iterations = %v", its)
+	}
+
+	d := call(t, s, "projects.add_draft", map[string]any{"project": pid, "title": "Card"})
+	id := d["item"].(map[string]any)["id"]
+	set := call(t, s, "projects.set_field", map[string]any{"project": pid, "item": id, "field": "sprint", "value": "beta"})
+	if v := set["item"].(map[string]any)["fields"].(map[string]any)["Sprint"]; v != "Beta" {
+		t.Fatalf("set by name = %v", set)
+	}
+	set = call(t, s, "projects.set_field", map[string]any{"project": pid, "item": id, "field": "Sprint", "value": "@current"})
+	if v := set["item"].(map[string]any)["fields"].(map[string]any)["Sprint"]; v != "Alpha" {
+		t.Fatalf("set @current = %v", set)
+	}
+	mustErr(t, s, "projects.set_field", map[string]any{"project": pid, "item": id, "field": "Sprint", "value": "Gamma"}, "Alpha, Beta")
+
+	items := itemsOf(t, call(t, s, "projects.items", map[string]any{"project": pid, "filter": "iteration:@current"}))
+	if len(items) != 1 {
+		t.Fatalf("items iteration:@current = %v", items)
+	}
+	if n := len(itemsOf(t, call(t, s, "projects.items", map[string]any{"project": pid, "filter": "iteration:@next"}))); n != 0 {
+		t.Fatalf("items iteration:@next = %d", n)
+	}
+}

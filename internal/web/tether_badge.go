@@ -28,6 +28,7 @@ const tetherBadgeFile = ".atelier"
 type tetherBadgeFileJSON struct {
 	Atelier bool   `json:"atelier"`
 	Studio  string `json:"studio"`
+	Connect string `json:"connect,omitempty"` // the studio's Atelier Connect actor (ConnectBadgeActor), for "Follow on Atelier"
 }
 
 // tetherStudioURL is what goes in your badge: your public profile, if known.
@@ -57,7 +58,8 @@ func (a *App) tetherSetBadge(ctx context.Context, personID int64, on bool) error
 		return err
 	}
 	if on {
-		body, _ := json.Marshal(tetherBadgeFileJSON{Atelier: true, Studio: a.tetherStudioURL(ctx, personID)})
+		body, _ := json.Marshal(tetherBadgeFileJSON{Atelier: true, Studio: a.tetherStudioURL(ctx, personID),
+			Connect: a.ConnectBadgeActor(ctx, personID)})
 		body = append(body, '\n')
 		if exists {
 			if old, err := cur.Decoded(); err == nil && strings.TrimSpace(string(old)) == strings.TrimSpace(string(body)) {
@@ -166,6 +168,7 @@ func (a *App) tetherCheckBadge(ctx context.Context, c *tether.Client, login stri
 		if derr == nil && len(raw) < 4096 && json.Unmarshal(raw, &f) == nil && f.Atelier {
 			b.Present, b.Studio = true, tetherSafeStudio(f.Studio)
 		}
+		a.connectNoteBadge(ctx, login, f.Connect)
 		b.ETag = cur.SHA
 	}
 	return b, a.db.SaveTetherBadge(ctx, b)

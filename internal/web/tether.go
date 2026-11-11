@@ -8,6 +8,8 @@ package web
 //	tether_feed.go      GitHub activity and "Popular this week" for the home page
 //	tether_repo.go      a repository's GitHub twin: link, home, push mirroring and fetching
 //	tether_sync.go      issues, pull requests and comments both ways; Merge on GitHub
+//	tether_issues.go    issue edits, labels, milestones and state both ways; Atelier issues
+//	                    pushed to GitHub; GitHub reviews on the pull request timeline
 //	tether_checks.go    Actions results reported to GitHub as commit statuses
 //	tether_badge.go     the opt-in "I use Atelier" badge, written and read
 //	tether_bridge.go    the tether.Bridge the apps & bots feature calls
@@ -470,6 +472,14 @@ func (a *App) tetherLoop(ctx context.Context) {
 	defer tick.Stop()
 	lastFull := map[int64]time.Time{}
 	var lastPrune time.Time
+	// Issue pushing starts now for links that sync issues (a no-op once set).
+	if links, err := a.db.TetherLinks(ctx); err == nil {
+		for _, l := range links {
+			if l.SyncIssues {
+				_, _ = a.db.TetherIssuesOutAfter(ctx, l.RepoID)
+			}
+		}
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -518,7 +528,12 @@ func tetherEventHandler(ctx context.Context, a *App, ev Event) {
 		}
 	case EventIssueCommented, EventPullCommented:
 		a.tetherCommentOut(ctx, ev)
+	case EventIssueOpened:
+		a.tetherIssueOpenedOut(ctx, ev)
 	case EventPullMerged, EventPullClosed:
+		// Tether owns closing the GitHub side of a pull request mirrored from
+		// Atelier (Review on GitHub included): one close, here. The apps
+		// bridge only records that its mirror is closed.
 		if _, err := a.db.TetherLink(ctx, ev.RepoID); err == nil {
 			st := a.tether()
 			st.kick(ev.RepoID)

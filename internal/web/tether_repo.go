@@ -419,6 +419,10 @@ func (a *App) tetherSyncRepo(ctx context.Context, repoID int64, full bool) {
 	if err != nil {
 		return
 	}
+	if l.SyncIssues {
+		// Issue pushing starts here: issues numbered above this go to GitHub.
+		_, _ = a.db.TetherIssuesOutAfter(ctx, repoID)
+	}
 	if l.Home == store.TetherHomeAtelier {
 		a.tetherPush(ctx, rp, &l)
 	} else if !full {
@@ -440,7 +444,8 @@ func (a *App) tetherSyncRepo(ctx context.Context, repoID int64, full bool) {
 	}
 	var ghPulls []tether.Pull
 	var pullsErr error
-	if l.Home == store.TetherHomeGitHub || l.SyncIssues {
+	pullsWanted := l.Home == store.TetherHomeGitHub || l.SyncIssues || a.tetherHasOpenMirrors(ctx, rp.ID)
+	if pullsWanted {
 		ghPulls, pullsErr = c.OpenPulls(ctx, l.GHRepo)
 		a.tetherNoteToken(ctx, l.PersonID, l.GHRepo, pullsErr)
 	}
@@ -459,9 +464,20 @@ func (a *App) tetherSyncRepo(ctx context.Context, repoID int64, full bool) {
 			problems = append(problems, tetherErrText(err))
 		}
 	}
-	if l.SyncIssues {
-		if err := a.tetherSyncIssues(ctx, c, rp, &l); err != nil {
+	if pullsErr == nil && pullsWanted {
+		if err := a.tetherSyncReviews(ctx, c, rp, l, ghPulls); err != nil {
 			problems = append(problems, tetherErrText(err))
+		}
+	}
+	if l.SyncIssues {
+		run := a.newTetherIssueRun(c, rp, l)
+		if err := a.tetherSyncIssues(ctx, run, &l); err != nil {
+			run.inErr = err
+			problems = append(problems, tetherErrText(err))
+		}
+		a.tetherIssuesOut(ctx, run)
+		if run.err != nil {
+			problems = append(problems, tetherErrText(run.err))
 		}
 	}
 	if err := a.tetherSyncComments(ctx, c, acc, rp, &l); err != nil {

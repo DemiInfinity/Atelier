@@ -6,6 +6,9 @@
 //	atelier.db                    a consistent SQLite copy made with VACUUM INTO
 //	repos/<owner>/<name>.bundle   every bare repository as `git bundle create --all`
 //	releases/…, lfs/…             release assets and Git LFS objects (see datadirs.go)
+//	data-repos/snippets/<a>/<b>.bundle
+//	                              bare repositories kept in a data directory (git data
+//	                              directories, see RegisterGitDataDir), also as bundles
 //
 // Bundles are self-consistent even while pushes are happening, which a plain
 // copy of a bare repository is not.
@@ -32,12 +35,19 @@ import (
 )
 
 // ManifestVersion is bumped when the archive layout changes incompatibly.
-const ManifestVersion = 1
+//
+//  1. database, repos/ bundles and data directories as plain files.
+//  2. adds DataRepos: git data directories (snippets/) as bundles. Version 1
+//     archives, where those were plain file copies, still restore.
+const ManifestVersion = 2
 
 const (
-	namePrefix = "atelier-"
-	nameSuffix = ".tar.gz"
-	nameTime   = "20060102-150405"
+	// dataReposPrefix keeps data-directory bundles out of the data directory
+	// names themselves, which a full restore moves into place wholesale.
+	dataReposPrefix = "data-repos/"
+	namePrefix      = "atelier-"
+	nameSuffix      = ".tar.gz"
+	nameTime        = "20060102-150405"
 )
 
 type Manifest struct {
@@ -45,6 +55,10 @@ type Manifest struct {
 	Created time.Time   `json:"created"`
 	Files   []FileEntry `json:"files"`
 	Repos   []RepoEntry `json:"repos"`
+	// DataRepos are the bare repositories in git data directories, such as
+	// snippets/<shard>/<uid>.git: Dir is the data directory, Owner the
+	// shard folder and Name the repository.
+	DataRepos []RepoEntry `json:"data_repos,omitempty"`
 }
 
 type FileEntry struct {
@@ -60,9 +74,15 @@ type RepoEntry struct {
 	Bundle string `json:"bundle,omitempty"` // archive path; empty for a repo with no refs
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256,omitempty"`
+	Dir    string `json:"dir,omitempty"` // data directory, for DataRepos only
 }
 
-func (r RepoEntry) FullName() string { return r.Owner + "/" + r.Name }
+func (r RepoEntry) FullName() string {
+	if r.Dir != "" {
+		return r.Dir + "/" + r.Owner + "/" + r.Name
+	}
+	return r.Owner + "/" + r.Name
+}
 
 // Options says what to snapshot and where to write it.
 type Options struct {
@@ -128,31 +148,32 @@ func Create(ctx context.Context, opts Options) (Result, error) {
 		if err := ctx.Err(); err != nil {
 			return Result{}, err
 		}
-		dir := filepath.Join(opts.RepoRoot, rp.Owner, rp.Name+".git")
-		entry := RepoEntry{Owner: rp.Owner, Name: rp.Name}
-		if out, err := git(ctx, opts.Git, dir, "symbolic-ref", "-q", "HEAD"); err == nil {
-			entry.Head = strings.TrimSpace(string(out))
-		}
-		refs, err := git(ctx, opts.Git, dir, "for-each-ref", "--count=1", "--format=%(refname)")
+		entry, err := bundleRepo(ctx, opts.Git, opts.RepoRoot, work, "repos", rp)
 		if err != nil {
-			return Result{}, fmt.Errorf("%s: %w", entry.FullName(), err)
+			return Result{}, err
 		}
-		if len(bytes.TrimSpace(refs)) > 0 {
-			entry.Bundle = "repos/" + rp.Owner + "/" + rp.Name + ".bundle"
-			out := filepath.Join(work, filepath.FromSlash(entry.Bundle))
-			if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
+		m.Repos = append(m.Repos, entry)
+	}
+
+	// 2b. Repositories kept in git data directories (snippets), also bundled,
+	// so a push during the snapshot can't leave a half-copied repository.
+	for _, d := range gitDataDirs {
+		root := filepath.Join(opts.dataRoot(), d)
+		found, err := findRepos(root)
+		if err != nil {
+			return Result{}, fmt.Errorf("list %s: %w", d, err)
+		}
+		for _, rp := range found {
+			if err := ctx.Err(); err != nil {
 				return Result{}, err
 			}
-			if _, err := git(ctx, opts.Git, dir, "bundle", "create", "--quiet", out, "--all"); err != nil {
-				return Result{}, fmt.Errorf("bundle %s: %w", entry.FullName(), err)
-			}
-			fe, err := fileEntry(out, entry.Bundle)
+			entry, err := bundleRepo(ctx, opts.Git, root, work, dataReposPrefix+d, rp)
 			if err != nil {
 				return Result{}, err
 			}
-			entry.Size, entry.SHA256 = fe.Size, fe.SHA256
+			entry.Dir = d
+			m.DataRepos = append(m.DataRepos, entry)
 		}
-		m.Repos = append(m.Repos, entry)
 	}
 
 	// 3. Data directories (release assets, LFS objects), read in place.
@@ -207,7 +228,7 @@ func writeArchive(path, work string, m Manifest, extra map[string]string) (strin
 	for _, fe := range m.Files {
 		paths = append(paths, fe.Path)
 	}
-	for _, r := range m.Repos {
+	for _, r := range append(append([]RepoEntry(nil), m.Repos...), m.DataRepos...) {
 		if r.Bundle != "" {
 			paths = append(paths, r.Bundle)
 		}
@@ -273,6 +294,37 @@ func fileEntry(path, name string) (FileEntry, error) {
 		return FileEntry{}, err
 	}
 	return FileEntry{Path: name, Size: n, SHA256: hex.EncodeToString(h.Sum(nil))}, nil
+}
+
+// bundleRepo bundles <root>/<owner>/<name>.git into work as
+// <prefix>/<owner>/<name>.bundle (nothing for a repository with no refs).
+func bundleRepo(ctx context.Context, gitBin, root, work, prefix string, rp repoRef) (RepoEntry, error) {
+	dir := filepath.Join(root, rp.Owner, rp.Name+".git")
+	entry := RepoEntry{Owner: rp.Owner, Name: rp.Name}
+	if out, err := git(ctx, gitBin, dir, "symbolic-ref", "-q", "HEAD"); err == nil {
+		entry.Head = strings.TrimSpace(string(out))
+	}
+	refs, err := git(ctx, gitBin, dir, "for-each-ref", "--count=1", "--format=%(refname)")
+	if err != nil {
+		return entry, fmt.Errorf("%s: %w", entry.FullName(), err)
+	}
+	if len(bytes.TrimSpace(refs)) == 0 {
+		return entry, nil
+	}
+	entry.Bundle = prefix + "/" + rp.Owner + "/" + rp.Name + ".bundle"
+	out := filepath.Join(work, filepath.FromSlash(entry.Bundle))
+	if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
+		return entry, err
+	}
+	if _, err := git(ctx, gitBin, dir, "bundle", "create", "--quiet", out, "--all"); err != nil {
+		return entry, fmt.Errorf("bundle %s: %w", entry.FullName(), err)
+	}
+	fe, err := fileEntry(out, entry.Bundle)
+	if err != nil {
+		return entry, err
+	}
+	entry.Size, entry.SHA256 = fe.Size, fe.SHA256
+	return entry, nil
 }
 
 type repoRef struct{ Owner, Name string }

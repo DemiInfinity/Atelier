@@ -46,6 +46,12 @@ type Server struct {
 	// create). It returns an error when that isn't allowed. Nil disables it.
 	Create func(ctx context.Context, keyID int64, owner, name string) (store.Repo, error)
 
+	// Snippet resolves "snippets/<uid>.git" for clone (write=false) and push
+	// (write=true). It returns the snippet repository's directory and, for a
+	// push, a function to run once git has finished; or an error whose text
+	// is shown to the client. Nil turns snippets over SSH off.
+	Snippet func(ctx context.Context, keyID int64, uid string, write bool) (dir string, afterPush func(), err error)
+
 	mu    sync.Mutex
 	conns map[net.Conn]struct{}
 	wg    sync.WaitGroup
@@ -278,6 +284,20 @@ func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtoco
 		fmt.Fprintf(stderr, "atelier: %v\n", err)
 		return 128
 	}
+	if strings.EqualFold(cmd.Owner, SnippetsPrefix) && s.Snippet != nil {
+		// "snippets" is a reserved account name, so this never shadows a repository.
+		dir, after, err := s.Snippet(ctx, keyID, strings.ToLower(cmd.Repo), cmd.Service == ReceivePack)
+		if err != nil {
+			fmt.Fprintf(stderr, "atelier: %v\n", err)
+			return 128
+		}
+		code := s.serve(ctx, ch, cmd.Service, dir, gitProtocol, keyName, remote)
+		if after != nil && cmd.Service == ReceivePack {
+			after()
+		}
+		s.Logf("ssh: %s snippets/%s by key %q from %s exited %d", cmd.Service, strings.ToLower(cmd.Repo), keyName, hostOnly(remote), code)
+		return code
+	}
 	repo, err := s.db.RepoByName(ctx, cmd.Owner, cmd.Repo)
 	if err != nil && cmd.Service == ReceivePack && s.Create != nil {
 		// Push to create: a push to a missing repository creates it (private).
@@ -308,7 +328,19 @@ func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtoco
 		}
 	}
 
-	c := exec.CommandContext(ctx, s.git.Git, cmd.Service.subcommand(), dir)
+	code := s.serve(ctx, ch, cmd.Service, dir, gitProtocol, keyName, remote)
+	if cmd.Service == ReceivePack {
+		_ = s.db.TouchRepo(context.WithoutCancel(ctx), repo.ID)
+	}
+	s.Logf("ssh: %s %s by key %q from %s exited %d", cmd.Service, repo.FullName(), keyName, hostOnly(remote), code)
+	return code
+}
+
+// serve runs git-upload-pack or git-receive-pack in dir over the channel and
+// returns its exit code.
+func (s *Server) serve(ctx context.Context, ch ssh.Channel, svc Service, dir, gitProtocol, keyName string, remote net.Addr) int {
+	stderr := ch.Stderr()
+	c := exec.CommandContext(ctx, s.git.Git, svc.subcommand(), dir)
 	c.Dir = dir
 	c.Env = append(os.Environ(), "REMOTE_USER=ssh:"+keyName, "REMOTE_ADDR="+hostOnly(remote))
 	if gitProtocol != "" {
@@ -324,7 +356,7 @@ func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtoco
 		return 1
 	}
 	if err := c.Start(); err != nil {
-		s.Logf("ssh: start %s: %v", cmd.Service, err)
+		s.Logf("ssh: start %s: %v", svc, err)
 		fmt.Fprintln(stderr, "atelier: internal error")
 		return 1
 	}
@@ -333,20 +365,14 @@ func (s *Server) runGit(ctx context.Context, ch ssh.Channel, command, gitProtoco
 		stdin.Close()
 	}()
 	err = c.Wait()
-	code := 0
 	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) && ee.ExitCode() >= 0 {
-			code = ee.ExitCode()
-		} else {
-			code = 1
+			return ee.ExitCode()
 		}
+		return 1
 	}
-	if cmd.Service == ReceivePack {
-		_ = s.db.TouchRepo(context.WithoutCancel(ctx), repo.ID)
-	}
-	s.Logf("ssh: %s %s by key %q from %s exited %d", cmd.Service, repo.FullName(), keyName, hostOnly(remote), code)
-	return code
+	return 0
 }
 
 func hostOnly(a net.Addr) string {
@@ -362,6 +388,9 @@ func hostOnly(a net.Addr) string {
 // ---------- command parsing ----------
 
 type Service string
+
+// SnippetsPrefix is the path snippets are cloned under: snippets/<uid>.git.
+const SnippetsPrefix = "snippets"
 
 const (
 	UploadPack  Service = "git-upload-pack"

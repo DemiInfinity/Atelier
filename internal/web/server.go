@@ -391,7 +391,12 @@ func (a *App) basicToken(r *http.Request) (store.Token, bool) {
 
 func cacheStatic(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		if r.URL.Query().Get("v") != "" {
+			// Versioned URL (assets.go): the content never changes under it.
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+		}
 		h.ServeHTTP(w, r)
 	})
 }

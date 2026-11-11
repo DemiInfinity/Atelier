@@ -209,12 +209,13 @@ func (a *App) ghPull(ctx context.Context, rp store.Repo, p store.Pull) map[strin
 	if p.IsMerged() {
 		mergedBy = a.ghUser(ctx, ActorOwner, p.MergedBy)
 	}
+	labels, _ := a.db.PullLabels(ctx, p.ID)
 	return map[string]any{
 		"id": p.ID, "node_id": "", "number": p.Number, "state": state, "locked": false, "title": p.Title, "body": nilIfEmpty(p.Body),
 		"user": a.ghUser(ctx, p.AuthorKind, p.AuthorName), "draft": false, "merged": p.IsMerged(), "mergeable": nil,
 		"merge_commit_sha": nilIfEmpty(p.MergedSHA), "merged_at": ghTimePtr(p.MergedAt), "merged_by": mergedBy,
 		"created_at": ghTime(p.CreatedAt), "updated_at": ghTime(p.UpdatedAt), "closed_at": ghTimePtr(appsPullClosedAt(p)),
-		"labels": []any{}, "assignees": []any{}, "requested_reviewers": []any{}, "author_association": "OWNER",
+		"labels": ghLabels(labels), "assignees": []any{}, "requested_reviewers": []any{}, "author_association": "OWNER",
 		"head": map[string]any{"label": rp.Owner + ":" + p.Head, "ref": p.Head, "sha": head, "user": owner, "repo": repo},
 		"base": map[string]any{"label": rp.Owner + ":" + p.Base, "ref": p.Base, "sha": baseSHA, "user": owner, "repo": repo},
 		"url":  api, "html_url": html, "diff_url": html + ".diff", "patch_url": html + ".patch",
@@ -421,7 +422,7 @@ func (a *App) appsPingPayload(ctx context.Context, h store.Webhook, who Actor) m
 		"zen":     "Keep it logically awesome.",
 		"hook_id": h.ID,
 		"hook": map[string]any{"type": typ, "id": h.ID, "name": "web", "active": h.Active, "events": h.Events,
-			"config":     map[string]any{"content_type": "json", "insecure_ssl": "0", "url": h.URL},
+			"config":     map[string]any{"content_type": appsContentType(h.ContentType), "insecure_ssl": "0", "url": h.URL},
 			"created_at": ghTime(h.CreatedAt), "updated_at": ghTime(h.UpdatedAt)},
 		"sender": a.ghUser(ctx, who.Kind, who.Name),
 	}

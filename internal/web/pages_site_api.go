@@ -20,22 +20,30 @@ import (
 //
 // Only Actions job tokens are accepted, and only for the job's own
 // repository (its actions:repo:<id> scope and jobRepoID must both match).
-// The site must be set to publish from Actions, and the job must come from a
-// push to the site's branch: pull requests and other branches can't deploy.
+// The site must be set to publish from Actions. A job from a push to the
+// site's branch deploys the site; a job from a pull_request run uploads that
+// pull request's preview (pages_site_preview.go), if previews are on and the
+// job isn't still waiting for approval. Other branches can't deploy.
 // Agentic jobs never deploy.
 
-// pagesJobRun reports the event and ref of the run a job belongs to. Tests
-// replace it.
-var pagesJobRun = func(ctx context.Context, a *App, jobID int64) (event, ref string, err error) {
+// pagesJobInfo is what the upload needs to know about the job's run.
+type pagesJobInfo struct {
+	Event, Ref string
+	Pull       int64 // pull request number of a pull_request run
+	Waiting    bool  // the job needed approval and hasn't had it
+}
+
+// pagesJobRun describes the run a job belongs to. Tests replace it.
+var pagesJobRun = func(ctx context.Context, a *App, jobID int64) (pagesJobInfo, error) {
 	j, err := a.db.ActionsJob(ctx, jobID)
 	if err != nil {
-		return "", "", err
+		return pagesJobInfo{}, err
 	}
 	run, err := a.db.ActionsRunByID(ctx, j.RunID)
 	if err != nil {
-		return "", "", err
+		return pagesJobInfo{}, err
 	}
-	return run.Event, run.Ref, nil
+	return pagesJobInfo{Event: run.Event, Ref: run.Ref, Pull: run.PullNumber, Waiting: j.Approval != "" && j.ApprovedBy == ""}, nil
 }
 
 func pagesAPIError(w http.ResponseWriter, code int, msg string) {
@@ -90,7 +98,7 @@ func (a *App) pagesUpload(w http.ResponseWriter, r *http.Request) {
 		pagesAPIError(w, http.StatusForbidden, "this job token can only deploy its own repository's site")
 		return
 	}
-	if rp.Private {
+	if !a.pagesMayPublish(ctx, rp) {
 		pagesAPIError(w, http.StatusForbidden, errPagesPrivate.Error())
 		return
 	}
@@ -104,13 +112,28 @@ func (a *App) pagesUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobID := pagesJobID(who)
-	event, ref, err := pagesJobRun(ctx, a, jobID)
+	info, err := pagesJobRun(ctx, a, jobID)
 	if err != nil {
 		pagesAPIError(w, http.StatusForbidden, "unknown job")
 		return
 	}
-	if strings.HasPrefix(event, "pull_request") || ref != "refs/heads/"+ps.Branch {
-		pagesAPIError(w, http.StatusForbidden, "only workflows run from a push to "+ps.Branch+" can deploy this site")
+	if info.Waiting {
+		pagesAPIError(w, http.StatusForbidden, "this job is waiting for approval")
+		return
+	}
+	var pr store.Pull
+	preview := strings.HasPrefix(info.Event, "pull_request")
+	if preview {
+		if _, ok := a.pagesPreviewsWanted(ctx, rp); !ok {
+			pagesAPIError(w, http.StatusConflict, "pull request previews are off for "+rp.FullName()+" (Settings → Pages)")
+			return
+		}
+		if pr, err = a.db.PullByNumber(ctx, rp.ID, info.Pull); err != nil || info.Pull == 0 || !pr.IsOpen() {
+			pagesAPIError(w, http.StatusConflict, "the pull request isn't open")
+			return
+		}
+	} else if info.Ref != "refs/heads/"+ps.Branch {
+		pagesAPIError(w, http.StatusForbidden, "only workflows run from a push to "+ps.Branch+" (or a pull request, for a preview) can deploy this site")
 		return
 	}
 	files := a.pagesFiles()
@@ -120,8 +143,18 @@ func (a *App) pagesUpload(w http.ResponseWriter, r *http.Request) {
 	if len(sha) > 64 {
 		sha = sha[:64]
 	}
-	d := store.PagesDeploy{RepoID: rp.ID, Source: store.PagesFromActions, Ref: ref, SHA: sha, Actor: who.Name}
-	d, err = a.pagesPublish(ctx, rp, d, func(extract func(io.Reader) error) error { return extract(r.Body) })
+	feed := func(extract func(io.Reader) error) error { return extract(r.Body) }
+	var d store.PagesDeploy
+	siteURL := a.pagesPublicURL(ctx, rp)
+	if preview {
+		unlock := pagesPreviewLock(rp.ID)
+		d, err = a.pagesPublishPreview(ctx, rp, pr, sha, who.Name, feed)
+		unlock()
+		siteURL = a.pagesPreviewURL(rp, pr.Number)
+	} else {
+		d = store.PagesDeploy{RepoID: rp.ID, Source: store.PagesFromActions, Ref: info.Ref, SHA: sha, Actor: who.Name}
+		d, err = a.pagesPublish(ctx, rp, d, feed)
+	}
 	if err != nil {
 		code := http.StatusBadRequest
 		var mbe *http.MaxBytesError
@@ -134,7 +167,7 @@ func (a *App) pagesUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"id": d.ID, "url": a.pagesSiteURL(rp), "files": d.Files, "bytes": d.Bytes,
+		"id": d.ID, "url": siteURL, "files": d.Files, "bytes": d.Bytes, "preview": preview,
 	})
 }
 

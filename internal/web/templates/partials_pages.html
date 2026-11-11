@@ -1,0 +1,99 @@
+{{/* Pages settings: custom domain and pull request preview cards. Pass the *pagesSettingsData. */}}
+{{define "pages-domain"}}{{$d := .}}{{$v := $d.V}}
+<section class="card stack" id="pages-domain" aria-labelledby="pages-domain-h">
+  <div class="row-between wrap-gap">
+    <h2 class="h-sm" id="pages-domain-h">Custom domain</h2>
+    {{with $d.Domain}}{{if .Verified}}<span class="pill pages-pill-live">Verified</span>{{else}}<span class="pill pages-pill-failed">Not verified</span>{{end}}{{end}}
+  </div>
+  {{with $d.Domain}}
+  <p class="small">{{if .Verified}}Served at <a class="mono" href="{{.URL}}" rel="noopener noreferrer" target="_blank">{{.URL}}</a>, as its own site at <span class="mono">/</span>.{{else}}<span class="mono">{{.Host}}</span> isn't served until it's verified.{{end}}
+  {{if .CheckedAt}}<span class="muted">Last checked {{ago .CheckedAt}}{{if .Method}} ({{if eq .Method "txt"}}TXT record{{else}}file{{end}}){{end}}.</span>{{end}}</p>
+  {{if .LastError}}<p class="small pages-err">{{.LastError}}{{if and .Verified .Failures}} · {{.Failures}} failed check{{if ne .Failures 1}}s{{end}} in a row; after 3 the domain stops being served.{{end}}</p>{{end}}
+  <div class="stack-sm">
+    <h3 class="small strong">1. Prove the name is yours (either one)</h3>
+    <ul class="pages-steps small">
+      <li>A <strong>TXT record</strong> named <span class="mono">{{.TXTName}}</span> with the value <span class="mono pages-token">{{.Token}}</span> (keep it; Atelier re-checks daily).</li>
+      <li>Or a <strong>file</strong> at <span class="mono">{{.FileURL}}</span> containing the token, served over HTTPS by whatever answers for the name today (commit <span class="mono">.well-known/atelier-pages/{{.Token}}</span> into the site if it's this one). Names that resolve to private addresses can only use the TXT record.</li>
+    </ul>
+    <h3 class="small strong">2. Put TLS in front of it</h3>
+    <form method="post" action="{{$v.Base}}/settings/pages/domain" class="stack-sm">
+      <input type="hidden" name="host" value="{{.Host}}">
+      <fieldset class="field">
+        <legend class="small">Atelier doesn't terminate TLS. Which route?</legend>
+        <label class="choice"><input type="radio" name="route" value="proxy" {{if ne .Route "tunnel"}}checked{{end}}><span><strong>Nginx Proxy Manager</strong></span></label>
+        <label class="choice"><input type="radio" name="route" value="tunnel" {{if eq .Route "tunnel"}}checked{{end}}><span><strong>The named Cloudflare tunnel</strong></span></label>
+      </fieldset>
+      <button class="btn btn-sm" type="submit">Show steps</button>
+    </form>
+    {{if eq .Route "tunnel"}}
+    <ol class="pages-steps small">
+      <li>Remote access must use a <strong>named tunnel</strong> (Settings → Remote access), with <strong>Pages</strong> ticked under what's exposed.</li>
+      <li>In Cloudflare Zero Trust → Networks → Tunnels → your Atelier tunnel → <strong>Public hostname → Add</strong>: hostname <span class="mono">{{.Host}}</span>, service type <span class="mono">HTTP</span>, URL <span class="mono">{{$d.TunnelListen}}</span> (the remote listener, the same service as the tunnel's other hostnames). The domain's zone must be on Cloudflare; it creates the DNS record and the certificate.</li>
+      <li>Add the TXT record above in Cloudflare DNS, then press <strong>Verify</strong>.</li>
+    </ol>
+    {{else}}
+    <ol class="pages-steps small">
+      <li><strong>DNS:</strong> point <span class="mono">{{.Host}}</span> (A or CNAME) at the machine running Nginx Proxy Manager, and add the TXT record above.</li>
+      <li><strong>Nginx Proxy Manager → Proxy Hosts → Add:</strong> domain name <span class="mono">{{.Host}}</span>, scheme <span class="mono">http</span>, forward to {{.Forward}}. Don't rewrite the <span class="mono">Host</span> header.</li>
+      <li><strong>SSL tab:</strong> request a Let's Encrypt certificate (the name must resolve publicly, or use a DNS challenge), and tick Force SSL and HTTP/2.</li>
+      <li>Press <strong>Verify</strong>.</li>
+    </ol>
+    {{end}}
+  </div>
+  {{if $d.PrivSite}}<p class="small muted">This repository is private, so its site is served only here, to people who can read the repository. Visitors sign in through Atelier and get a cookie for <span class="mono">{{.Host}}</span> alone.</p>
+  {{else if $v.Repo.Private}}<p class="small muted">Once the domain is verified, this private repository can publish: its site is served only here, to people who can read the repository.</p>{{end}}
+  <div class="row wrap-gap">
+    <form method="post" action="{{$v.Base}}/settings/pages/domain/verify"><button class="btn btn-primary btn-sm" type="submit">Verify{{if .Verified}} again{{end}}</button></form>
+    <form method="post" action="{{$v.Base}}/settings/pages/domain/remove"><button class="btn btn-danger btn-sm" type="submit">Remove domain</button></form>
+  </div>
+  {{else}}
+  <p class="small muted">Serve the site on its own host name, such as <span class="mono">docs.example.com</span>. It's verified with a DNS record before anything is served there.{{if $v.Repo.Private}} A private repository can publish once it has one: it's the site's own origin, so only people who can read the repository get in.{{end}}</p>
+  <form method="post" action="{{$v.Base}}/settings/pages/domain" class="stack-sm">
+    <div class="field">
+      <label for="pages-host">Host name</label>
+      <input id="pages-host" name="host" class="mono" placeholder="docs.example.com" maxlength="253" autocomplete="off" spellcheck="false" required>
+    </div>
+    <fieldset class="field">
+      <legend class="small">TLS is handled by</legend>
+      <label class="choice"><input type="radio" name="route" value="proxy" checked><span><strong>Nginx Proxy Manager</strong></span></label>
+      <label class="choice"><input type="radio" name="route" value="tunnel"><span><strong>The named Cloudflare tunnel</strong></span></label>
+    </fieldset>
+    <div class="row-end"><button class="btn" type="submit">Add domain</button></div>
+  </form>
+  {{end}}
+</section>
+{{end}}
+
+{{define "pages-previews"}}{{$d := .}}{{$v := $d.V}}
+<section class="card stack" id="pages-previews" aria-labelledby="pages-previews-h">
+  <h2 class="h-sm" id="pages-previews-h">Pull request previews</h2>
+  <form method="post" action="{{$v.Base}}/settings/pages/previews" class="row-between wrap-gap">
+    <label class="choice"><input type="checkbox" name="previews" value="on" {{if $d.Previews}}checked{{end}}><span><strong>Publish a preview of each pull request</strong>
+      <span class="small muted">At <span class="mono">{{$d.PagesBase}}/~preview/{{$v.Repo.Owner}}/{{$v.Repo.Name}}/&lt;number&gt;/</span>, linked in a comment on the pull request and removed when it's closed or merged. {{if eq $d.Site.Source "actions"}}The workflow needs an <span class="mono">on: pull_request</span> trigger; <span class="mono">atelier/deploy-pages</span> then uploads the preview.{{else}}Built from the head branch's <span class="mono">{{$d.Folder}}</span>.{{end}} Pull requests opened by anyone else wait for your approval. Up to {{$d.Keep}} previews are kept.</span></span></label>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </form>
+  {{if $d.PreviewRows}}
+  <div class="list-card">
+    {{range $d.PreviewRows}}
+    <div class="list-row pages-deploy">
+      <div class="grow min0">
+        <div class="row wrap-gap">
+          <a href="{{.PullURL}}"><strong>#{{.Number}}</strong></a> <span class="min0">{{.Title}}</span>
+          {{if eq .Status "live"}}<span class="pill pages-pill-live">Live</span>{{else if eq .Status "waiting"}}<span class="pill">Waiting for approval</span>{{else}}<span class="pill pages-pill-failed">Failed</span>{{end}}
+          {{if .Short}}<span class="small muted mono">{{.Short}}</span>{{end}}
+        </div>
+        {{if .URL}}<a class="small mono" href="{{.URL}}" rel="noopener noreferrer" target="_blank">{{.URL}}</a>{{end}}
+        {{if .Error}}<div class="small pages-err">{{.Error}}</div>{{end}}
+      </div>
+      {{if eq .Status "waiting"}}
+      <form method="post" action="{{$v.Base}}/settings/pages/previews/approve">
+        <input type="hidden" name="number" value="{{.Number}}"><input type="hidden" name="sha" value="{{.SHA}}">
+        <button class="btn btn-sm" type="submit">Approve and publish</button>
+      </form>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</section>
+{{end}}

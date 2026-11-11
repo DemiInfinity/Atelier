@@ -28,7 +28,9 @@ import (
 const pagesCSP = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals; " +
 	"default-src 'self' https: data: blob: 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
 
-// servePagesHost answers the request if it's for the Pages host.
+// servePagesHost answers the request if it's for the Pages host or a
+// verified custom domain (pages_site_domain.go). Any other host, including
+// a custom domain that isn't verified, is left to the app.
 func (a *App) servePagesHost(w http.ResponseWriter, r *http.Request) bool {
 	base := a.pagesBase()
 	if base == "" {
@@ -36,18 +38,26 @@ func (a *App) servePagesHost(w http.ResponseWriter, r *http.Request) bool {
 	}
 	scheme, host, _ := strings.Cut(base, "://")
 	_, reqHost := a.external(r)
-	if !pagesSameHost(reqHost, scheme, host, scheme) {
-		return false
+	if pagesSameHost(reqHost, scheme, host, scheme) {
+		a.servePages(w, r)
+		return true
 	}
-	a.servePages(w, r)
-	return true
+	if isRemote(r) {
+		return false // the remote listener dispatches custom domains itself (tunnel_remote.go)
+	}
+	return a.servePagesDomain(w, r, reqHost)
+}
+
+// pagesSecurityHeaders are sent with everything a site host answers.
+func pagesSecurityHeaders(h http.Header, csp string) {
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	h.Set("Content-Security-Policy", csp)
 }
 
 func (a *App) servePages(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
-	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-	h.Set("Content-Security-Policy", pagesCSP)
+	pagesSecurityHeaders(h, pagesCSP)
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		h.Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -64,6 +74,10 @@ func (a *App) servePages(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	owner := segs[0]
+	if owner == pagesPreviewSeg {
+		a.servePreview(w, r, segs[1:])
+		return
+	}
 	// <pages>/<owner>/<repo>/… first, then the owner's site <owner>.pages.
 	if len(segs) >= 2 && segs[1] != "" && !strings.EqualFold(segs[1], pagesUserSiteName(owner)) {
 		if rp, ps, ok := a.pagesLiveSite(ctx, owner, segs[1]); ok {
@@ -71,7 +85,7 @@ func (a *App) servePages(w http.ResponseWriter, r *http.Request) {
 				pagesRedirectSlash(w, r)
 				return
 			}
-			a.pagesServeFile(w, r, rp, ps, strings.Join(segs[2:], "/"))
+			a.pagesServeFile(w, r, rp.ID, ps.LiveID, strings.Join(segs[2:], "/"), false)
 			return
 		}
 	}
@@ -80,7 +94,7 @@ func (a *App) servePages(w http.ResponseWriter, r *http.Request) {
 			pagesRedirectSlash(w, r)
 			return
 		}
-		a.pagesServeFile(w, r, rp, ps, strings.Join(segs[1:], "/"))
+		a.pagesServeFile(w, r, rp.ID, ps.LiveID, strings.Join(segs[1:], "/"), false)
 		return
 	}
 	pagesPlain404(w, r)
@@ -123,9 +137,11 @@ func pagesRedirectSlash(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusMovedPermanently)
 }
 
-// pagesServeFile serves name (relative, may end in "/") from the live deploy.
-func (a *App) pagesServeFile(w http.ResponseWriter, r *http.Request, rp store.Repo, ps store.PagesSite, name string) {
-	root, err := os.OpenRoot(a.pagesFiles().Dir(rp.ID, ps.LiveID))
+// pagesServeFile serves name (relative, may end in "/") from a deploy.
+// Private content (a private site on its custom domain) is never cached by
+// shared caches and isn't readable cross-origin.
+func (a *App) pagesServeFile(w http.ResponseWriter, r *http.Request, repoID, deployID int64, name string, private bool) {
+	root, err := os.OpenRoot(a.pagesFiles().Dir(repoID, deployID))
 	if err != nil {
 		pagesPlain404(w, r)
 		return
@@ -154,25 +170,30 @@ func (a *App) pagesServeFile(w http.ResponseWriter, r *http.Request, rp store.Re
 		}
 	}
 	if err != nil || !fi.Mode().IsRegular() {
-		a.pagesNotFound(w, r, root, ps.LiveID)
+		a.pagesNotFound(w, r, root, private)
 		return
 	}
 	f, err := root.Open(name)
 	if err != nil {
-		a.pagesNotFound(w, r, root, ps.LiveID)
+		a.pagesNotFound(w, r, root, private)
 		return
 	}
 	defer f.Close()
 	h := w.Header()
 	h.Set("Content-Type", pagesContentType(name))
-	h.Set("ETag", pagesETag(ps.LiveID, name, fi))
-	h.Set("Cache-Control", "public, max-age=0, must-revalidate")
-	h.Set("Access-Control-Allow-Origin", "*") // public content; sandboxed pages fetch from an opaque origin
+	h.Set("ETag", pagesETag(deployID, name, fi))
+	if private {
+		h.Set("Cache-Control", "private, no-cache")
+		h.Set("Vary", "Cookie")
+	} else {
+		h.Set("Cache-Control", "public, max-age=0, must-revalidate")
+		h.Set("Access-Control-Allow-Origin", "*") // public content; sandboxed pages fetch from an opaque origin
+	}
 	http.ServeContent(w, r, "", fi.ModTime(), f)
 }
 
 // pagesNotFound serves the site's 404.html (with status 404) or a plain 404.
-func (a *App) pagesNotFound(w http.ResponseWriter, r *http.Request, root *os.Root, deployID int64) {
+func (a *App) pagesNotFound(w http.ResponseWriter, r *http.Request, root *os.Root, private bool) {
 	f, err := root.Open("404.html")
 	if err != nil {
 		pagesPlain404(w, r)
@@ -185,6 +206,9 @@ func (a *App) pagesNotFound(w http.ResponseWriter, r *http.Request, root *os.Roo
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
+	if private {
+		w.Header().Set("Cache-Control", "private, no-cache")
+	}
 	w.WriteHeader(http.StatusNotFound)
 	if r.Method != http.MethodHead {
 		_, _ = io.Copy(w, f)
