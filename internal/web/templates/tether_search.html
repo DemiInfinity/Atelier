@@ -63,14 +63,14 @@
       {{range $d.GHRepos}}
       <li>
         <div class="row-between wrap-gap">
-          <span class="row gap-sm min0">{{template "tether-person" .Person}}<span class="slash">/</span><a class="tt-repo" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Name}}</a>{{if .Private}}<span class="pill">Private</span>{{end}}</span>
+          <span class="row gap-sm min0">{{template "tether-person" .Person}}<span class="slash">/</span><a class="tt-repo" href="{{.URL}}">{{.Name}}</a>{{if .Private}}<span class="pill">Private</span>{{end}}</span>
           <span class="tt-stars">★ {{.Stars}}{{with .Language}} · {{.}}{{end}}</span>
         </div>
         {{with .Desc}}<p class="small">{{.}}</p>{{end}}
         <div class="srch-actions">
           {{if .InStudio}}<a class="btn btn-sm" href="/{{.InStudio}}">In your studio</a>
           {{else}}<form method="post" action="/search/mirror" class="tt-inline"><input type="hidden" name="repo" value="{{.FullName}}"><input type="hidden" name="q" value="{{$d.Q}}"><input type="hidden" name="src" value="{{$d.Src}}"><button class="btn btn-tether btn-sm" type="submit">Mirror to studio</button></form>{{end}}
-          <a class="btn btn-ghost btn-sm" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+          <a class="btn btn-ghost btn-sm" href="{{.GHURL}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
         </div>
       </li>
       {{end}}
@@ -83,7 +83,7 @@
     <ul class="tt-list">
       {{range $d.GHItems}}
       <li>
-        <a href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Title}} ↗</a>
+        <span><a href="{{.URL}}">{{.Title}}</a> <a class="tt-gh-out" href="{{.GHURL}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="Open on GitHub" title="Open on GitHub">↗</a></span>
         <span class="small row gap-sm">{{template "tether-person" .Person}} · {{.Repo}} #{{.Number}} · {{if .IsPull}}pull request{{else}}issue{{end}} · {{.State}}</span>
       </li>
       {{end}}

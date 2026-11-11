@@ -39,6 +39,7 @@ var reserved = map[string]bool{
 	"packages": true, "runners": true, "actions": true, "lfs": true,
 	"insights": true, "sw.js": true, "manifest.webmanifest": true, // pwa.go, insights.go
 	"snippets": true, "-": true, // snippets.go, palette.go (/-/palette)
+	"gh": true, // gh.go: GitHub browsed through Tether (/gh/…)
 }
 
 type App struct {
@@ -134,10 +135,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Set("X-Frame-Options", "DENY")
-	h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' https://fonts.googleapis.com; "+
-		"font-src https://fonts.gstatic.com; img-src 'self' data: https://avatars.githubusercontent.com; "+
-		"script-src 'self'; form-action 'self' https://github.com; frame-ancestors 'none'; base-uri 'none'")
+	setUIHeaders(h)
 
 	if strings.HasPrefix(r.URL.Path, "/static/") {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -154,6 +152,18 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.mux.ServeHTTP(w, r)
+}
+
+// uiCSP is the Content-Security-Policy of every UI page.
+const uiCSP = "default-src 'self'; style-src 'self' https://fonts.googleapis.com; " +
+	"font-src https://fonts.gstatic.com; img-src 'self' data: https://avatars.githubusercontent.com; " +
+	"script-src 'self'; form-action 'self' https://github.com; frame-ancestors 'none'; base-uri 'none'"
+
+// setUIHeaders sets the headers every UI page gets (path handlers that serve
+// pages call it too, since they answer before ServeHTTP sets them).
+func setUIHeaders(h http.Header) {
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Content-Security-Policy", uiCSP)
 }
 
 // ---------- request helpers ----------

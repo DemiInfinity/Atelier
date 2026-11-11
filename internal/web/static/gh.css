@@ -1,0 +1,101 @@
+/* GitHub as native (/gh/…): Atelier's layout with a blue Tether accent.
+   Amber stays for Atelier itself: local copies and the Atelier badge. */
+
+.gh-page { padding-top: 20px; }
+.gh-break { overflow-wrap: anywhere; }
+.gh-ink { color: var(--tether); display: inline-flex; vertical-align: -3px; margin-right: 4px; }
+
+/* Repository header */
+.gh-repohead { background: linear-gradient(180deg, var(--tether-surface), var(--surface) 70%); border-bottom-color: var(--tether-border); }
+.gh-title .repo-name a.muted-link { color: var(--tether-2); }
+.gh-title .repo-name a:hover strong { color: var(--tether); }
+.gh-pill-public { border-color: var(--tether-border); color: var(--tether-2); background: transparent; }
+.gh-via { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--tether-border); background: var(--tether-surface); color: var(--tether-2); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.gh-via::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--tether); }
+.gh-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; align-items: center; }
+.gh-local { border-color: #5a4320; background: var(--amber-chip); color: var(--amber); }
+.gh-local svg { width: 14px; height: 14px; }
+.gh-local:hover { border-color: var(--amber); }
+.gh-tabs a[aria-current="page"], .gh-subtabs a[aria-current="page"] { border-bottom-color: var(--tether); }
+.gh-subtabs { border-bottom: 1px solid var(--border); align-items: center; }
+.gh-churn { white-space: nowrap; }
+
+/* Notices */
+.gh-stale { border: 1px solid var(--tether-border); background: var(--tether-surface); color: var(--tether-2);
+  border-radius: var(--r); padding: 10px 14px; font-size: 13px; }
+.gh-stale strong { color: var(--text); }
+
+/* About */
+.gh-about p { overflow-wrap: anywhere; }
+.gh-topics { display: flex; flex-wrap: wrap; gap: 6px; }
+.gh-topic { font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--tether-surface); border: 1px solid var(--tether-border); color: var(--tether-2); }
+.gh-facts { display: flex; flex-direction: column; gap: 6px; color: var(--text-2); }
+.gh-facts li { overflow-wrap: anywhere; }
+.gh-lang-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--tether); margin-right: 6px; vertical-align: 0; }
+.gh-ext { color: var(--tether); }
+
+/* Lists */
+.gh-rows { list-style: none; margin: 0; padding: 0; }
+.gh-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--border); min-width: 0; }
+.gh-row:first-child { border-top: 0; }
+.gh-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+.gh-row-title { color: var(--tether-2); font-weight: 600; font-size: 15px; }
+.gh-row-title:hover { color: var(--tether); }
+.gh-pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.gh-label { border-color: var(--tether-border); color: var(--tether-2); }
+.gh-merged { color: var(--violet); }
+.gh-state-merged { background: var(--violet-chip); border-color: #443860; color: var(--violet); }
+.gh-ref { font-size: 12px; padding: 1px 6px; border-radius: 6px; background: var(--tether-surface); border: 1px solid var(--tether-border); color: var(--tether-2); }
+.gh-readonly { display: flex; align-items: center; gap: 6px; color: var(--tether-2); }
+.gh-timeline .tl-comment-head .tt-person { font-weight: 600; }
+
+/* Files and diffs */
+.gh-file-name { overflow-wrap: anywhere; min-width: 0; }
+.gh-add { color: var(--ok); }
+.gh-del { color: var(--danger); }
+.gh-nopatch { padding: 12px 16px; }
+.gh-image { padding: 24px; display: flex; justify-content: center; background: repeating-conic-gradient(#1d1b18 0% 25%, #171614 0% 50%) 50% / 20px 20px; }
+.gh-image img { max-width: 100%; height: auto; }
+.gh-lastcommit .tt-person { flex: none; }
+
+/* Markdown from GitHub */
+.gh-markdown a { color: var(--tether); }
+.gh-markdown img { max-width: 100%; height: auto; vertical-align: middle; }
+.gh-markdown table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+.gh-markdown th, .gh-markdown td { border: 1px solid var(--border-strong); padding: 6px 12px; }
+.gh-md-tight { padding: 0; }
+.gh-release-body { padding: 16px 20px; }
+
+/* Profile */
+.gh-profile-grid { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+.gh-profile-side { flex: 1 1 240px; max-width: 296px; min-width: 0; }
+.gh-profile-main { flex: 999 1 560px; min-width: 0; }
+.gh-avatar-xl { width: 260px; max-width: 100%; height: auto; aspect-ratio: 1; border-radius: 50%; border: 3px solid var(--tether-border); background: var(--tether-surface); display: block; }
+.gh-avatar-org { border-radius: 28px; }
+.gh-avatar-atelier { border-color: var(--amber); }
+.gh-avatar-blank { display: flex; align-items: center; justify-content: center; font: 700 88px var(--font-display); color: var(--tether-2); }
+.gh-name { font-size: 26px; overflow-wrap: anywhere; }
+.gh-login { color: var(--muted); font-size: 18px; font-weight: 300; }
+.gh-bio { color: var(--text-2); overflow-wrap: anywhere; }
+.gh-atelier { border: 1px solid #5a4320; background: var(--amber-chip); border-radius: var(--r); padding: 12px 14px; color: var(--text); }
+.gh-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 6px; border-radius: 999px; background: #2a2116;
+  border: 1px solid var(--amber); color: var(--amber); font: 600 12px var(--font); white-space: nowrap; }
+.gh-badge svg { width: 16px; height: 16px; }
+.gh-studio-btn { border-color: var(--amber); color: var(--amber); background: transparent; align-self: flex-start; }
+.gh-studio-btn:hover { background: #2a2116; }
+.gh-pins { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gh-pin { border: 1px solid var(--tether-border); background: var(--tether-surface); border-radius: var(--r-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.gh-pin-name { color: var(--tether-2); font-weight: 600; }
+.gh-pin-meta { display: flex; flex-wrap: wrap; gap: 14px; color: var(--text-2); margin-top: auto; }
+.gh-repo-search { display: flex; gap: 8px; }
+.gh-repo-search input { flex: 1 1 auto; min-width: 0; }
+.gh-connect p { color: var(--text-2); }
+
+@media (max-width: 760px) {
+  .gh-actions { margin-left: 0; width: 100%; }
+  .gh-pins { grid-template-columns: minmax(0, 1fr); }
+  .gh-profile-side { max-width: none; flex-basis: 100%; }
+  .gh-profile-side .gh-avatar-xl { width: 120px; }
+  .gh-row { padding: 12px; }
+}

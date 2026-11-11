@@ -1,0 +1,34 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}{{$c := $d.C}}
+{{template "gh-repohead" $v}}
+<main class="wrap stack-lg gh-page">
+  {{template "gh-notices" $v}}
+  <section class="list-card">
+    <div class="commit-head stack-sm">
+      <div class="row-between wrap-gap align-start">
+        <h1 class="h-display gh-break">{{$d.Subject}}</h1>
+        <div class="row gap-sm">
+          <a class="btn btn-sm" href="{{$v.Base}}/tree/{{$c.SHA}}">Browse files</a>
+          <a class="btn btn-sm btn-ghost" href="{{$d.GHCommit}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+        </div>
+      </div>
+      {{if $d.Body}}<pre class="commit-body">{{$d.Body}}</pre>{{end}}
+    </div>
+    <div class="commit-meta">
+      <div class="row gap-sm wrap-gap">
+        {{if $c.Author.Login}}{{template "tether-person" $c.Author}}{{else}}<span class="avatar avatar-sm" aria-hidden="true">{{initial $c.AuthorName}}</span><strong>{{$c.AuthorName}}</strong>{{end}}
+        {{if not $c.When.IsZero}}<span class="muted">committed {{ago $c.When}}</span>{{end}}
+        {{if $d.Add}}<span class="small"><span class="gh-add">+{{$d.Add}}</span> <span class="gh-del">−{{$d.Del}}</span></span>{{end}}
+      </div>
+      <div class="small muted commit-ids">
+        {{if $d.Parents}}<span>{{if gt (len $d.Parents) 1}}{{len $d.Parents}} parents{{else}}1 parent{{end}}
+          {{range $i, $p := $d.Parents}}{{if $i}} + {{end}}<a class="mono" href="{{$v.Base}}/commit/{{$p}}">{{short $p}}</a>{{end}}</span>
+        {{else}}<span>Root commit</span>{{end}}
+        <span>commit <span class="mono text-2 break">{{$c.SHA}}</span></span>
+      </div>
+    </div>
+  </section>
+  {{template "gh-diffs" $d.Files}}
+</main>
+{{end}}

@@ -169,6 +169,11 @@ func (c tetherCache) Get(ctx context.Context, key string) (string, []byte, bool)
 	return etag, body, err == nil
 }
 
+func (c tetherCache) GetAt(ctx context.Context, key string) (string, []byte, time.Time, bool) {
+	etag, body, at, err := c.db.TetherCacheGet(ctx, c.person, key)
+	return etag, body, at, err == nil
+}
+
 func (c tetherCache) Put(ctx context.Context, key, etag string, body []byte) {
 	if len(body) > 2<<20 {
 		return

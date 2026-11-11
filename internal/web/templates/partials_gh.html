@@ -1,0 +1,127 @@
+{{/* GitHub as native (/gh/…). Everything from GitHub is untrusted text: it is only printed (escaped), and Markdown arrives already rendered safely by gh_markdown.go. */}}
+{{define "gh-css"}}<link rel="stylesheet" href="/static/tether.css"><link rel="stylesheet" href="/static/gh.css">{{end}}
+
+{{define "gh-arrow"}}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 17 L17 7 M9 7 H17 V15"/></svg>{{end}}
+
+{{/* The "as of" notice and flash. Pass anything with AsOf, Notice and Flash. */}}
+{{define "gh-notices"}}
+{{if .Flash}}<div class="flash flash-error" role="alert">{{.Flash}}</div>{{end}}
+{{if not .AsOf.IsZero}}<div class="gh-stale" role="status"><strong>As of {{ago .AsOf}}.</strong> {{.Notice}}</div>{{end}}
+{{end}}
+
+{{/* The Atelier mark for a person: pass a tetherPerson. */}}
+{{define "gh-badge"}}{{if .Atelier}}<span class="gh-badge" title="{{.Login}} uses Atelier">{{template "logo"}}<span>Atelier</span></span>{{end}}{{end}}
+
+{{/* The repository header: pass a *ghRepoView. */}}
+{{define "gh-repohead"}}
+<div class="repohead gh-repohead">
+  <div class="wrap">
+    <div class="repohead-title gh-title">
+      <p class="repo-name">
+        <span class="gh-ink">{{template "tether-icon" 18}}</span>
+        <a href="{{.Owner.URL}}" class="muted-link">{{.Owner.Login}}</a>{{if .Owner.Atelier}}<span class="tt-mark" title="{{.Owner.Login}} uses Atelier"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">uses Atelier</span></span>{{end}}
+        <span class="slash">/</span> <a href="{{.Base}}"><strong>{{.Repo.Name}}</strong></a>
+      </p>
+      {{if .Repo.Private}}<span class="pill">Private</span>{{else}}<span class="pill gh-pill-public">Public</span>{{end}}
+      {{if .Repo.Archived}}<span class="pill">Archived</span>{{end}}
+      <span class="gh-via">On GitHub · via Tether</span>
+      <div class="gh-actions">
+        {{if .Local}}<a class="btn btn-sm gh-local" href="{{.Local}}">{{template "logo"}} Your {{.LocalHow}} copy</a>
+        {{else}}<form method="post" action="/search/mirror" class="tt-inline"><input type="hidden" name="repo" value="{{.Full}}"><input type="hidden" name="back" value="{{.Back}}"><button class="btn btn-tether btn-sm" type="submit">Mirror to studio</button></form>{{end}}
+        <a class="btn btn-ghost btn-sm" href="{{.GH}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+      </div>
+    </div>
+    <nav class="tabs gh-tabs" aria-label="GitHub repository">
+      <a href="{{.Base}}" {{if eq .Tab "code"}}aria-current="page"{{end}}>Code</a>
+      <a href="{{.Base}}/issues" {{if eq .Tab "issues"}}aria-current="page"{{end}}>Issues</a>
+      <a href="{{.Base}}/pulls" {{if eq .Tab "pulls"}}aria-current="page"{{end}}>Pull requests</a>
+      <a href="{{.Base}}/commits" {{if eq .Tab "commits"}}aria-current="page"{{end}}>Commits</a>
+      <a href="{{.Base}}/releases" {{if eq .Tab "releases"}}aria-current="page"{{end}}>Releases</a>
+    </nav>
+  </div>
+</div>
+{{end}}
+
+{{/* Branch and tag switcher: pass a *ghRepoView. */}}
+{{define "gh-refs"}}
+<details class="dropdown">
+  <summary class="btn btn-sm" aria-label="Switch branch or tag, current: {{.Ref}}">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7 V17 M18 9 c0 5-12 3-12 8"/></svg>
+    <span class="mono ellipsis">{{if eq (len .Ref) 40}}{{short .Ref}}{{else}}{{.Ref}}{{end}}</span>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9 L12 15 L18 9"/></svg>
+  </summary>
+  <div class="dropdown-menu">
+    <p class="dropdown-head">Branches</p>
+    {{$v := .}}
+    {{range .Branches}}<a class="dropdown-item" href="{{$v.TreeURL .}}" {{if eq . $v.Ref}}aria-current="true"{{end}}><span class="ellipsis">{{.}}</span>{{if eq . $v.Default}} <span class="pill">default</span>{{end}}</a>{{else}}<p class="dropdown-item muted">None listed</p>{{end}}
+    {{if .Tags}}
+    <p class="dropdown-head">Tags</p>
+    {{range .Tags}}<a class="dropdown-item" href="{{$v.TreeURL .}}" {{if eq . $v.Ref}}aria-current="true"{{end}}><span class="ellipsis">{{.}}</span></a>{{end}}
+    {{end}}
+  </div>
+</details>
+{{end}}
+
+{{define "gh-crumbs"}}
+<p class="crumbs"><a href="{{.RootURL}}">{{.Repo.Name}}</a>{{range .Crumbs}} <span class="slash">/</span> <a href="{{.URL}}">{{.Name}}</a>{{end}}</p>
+{{end}}
+
+{{/* Latest commit line: pass a ghCommitRow (or nil). */}}
+{{define "gh-lastcommit"}}
+{{if .}}<div class="lastcommit gh-lastcommit">
+  {{if .Author.Login}}{{template "tether-person" .Author}}{{else}}<span class="avatar avatar-sm" aria-hidden="true">{{initial .AuthorName}}</span><strong>{{.AuthorName}}</strong>{{end}}
+  <a class="lastcommit-msg muted-link" href="{{.URL}}">{{.Subject}}</a>
+  <a class="mono muted-link" href="{{.URL}}">{{.Short}}</a>
+  {{if not .When.IsZero}}<span class="muted">{{ago .When}}</span>{{end}}
+</div>{{end}}
+{{end}}
+
+{{/* About sidebar: pass a *ghRepoView. */}}
+{{define "gh-about"}}
+<section class="stack-sm gh-about" aria-labelledby="gh-about-h">
+  <h2 class="h-sm" id="gh-about-h">About</h2>
+  {{if .Desc}}<p>{{.Desc}}</p>{{else}}<p class="muted">No description.</p>{{end}}
+  {{with .Homepage}}<p class="small"><a class="gh-ext" href="{{.}}" rel="noopener noreferrer nofollow" target="_blank">{{.}}</a></p>{{end}}
+  {{if .Topics}}<ul class="gh-topics" aria-label="Topics">{{range .Topics}}<li class="gh-topic">{{.}}</li>{{end}}</ul>{{end}}
+  <ul class="gh-facts small">
+    <li><span aria-hidden="true">★</span> <strong>{{.Repo.Stars}}</strong> stars</li>
+    <li><strong>{{.Repo.Forks}}</strong> forks</li>
+    {{with .Repo.Language}}<li><span class="gh-lang-dot" aria-hidden="true"></span>{{.}}</li>{{end}}
+    {{with .License}}<li>{{.}}</li>{{end}}
+    {{if not .Repo.PushedAt.IsZero}}<li>Updated {{ago .Repo.PushedAt}}</li>{{end}}
+  </ul>
+  <p class="small row gap-sm wrap-gap">Owner {{template "tether-person" .Owner}}</p>
+</section>
+<section class="tt-card stack-sm" aria-labelledby="gh-tether-h">
+  <h2 class="h-sm row gap-sm" id="gh-tether-h">{{template "tether-icon" 18}} Tether</h2>
+  <p class="small">You're reading this on GitHub through your own connection. Nothing here changes GitHub.</p>
+  {{if .Local}}<a class="btn btn-sm gh-local" href="{{.Local}}">Open your {{.LocalHow}} copy</a>
+  {{else}}<form method="post" action="/search/mirror"><input type="hidden" name="repo" value="{{.Full}}"><input type="hidden" name="back" value="{{.Back}}"><button class="btn btn-tether btn-sm" type="submit">Mirror to studio</button></form>{{end}}
+  <a class="small" href="{{.GH}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+</section>
+{{end}}
+
+{{define "gh-pager"}}
+{{if or .Prev .Next}}<nav class="gh-pager" aria-label="Pages">
+  {{if .Prev}}<a class="btn btn-sm" href="{{.Prev}}" rel="prev">← Newer</a>{{else}}<span></span>{{end}}
+  <span class="small muted">Page {{.Page}}</span>
+  {{if .Next}}<a class="btn btn-sm" href="{{.Next}}" rel="next">Older →</a>{{else}}<span></span>{{end}}
+</nav>{{end}}
+{{end}}
+
+{{/* A diff per file: pass []ghFileDiff. */}}
+{{define "gh-diffs"}}
+{{range .}}
+<section class="list-card gh-file">
+  <div class="list-head row-between wrap-gap">
+    <p class="mono small gh-file-name">{{if .Old}}{{.Old}} → {{end}}{{.Name}}</p>
+    <span class="small row gap-sm"><span class="gh-add">+{{.Add}}</span><span class="gh-del">−{{.Del}}</span>{{if .URL}}<a class="btn btn-xs btn-ghost" href="{{.URL}}">View file</a>{{end}}</span>
+  </div>
+  {{if .NoPatch}}<p class="small muted gh-nopatch">{{if eq .Status "renamed"}}File renamed without changes.{{else}}No text diff (binary or too large).{{end}}</p>
+  {{else}}<div class="table-scroll"><pre class="diff"><code>{{range diffLines .Patch}}<span class="dl {{.Class}}">{{.Text}}</span>
+{{end}}</code></pre></div>{{end}}
+</section>
+{{else}}
+<div class="card empty"><p class="muted">No file changes.</p></div>
+{{end}}
+{{end}}

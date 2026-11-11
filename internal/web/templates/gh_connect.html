@@ -1,0 +1,12 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}
+<main class="wrap narrow stack-lg">
+  <section class="tt-card stack gh-connect">
+    <h1 class="h-display row gap-sm">{{template "tether-icon" 22}} Browse GitHub in Atelier</h1>
+    {{with .Data.Error}}<p class="tt-error">{{.}}</p>{{end}}
+    <p>GitHub profiles and repositories open here, read-only, through Tether: your link to GitHub, using your own GitHub token.</p>
+    <p>Connect GitHub in <a href="/settings/tether">Settings → Tether</a> to start. Nothing is shared with anyone else's connection.</p>
+    <div><a class="btn btn-tether" href="/settings/tether">Connect GitHub</a></div>
+  </section>
+</main>
+{{end}}

@@ -57,6 +57,8 @@ type fakeGH struct {
 	search      []tether.Repo
 	searchItems []tether.Issue
 	limited     bool
+	// extra answers requests first when set (f.mu held); gh_test.go uses it.
+	extra       func(w http.ResponseWriter, r *http.Request, seg []string, body map[string]any) bool
 	hits        map[string]int
 	notModified int
 	nextID      int64
@@ -164,6 +166,9 @@ func (f *fakeGH) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	str := func(k string) string { s, _ := body[k].(string); return s }
 	seg := strings.Split(strings.Trim(p, "/"), "/")
+	if f.extra != nil && f.extra(w, r, seg, body) {
+		return
+	}
 	switch {
 	case p == "/user":
 		f.write(w, r, 200, tether.User{Login: f.login, Name: "Zoe", AvatarURL: "https://avatars.githubusercontent.com/u/9"})

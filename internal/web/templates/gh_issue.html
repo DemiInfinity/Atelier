@@ -1,0 +1,59 @@
+{{define "head"}}{{template "gh-css"}}<link rel="stylesheet" href="/static/issues.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "gh-repohead" $v}}
+<main class="wrap stack-lg gh-page">
+  {{template "gh-notices" $v}}
+  <header class="issue-header stack-sm">
+    <div class="row-between align-start wrap-gap">
+      <h1 class="h-display issue-heading gh-break">{{$d.Title}} <span class="muted issue-number">#{{$d.Number}}</span></h1>
+      <a class="btn btn-sm btn-ghost" href="{{$d.GH}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+    </div>
+    <div class="row gap-sm wrap-gap issue-sub">
+      {{if eq $d.State "open"}}<span class="state-badge state-open">{{if $d.Draft}}Draft{{else}}Open{{end}}</span>
+      {{else if eq $d.State "merged"}}<span class="state-badge gh-state-merged">Merged</span>
+      {{else if eq $d.State "not_planned"}}<span class="state-badge state-not-planned">Closed as not planned</span>
+      {{else}}<span class="state-badge state-closed">Closed</span>{{end}}
+      <p class="muted row gap-sm wrap-gap">{{template "tether-person" $d.Author}}
+        {{if $d.Pull}}wants to merge {{if $d.Commits}}{{$d.Commits}} commit{{if ne $d.Commits 1}}s{{end}} {{end}}into <span class="mono gh-ref">{{$d.BaseRef}}</span> from {{if $d.HeadURL}}<a class="mono gh-ref" href="{{$d.HeadURL}}">{{$d.Head}}</a>{{else}}<span class="mono gh-ref">{{$d.Head}}</span>{{end}}
+        {{else}}opened this issue {{ago $d.Created}}{{end}}</p>
+      {{range $d.Labels}}<span class="pill gh-label">{{.}}</span>{{end}}
+    </div>
+    {{if $d.Pull}}
+    <nav class="tabs gh-subtabs" aria-label="Pull request">
+      <a href="{{$d.URL}}" {{if not $d.Files}}aria-current="page"{{end}}>Conversation</a>
+      <a href="{{$d.URL}}/files" {{if $d.Files}}aria-current="page"{{end}}>Files changed{{if $d.Changed}} <span class="pill">{{$d.Changed}}</span>{{end}}</a>
+      {{if or $d.Add $d.Del}}<span class="small push-right gh-churn"><span class="gh-add">+{{$d.Add}}</span> <span class="gh-del">−{{$d.Del}}</span></span>{{end}}
+    </nav>
+    {{end}}
+  </header>
+
+  {{if $d.Files}}
+  <div class="stack">{{template "gh-diffs" $d.Diffs}}</div>
+  {{else}}
+  <div class="col-main stack timeline gh-timeline">
+    <article class="tl-comment">
+      <header class="tl-comment-head">
+        {{template "tether-person" $d.Author}}
+        <span class="muted small">opened {{ago $d.Created}}</span>
+        <span class="pill push-right">Author</span>
+      </header>
+      <div class="tl-comment-body">
+        {{if $d.Body}}<div class="markdown gh-markdown">{{$d.Body}}</div>{{else}}<p class="muted"><em>No description provided.</em></p>{{end}}
+      </div>
+    </article>
+    {{range $d.Comments}}
+    <article class="tl-comment" id="comment-{{.ID}}">
+      <header class="tl-comment-head">
+        {{template "tether-person" .Author}}
+        <a class="muted-link small" href="#comment-{{.ID}}">{{ago .When}}</a>
+        <a class="small muted-link push-right" href="{{.GH}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="Open this comment on GitHub">↗</a>
+      </header>
+      <div class="tl-comment-body"><div class="markdown gh-markdown">{{.Body}}</div></div>
+    </article>
+    {{end}}
+    <p class="small muted gh-readonly">{{template "tether-icon" 14}} Read-only here. <a href="{{$d.GH}}" rel="noopener noreferrer nofollow" target="_blank">Comment on GitHub ↗</a></p>
+  </div>
+  {{end}}
+</main>
+{{end}}

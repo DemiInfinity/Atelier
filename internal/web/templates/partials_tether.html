@@ -4,7 +4,7 @@
 {{/* A GitHub person: pass a tetherPerson. Shows the amber Atelier mark when they publish an .atelier badge. */}}
 {{define "tether-person"}}<span class="tt-person">
   {{if .Avatar}}<img class="tt-avatar" src="{{.Avatar}}" alt="" width="20" height="20" loading="lazy" referrerpolicy="no-referrer">{{else}}<span class="tt-avatar tt-avatar-blank" aria-hidden="true">{{initial .Login}}</span>{{end}}
-  <a class="tt-login" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Login}}</a>
+  <a class="tt-login" href="{{.URL}}">{{.Login}}</a>{{if .GH}}<a class="tt-gh-out" href="{{.GH}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="{{.Login}} on GitHub" title="Open on GitHub">↗</a>{{end}}
   {{if .Atelier}}<span class="tt-mark" title="{{.Login}} uses Atelier"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">uses Atelier</span></span>
     {{if .Studio}}<a class="tt-studio" href="{{.Studio}}" rel="noopener noreferrer nofollow" target="_blank">Visit their studio</a>{{end}}{{end}}
 </span>{{end}}

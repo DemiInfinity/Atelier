@@ -1,0 +1,11 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}{{$d := .Data}}
+<main class="wrap narrow stack-lg">
+  {{template "gh-notices" $d.Base}}
+  <section class="tt-card stack">
+    <h1 class="h-display row gap-sm">{{template "tether-icon" 22}} {{if $d.NotFound}}Not on GitHub{{else}}GitHub didn't answer{{end}}</h1>
+    <p>{{$d.Message}}</p>
+    {{with $d.GH}}<p><a href="{{.}}" rel="noopener noreferrer nofollow" target="_blank">Try it on GitHub ↗</a></p>{{end}}
+  </section>
+</main>
+{{end}}

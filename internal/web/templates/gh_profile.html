@@ -1,0 +1,93 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap gh-page gh-profile">
+  {{template "gh-notices" $d}}
+  <div class="gh-profile-grid">
+    <aside class="gh-profile-side stack" aria-label="Profile">
+      {{if $d.Avatar}}<img class="gh-avatar-xl{{if $d.Org}} gh-avatar-org{{end}}{{if $d.Atelier}} gh-avatar-atelier{{end}}" src="{{$d.Avatar}}" alt="" width="260" height="260" referrerpolicy="no-referrer">
+      {{else}}<div class="gh-avatar-xl gh-avatar-blank{{if $d.Org}} gh-avatar-org{{end}}{{if $d.Atelier}} gh-avatar-atelier{{end}}" aria-hidden="true">{{initial $d.Person.Login}}</div>{{end}}
+      <div class="stack-sm">
+        {{if $d.Name}}<h1 class="h-display gh-name">{{$d.Name}}</h1><p class="gh-login">{{$d.Person.Login}}</p>
+        {{else}}<h1 class="h-display gh-name">{{$d.Person.Login}}</h1>{{end}}
+        <div class="row gap-sm wrap-gap">
+          {{if $d.Org}}<span class="pill">Organisation</span>{{end}}
+          <span class="gh-via">On GitHub · via Tether</span>
+        </div>
+      </div>
+      {{if $d.Atelier}}
+      <section class="gh-atelier stack-sm" aria-label="Atelier">
+        <p class="row gap-sm">{{template "gh-badge" $d.Person}}<span class="small">{{$d.Person.Login}} has a studio of their own.</span></p>
+        {{if $d.Studio}}<a class="btn btn-sm gh-studio-btn" href="{{$d.Studio}}" rel="noopener noreferrer nofollow" target="_blank">Visit their studio ↗</a>{{end}}
+      </section>
+      {{end}}
+      {{with $d.Bio}}<p class="gh-bio">{{.}}</p>{{end}}
+      <a class="btn btn-sm btn-ghost" href="{{$d.GH}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+      <ul class="gh-facts small">
+        {{if not $d.Org}}<li><strong>{{$d.P.Followers}}</strong> followers · <strong>{{$d.P.Following}}</strong> following</li>{{end}}
+        <li><strong>{{$d.P.PublicRepos}}</strong> public repositories</li>
+        {{with $d.Company}}<li>{{.}}</li>{{end}}
+        {{with $d.Location}}<li>{{.}}</li>{{end}}
+        {{if $d.Blog}}<li><a class="gh-ext" href="{{$d.Blog}}" rel="noopener noreferrer nofollow me" target="_blank">{{$d.BlogLabel}}</a></li>{{end}}
+        {{with $d.Twitter}}<li><a class="gh-ext" href="https://x.com/{{.}}" rel="noopener noreferrer nofollow me" target="_blank">@{{.}}</a></li>{{end}}
+        {{if not $d.P.CreatedAt.IsZero}}<li class="muted">On GitHub since {{date $d.P.CreatedAt}}</li>{{end}}
+      </ul>
+    </aside>
+
+    <section class="gh-profile-main stack-lg">
+      {{if $d.Readme}}
+      <article class="list-card">
+        <div class="list-head small mono muted">{{$d.ReadmeFrom}} · README.md</div>
+        <div class="markdown gh-markdown">{{$d.Readme}}</div>
+      </article>
+      {{end}}
+
+      {{if $d.Pinned}}
+      <section class="stack-sm" aria-labelledby="gh-pinned-h">
+        <h2 class="h-sm" id="gh-pinned-h">{{if eq $d.PinnedKind "pinned"}}Pinned{{else}}Popular repositories{{end}}</h2>
+        <ul class="gh-pins">
+          {{range $d.Pinned}}
+          <li class="gh-pin">
+            <div class="row gap-sm wrap-gap"><a class="gh-pin-name" href="{{.URL}}">{{.Name}}</a>{{if .Private}}<span class="pill">Private</span>{{end}}{{if .Archived}}<span class="pill">Archived</span>{{end}}</div>
+            {{with .Desc}}<p class="small muted">{{.}}</p>{{end}}
+            <p class="small gh-pin-meta">{{with .Lang}}<span><span class="gh-lang-dot" aria-hidden="true"></span>{{.}}</span>{{end}}<span>★ {{.Stars}}</span>{{if .Forks}}<span>{{.Forks}} forks</span>{{end}}</p>
+          </li>
+          {{end}}
+        </ul>
+      </section>
+      {{end}}
+
+      <section class="list-card" id="repositories" aria-labelledby="gh-repos-h">
+        <div class="list-head stack-sm">
+          <div class="row-between wrap-gap">
+            <h2 class="h-sm" id="gh-repos-h">Repositories</h2>
+            <nav class="tt-chips" aria-label="Sort">{{range $d.Sorts}}<a class="tt-chip" href="{{.URL}}" {{if .Active}}aria-current="true"{{end}}>{{.Label}}</a>{{end}}</nav>
+          </div>
+          <form method="get" action="/gh/{{$d.Person.Login}}#repositories" class="gh-repo-search" role="search">
+            <label for="gh-q" class="sr-only">Find a repository</label>
+            <input id="gh-q" type="search" name="q" value="{{$d.Q}}" maxlength="100" placeholder="Find a repository…">
+            {{if ne $d.Sort "updated"}}<input type="hidden" name="sort" value="{{$d.Sort}}">{{end}}
+            <button class="btn btn-sm" type="submit">Find</button>
+          </form>
+        </div>
+        {{with $d.ReposErr}}<p class="list-row small tt-error">{{.}}</p>{{end}}
+        <ul class="gh-rows">
+          {{range $d.Repos}}
+          <li class="gh-row">
+            <div class="gh-row-main">
+              <div class="row gap-sm wrap-gap"><a class="gh-row-title" href="{{.URL}}">{{.Name}}</a>{{if .Private}}<span class="pill">Private</span>{{end}}{{if .Fork}}<span class="pill">Fork</span>{{end}}{{if .Archived}}<span class="pill">Archived</span>{{end}}</div>
+              {{with .Desc}}<p class="small muted">{{.}}</p>{{end}}
+              <p class="small gh-pin-meta">{{with .Lang}}<span><span class="gh-lang-dot" aria-hidden="true"></span>{{.}}</span>{{end}}<span>★ {{.Stars}}</span>{{if not .Updated.IsZero}}<span class="muted">Updated {{ago .Updated}}</span>{{end}}</p>
+            </div>
+            <a class="btn btn-xs btn-ghost" href="{{.GH}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="Open {{.Name}} on GitHub">↗</a>
+          </li>
+          {{else}}
+          {{if not $d.ReposErr}}<li class="gh-row muted">{{if $d.Q}}No repositories match “{{$d.Q}}”.{{else}}No repositories.{{end}}</li>{{end}}
+          {{end}}
+        </ul>
+      </section>
+      {{template "gh-pager" $d.Pager}}
+    </section>
+  </div>
+</main>
+{{end}}

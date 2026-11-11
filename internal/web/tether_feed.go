@@ -27,7 +27,8 @@ type tetherFeedItem struct {
 	Repo   string    `json:"repo"`
 	Text   string    `json:"text"`   // "starred", "pushed to main", …
 	Detail string    `json:"detail"` // a title or tag
-	URL    string    `json:"url"`
+	URL    string    `json:"url"`    // on github.com
+	Local  string    `json:"local"`  // the same thing in Atelier (/gh/…); "" = the repository
 	When   time.Time `json:"when"`
 }
 
@@ -156,18 +157,25 @@ func (a *App) tetherEventItem(ev tether.Event) (tetherFeedItem, bool) {
 			it.Detail = pstr(p, "release", "tag_name")
 		}
 		it.URL = a.tetherHTMLURL(pstr(p, "release", "html_url"), repo+"/releases")
+		it.Local = ghLocalURL(repo + "/releases")
 	case "PullRequestEvent":
 		if pstr(p, "action") != "opened" {
 			return it, false
 		}
 		it.Kind, it.Text, it.Detail = "pull", "opened pull request #"+pstr(p, "number"), pstr(p, "pull_request", "title")
 		it.URL = a.tetherHTMLURL(pstr(p, "pull_request", "html_url"), repo+"/pulls")
+		if n := pstr(p, "number"); ghNumberRe.MatchString(n) {
+			it.Local = ghLocalURL(repo + "/pull/" + n)
+		}
 	case "IssuesEvent":
 		if pstr(p, "action") != "opened" {
 			return it, false
 		}
 		it.Kind, it.Text, it.Detail = "issue", "opened issue #"+pstr(p, "issue", "number"), pstr(p, "issue", "title")
 		it.URL = a.tetherHTMLURL(pstr(p, "issue", "html_url"), repo+"/issues")
+		if n := pstr(p, "issue", "number"); ghNumberRe.MatchString(n) {
+			it.Local = ghLocalURL(repo + "/issues/" + n)
+		}
 	default:
 		return it, false
 	}
@@ -213,7 +221,7 @@ func (a *App) tetherRefreshFeed(ctx context.Context, personID int64) error {
 				}
 				items = append(items, tetherFeedItem{Kind: "release", Actor: rp.Owner.Login, Avatar: tetherAvatar(rp.Owner.AvatarURL),
 					Repo: rp.FullName, Text: "released", Detail: eventExcerpt(name, 140), When: rel.PublishedAt,
-					URL: a.tetherHTMLURL(rel.HTMLURL, rp.FullName+"/releases")})
+					URL: a.tetherHTMLURL(rel.HTMLURL, rp.FullName+"/releases"), Local: ghLocalURL(rp.FullName + "/releases")})
 			}
 		}
 	}
@@ -290,11 +298,13 @@ type tetherLangChip struct {
 type tetherFeedView struct {
 	tetherFeedItem
 	Person tetherPerson
+	Link   string // in Atelier (/gh/…); URL stays the github.com link
 }
 
 type tetherTrendView struct {
 	tetherTrendRepo
 	Person tetherPerson
+	Link   string
 }
 
 // homeItem is a row of the blended activity feed: local or from GitHub.
@@ -350,13 +360,18 @@ func (a *App) tetherHomeData(ctx context.Context, personID int64, lang, account 
 	}
 	badges := a.tetherBadges(ctx, personID, logins)
 	for _, it := range feed.Items {
-		h.Feed = append(h.Feed, tetherFeedView{tetherFeedItem: it, Person: a.tetherPersonView(it.Actor, it.Avatar, badges)})
+		link := it.Local
+		if !strings.HasPrefix(link, "/gh/") || !tether.ValidRepo(it.Repo) {
+			link = ghLocalURL(it.Repo)
+		}
+		h.Feed = append(h.Feed, tetherFeedView{tetherFeedItem: it, Person: a.tetherPersonView(it.Actor, it.Avatar, badges), Link: link})
 	}
 	for i, rp := range trend.Repos {
 		if i >= 6 {
 			break
 		}
-		h.Trending = append(h.Trending, tetherTrendView{tetherTrendRepo: rp, Person: a.tetherPersonView(rp.Owner, rp.Avatar, badges)})
+		h.Trending = append(h.Trending, tetherTrendView{tetherTrendRepo: rp, Person: a.tetherPersonView(rp.Owner, rp.Avatar, badges),
+			Link: ghLocalURL(rp.FullName)})
 	}
 	a.tetherRefreshIfStale(ctx, personID, h.Lang)
 	return h

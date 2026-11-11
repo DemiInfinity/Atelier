@@ -1,0 +1,27 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "gh-repohead" $v}}
+<main class="wrap stack-lg gh-page">
+  {{template "gh-notices" $v}}
+  <h1 class="sr-only">Releases</h1>
+  {{range $d.Rows}}
+  <article class="list-card gh-release">
+    <header class="list-head row-between wrap-gap">
+      <div class="row gap-sm wrap-gap min0">
+        <h2 class="h-sm gh-break">{{.Name}}</h2>
+        {{if .Pre}}<span class="pill pill-amber">Pre-release</span>{{end}}{{if .Draft}}<span class="pill">Draft</span>{{end}}
+      </div>
+      <a class="btn btn-xs btn-ghost" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+    </header>
+    <div class="gh-release-body stack-sm">
+      <p class="small muted row gap-sm wrap-gap">{{if .Tree}}<a class="mono" href="{{.Tree}}">{{.Tag}}</a>{{else}}<span class="mono">{{.Tag}}</span>{{end}}{{if .Author.Login}} · {{template "tether-person" .Author}}{{end}}{{if not .When.IsZero}} · {{ago .When}}{{end}}</p>
+      {{with .Notes}}<div class="markdown gh-markdown gh-md-tight">{{.}}</div>{{else}}<p class="muted small">No release notes.</p>{{end}}
+    </div>
+  </article>
+  {{else}}
+  <div class="card empty"><p><strong>No releases on GitHub yet.</strong></p></div>
+  {{end}}
+  {{template "gh-pager" $d.Pager}}
+</main>
+{{end}}

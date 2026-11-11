@@ -1,0 +1,29 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "gh-repohead" $v}}
+<main class="wrap stack gh-page">
+  {{template "gh-notices" $v}}
+  <div class="toolbar">
+    {{template "gh-refs" $v}}
+    {{if $v.Path}}{{template "gh-crumbs" $v}}{{end}}
+  </div>
+  <section class="list-card" aria-labelledby="gh-commits-h">
+    <h1 class="list-head h-sm" id="gh-commits-h">Commits on {{$v.Ref}}{{if $v.Path}} · {{$v.Path}}{{end}}</h1>
+    <ul class="gh-rows">
+      {{range $d.Rows}}
+      <li class="gh-row">
+        <div class="gh-row-main">
+          <a class="gh-row-title" href="{{.URL}}">{{.Subject}}</a>
+          <span class="small muted row gap-sm wrap-gap">{{if .Author.Login}}{{template "tether-person" .Author}}{{else}}<strong class="text-2">{{.AuthorName}}</strong>{{end}} committed {{if not .When.IsZero}}{{ago .When}}{{end}}</span>
+        </div>
+        <div class="row gap-sm"><a class="btn btn-xs mono" href="{{.URL}}">{{.Short}}</a><a class="btn btn-xs btn-ghost" href="{{.GH}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="Open {{.Short}} on GitHub">↗</a></div>
+      </li>
+      {{else}}
+      <li class="gh-row muted">No commits.</li>
+      {{end}}
+    </ul>
+  </section>
+  {{template "gh-pager" $d.Pager}}
+</main>
+{{end}}

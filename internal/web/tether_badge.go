@@ -158,17 +158,39 @@ func (a *App) tetherBadges(ctx context.Context, personID int64, logins []string)
 	return out
 }
 
-// tetherPerson is a GitHub person as Tether shows them.
+// tetherBadgeNow is login's badge, checked right away (with the person's
+// client) when it isn't known or is stale. A failed check falls back to
+// whatever is cached. This is the lookup to reuse wherever one person's
+// badge matters (a profile page, Atelier Connect).
+func (a *App) tetherBadgeNow(ctx context.Context, c *tether.Client, login string) (store.TetherBadge, bool) {
+	if !tether.ValidLogin(login) {
+		return store.TetherBadge{}, false
+	}
+	b, err := a.db.TetherBadge(ctx, login)
+	if err == nil && time.Since(b.CheckedAt) <= tetherBadgeTTL {
+		return b, b.Present
+	}
+	if c != nil {
+		if fresh, cerr := a.tetherCheckBadge(ctx, c, login); cerr == nil {
+			return fresh, fresh.Present
+		}
+	}
+	return b, err == nil && b.Present
+}
+
+// tetherPerson is a GitHub person as Tether shows them. URL opens them in
+// Atelier (/gh/<login>); GH is their page on GitHub.
 type tetherPerson struct {
 	Login   string
 	Avatar  string
 	URL     string
+	GH      string
 	Atelier bool
 	Studio  string
 }
 
 func (a *App) tetherPersonView(login, avatar string, badges map[string]store.TetherBadge) tetherPerson {
-	p := tetherPerson{Login: login, Avatar: tetherAvatar(avatar), URL: a.tetherWebURL(url.PathEscape(login))}
+	p := tetherPerson{Login: login, Avatar: tetherAvatar(avatar), URL: ghLocalURL(login), GH: a.tetherWebURL(url.PathEscape(login))}
 	if b, ok := badges[strings.ToLower(login)]; ok && b.Present {
 		p.Atelier, p.Studio = true, b.Studio
 	}

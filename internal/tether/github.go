@@ -83,6 +83,14 @@ type Cache interface {
 	Put(ctx context.Context, key, etag string, body []byte)
 }
 
+// TimedCache is a Cache that also knows when each body was stored. With it,
+// a Client can answer from the cache without asking GitHub (MaxAge) and fall
+// back to what it has when GitHub can't be asked (StaleOK).
+type TimedCache interface {
+	Cache
+	GetAt(ctx context.Context, key string) (etag string, body []byte, at time.Time, ok bool)
+}
+
 // Client talks to GitHub with one token.
 type Client struct {
 	API    string // DefaultAPI when empty
@@ -90,6 +98,15 @@ type Client struct {
 	HTTP   *http.Client
 	Cache  Cache      // optional
 	OnRate func(Rate) // optional
+
+	// MaxAge > 0 (with a TimedCache): cached GETs younger than this are
+	// answered from the cache without contacting GitHub.
+	MaxAge time.Duration
+	// StaleOK (with a TimedCache): when GitHub is rate limited, unreachable or
+	// failing (5xx), cached GETs are answered from the cache and OnStale is
+	// told how old the answer is.
+	StaleOK bool
+	OnStale func(at time.Time, cause error)
 }
 
 var blocked sync.Map // client key → time.Time
@@ -137,8 +154,16 @@ func (c *Client) block(until time.Time) {
 // do sends one request. out may be nil. When cached is true and a Cache is
 // set, the response is stored and a 304 is answered from it.
 func (c *Client) do(ctx context.Context, method, path string, in, out any, cached bool) (http.Header, error) {
+	cacheKey := method + " " + path
+	if c.fresh(ctx, cached, method, cacheKey, out) {
+		return http.Header{}, nil
+	}
 	if until, ok := c.BlockedUntil(); ok {
-		return nil, &RateLimitError{Reset: until}
+		err := &RateLimitError{Reset: until}
+		if c.stale(ctx, cached, method, cacheKey, out, err) {
+			return http.Header{}, nil
+		}
+		return nil, err
 	}
 	u := path
 	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
@@ -165,7 +190,6 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, cache
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	cacheKey := method + " " + path
 	var cachedBody []byte
 	if cached && c.Cache != nil && method == http.MethodGet {
 		if etag, b, ok := c.Cache.Get(ctx, cacheKey); ok && etag != "" {
@@ -175,7 +199,11 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, cache
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't reach GitHub: %w", scrubErr(err))
+		err = fmt.Errorf("couldn't reach GitHub: %w", scrubErr(err))
+		if ctx.Err() == nil && c.stale(ctx, cached, method, cacheKey, out, err) {
+			return http.Header{}, nil
+		}
+		return nil, err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
@@ -186,10 +214,20 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, cache
 	switch {
 	case resp.StatusCode == http.StatusNotModified && cachedBody != nil:
 		raw = cachedBody
+		if c.MaxAge > 0 {
+			// Still current: restart its MaxAge.
+			c.Cache.Put(ctx, cacheKey, req.Header.Get("If-None-Match"), raw)
+		}
 	case limited(resp, raw):
 		reset := resetTime(resp.Header)
 		c.block(reset)
-		return resp.Header, &RateLimitError{Reset: reset}
+		rl := &RateLimitError{Reset: reset}
+		if c.stale(ctx, cached, method, cacheKey, out, rl) {
+			return resp.Header, nil
+		}
+		return resp.Header, rl
+	case resp.StatusCode >= 500 && c.stale(ctx, cached, method, cacheKey, out, &APIError{Status: resp.StatusCode}):
+		return resp.Header, nil
 	case resp.StatusCode >= 300:
 		var m struct {
 			Message string `json:"message"`
@@ -213,6 +251,41 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, cache
 		}
 	}
 	return resp.Header, nil
+}
+
+// fresh answers a GET from a TimedCache entry younger than MaxAge.
+func (c *Client) fresh(ctx context.Context, cached bool, method, key string, out any) bool {
+	if !cached || c.MaxAge <= 0 || method != http.MethodGet {
+		return false
+	}
+	tc, ok := c.Cache.(TimedCache)
+	if !ok {
+		return false
+	}
+	_, body, at, ok := tc.GetAt(ctx, key)
+	if !ok || time.Since(at) >= c.MaxAge || time.Since(at) < 0 {
+		return false
+	}
+	return out == nil || json.Unmarshal(body, out) == nil
+}
+
+// stale answers a GET from whatever a TimedCache holds, when allowed.
+func (c *Client) stale(ctx context.Context, cached bool, method, key string, out any, cause error) bool {
+	if !c.StaleOK || !cached || method != http.MethodGet {
+		return false
+	}
+	tc, ok := c.Cache.(TimedCache)
+	if !ok {
+		return false
+	}
+	_, body, at, ok := tc.GetAt(ctx, key)
+	if !ok || (out != nil && json.Unmarshal(body, out) != nil) {
+		return false
+	}
+	if c.OnStale != nil {
+		c.OnStale(at, cause)
+	}
+	return true
 }
 
 func scrubErr(err error) error {
@@ -319,7 +392,20 @@ type Repo struct {
 	Owner         User      `json:"owner"`
 	CreatedAt     time.Time `json:"created_at"`
 	PushedAt      time.Time `json:"pushed_at"`
-	Permissions   *struct {
+	UpdatedAt     time.Time `json:"updated_at"`
+	Homepage      string    `json:"homepage"`
+	Topics        []string  `json:"topics"`
+	OpenIssues    int       `json:"open_issues_count"`
+	Watchers      int       `json:"subscribers_count"`
+	License       *struct {
+		Key    string `json:"key"`
+		Name   string `json:"name"`
+		SPDXID string `json:"spdx_id"`
+	} `json:"license"`
+	Parent *struct {
+		FullName string `json:"full_name"`
+	} `json:"parent,omitempty"`
+	Permissions *struct {
 		Admin bool `json:"admin"`
 		Push  bool `json:"push"`
 		Pull  bool `json:"pull"`
@@ -336,6 +422,7 @@ type Issue struct {
 	RepositoryURL string     `json:"repository_url"`
 	User          User       `json:"user"`
 	Comments      int        `json:"comments"`
+	Labels        []Label    `json:"labels"`
 	PullRequest   *struct{}  `json:"pull_request,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
@@ -393,6 +480,12 @@ type Pull struct {
 	Merged         bool       `json:"merged"`
 	MergedAt       *time.Time `json:"merged_at"`
 	MergeCommitSHA string     `json:"merge_commit_sha"`
+	Comments       int        `json:"comments"`
+	Commits        int        `json:"commits"`
+	Additions      int        `json:"additions"`
+	Deletions      int        `json:"deletions"`
+	ChangedFiles   int        `json:"changed_files"`
+	Labels         []Label    `json:"labels"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	ClosedAt       *time.Time `json:"closed_at"`
@@ -422,6 +515,12 @@ type Release struct {
 	Prerelease  bool      `json:"prerelease"`
 	PublishedAt time.Time `json:"published_at"`
 	Author      User      `json:"author"`
+	Body        string    `json:"body"`
+}
+
+// Label is an issue or pull request label (its colour is ignored: untrusted).
+type Label struct {
+	Name string `json:"name"`
 }
 
 type Status struct {

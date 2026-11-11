@@ -1,0 +1,60 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "gh-repohead" $v}}
+<main class="wrap stack gh-page">
+  {{template "gh-notices" $v}}
+  <div class="toolbar">
+    {{template "gh-refs" $v}}
+    {{template "gh-crumbs" $v}}
+  </div>
+
+  {{with $d.Last}}
+  <div class="list-card">
+    <div class="list-head row-between wrap-gap">
+      {{template "gh-lastcommit" .}}
+      <a class="btn btn-sm" href="{{$v.CommitsURL}}">History</a>
+    </div>
+  </div>
+  {{end}}
+
+  <section class="list-card">
+    <div class="list-head row-between wrap-gap">
+      <div class="row gap-sm min0">
+        <h1 class="h-sm mono gh-file-name">{{$d.Name}}</h1>
+        <span class="small muted nowrap">{{bytes $d.Size}}{{with $d.Lines}} · {{.}} lines{{end}}</span>
+      </div>
+      <div class="row gap-sm">
+        {{if $d.IsMarkdown}}
+        <nav class="segmented" aria-label="View">
+          <a href="?plain=1" {{if not $d.Markdown}}aria-current="page"{{end}}>Code</a>
+          <a href="?" {{if $d.Markdown}}aria-current="page"{{end}}>Preview</a>
+        </nav>
+        {{end}}
+        <a class="btn btn-sm btn-ghost" href="{{$d.GHFile}}" rel="noopener noreferrer nofollow" target="_blank">View on GitHub ↗</a>
+      </div>
+    </div>
+    {{if $d.Unsupported}}
+      <div class="empty"><p><strong>This is a link or a submodule.</strong></p><p><a href="{{$d.GHFile}}" rel="noopener noreferrer nofollow" target="_blank">View it on GitHub ↗</a></p></div>
+    {{else if $d.Image}}
+      <div class="gh-image"><img src="{{$d.Image}}" alt="{{$d.Name}}" loading="lazy" referrerpolicy="no-referrer"></div>
+    {{else if $d.TooLarge}}
+      <div class="empty"><p><strong>This file is too large to show here.</strong></p><p><a href="{{$d.GHFile}}" rel="noopener noreferrer nofollow" target="_blank">View it on GitHub ↗</a></p></div>
+    {{else if $d.Binary}}
+      <div class="empty"><p><strong>Binary file not shown.</strong></p><p><a href="{{$d.GHFile}}" rel="noopener noreferrer nofollow" target="_blank">View it on GitHub ↗</a> ({{bytes $d.Size}})</p></div>
+    {{else if $d.Markdown}}
+      <div class="markdown gh-markdown">{{$d.Markdown}}</div>
+    {{else}}
+      <div class="table-scroll">
+        <table class="code">
+          <caption class="sr-only">Contents of {{$d.Name}}</caption>
+          <tbody>
+          {{range $d.Code}}<tr id="L{{.N}}"><td class="ln"><a href="#L{{.N}}">{{.N}}</a></td><td class="lc">{{.Text}}</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    {{end}}
+  </section>
+</main>
+{{end}}

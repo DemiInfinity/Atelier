@@ -71,7 +71,7 @@
           <span class="feed-chip" aria-hidden="true">{{template "tether-icon" 14}}</span>
           <div class="feed-body">
             <div class="feed-meta"><span class="feed-source">GitHub</span>{{template "tether-via"}}<span class="small muted">{{ago .When}}</span></div>
-            <p class="row gap-sm wrap-gap">{{template "tether-person" .Person}} <span>{{.Text}}</span> <a href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Repo}}</a></p>
+            <p class="row gap-sm wrap-gap">{{template "tether-person" .Person}} <span>{{.Text}}</span> <a href="{{.Link}}">{{.Repo}}</a> <a class="tt-gh-out" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="Open on GitHub" title="Open on GitHub">↗</a></p>
             {{with .Detail}}<p class="small tt-detail">{{.}}</p>{{end}}
           </div>
         </li>
@@ -96,7 +96,7 @@
         {{if .Connected}}<a class="small tether-ink push-right" href="/settings/tether">Settings</a>{{else}}<span class="small tether-ink push-right">Not connected</span>{{end}}
       </div>
       {{if .Connected}}
-      <p class="small tether-muted row gap-sm">{{if .Avatar}}<img class="tt-avatar" src="{{.Avatar}}" alt="" width="20" height="20" referrerpolicy="no-referrer">{{end}}Linked to <a class="tt-login" href="{{.Profile}}" rel="noopener noreferrer" target="_blank">{{.Login}}</a></p>
+      <p class="small tether-muted row gap-sm">{{if .Avatar}}<img class="tt-avatar" src="{{.Avatar}}" alt="" width="20" height="20" referrerpolicy="no-referrer">{{end}}Linked to <a class="tt-login" href="/gh/{{.Login}}">{{.Login}}</a> <a class="tt-gh-out" href="{{.Profile}}" rel="noopener noreferrer" target="_blank" aria-label="{{.Login}} on GitHub" title="Open on GitHub">↗</a></p>
       {{with .Error}}<p class="small tt-error">{{.}}</p>{{end}}
       <form method="get" action="/search" role="search" class="row gap-sm"><input type="search" name="q" placeholder="Search GitHub" aria-label="Search GitHub" maxlength="200"><input type="hidden" name="src" value="github"><button class="btn btn-tether btn-sm" type="submit">Go</button></form>
       {{else}}
@@ -115,7 +115,7 @@
       <ul class="tt-list">
         {{range .Trending}}
         <li>
-          <a class="tt-repo" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.FullName}}</a>
+          <span><a class="tt-repo" href="{{.Link}}">{{.FullName}}</a> <a class="tt-gh-out" href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="Open on GitHub" title="Open on GitHub">↗</a></span>
           {{with .Description}}<span class="small">{{.}}</span>{{end}}
           <span class="small row gap-sm wrap-gap">{{template "tether-person" .Person}}<span class="tt-stars">★ {{.Stars}}{{with .Language}} · {{.}}{{end}}</span></span>
         </li>

@@ -1,0 +1,61 @@
+{{define "head"}}{{template "gh-css"}}{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "gh-repohead" $v}}
+<main class="wrap layout-repo gh-page">
+  <section class="col-main stack">
+  {{template "gh-notices" $v}}
+  {{if $d.Empty}}
+    <div class="card empty"><p><strong>This repository is empty on GitHub.</strong></p><p class="muted"><a href="{{$v.GH}}" rel="noopener noreferrer nofollow" target="_blank">Open it on GitHub ↗</a></p></div>
+  {{else}}
+    <div class="toolbar">
+      {{template "gh-refs" $v}}
+      {{if $v.Path}}{{template "gh-crumbs" $v}}{{end}}
+      <a class="btn btn-sm btn-ghost push-right" href="{{$v.GH}}/tree/{{$v.Ref}}{{if $v.Path}}/{{$v.Path}}{{end}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+    </div>
+
+    <section class="list-card">
+      <div class="list-head row-between wrap-gap">
+        {{template "gh-lastcommit" $d.Last}}
+        <a class="small muted-link nowrap" href="{{$v.CommitsURL}}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15 14"/></svg>
+          Commits</a>
+      </div>
+      <div class="table-scroll">
+        <table class="files">
+          <caption class="sr-only">Files in {{if $v.Path}}{{$v.Path}}{{else}}{{$v.Repo.Name}}{{end}}</caption>
+          <tbody>
+          {{range $d.Rows}}
+            <tr>
+              <td class="files-name">
+                {{if .Dir}}<svg class="icon-dir" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6 a1 1 0 0 1 1-1 H9 L11 7 H20 a1 1 0 0 1 1 1 V18 a1 1 0 0 1-1 1 H4 a1 1 0 0 1-1-1 Z"/></svg>
+                {{else}}<svg class="icon-file" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3 H14 L19 8 V21 H6 Z M14 3 V8 H19"/></svg>{{end}}
+                {{if eq .Kind "submodule"}}<a href="{{.URL}}" rel="noopener noreferrer nofollow" target="_blank">{{.Name}} ↗</a>{{else}}<a href="{{.URL}}">{{.Name}}</a>{{end}}
+              </td>
+            </tr>
+          {{else}}
+            <tr><td class="muted">This folder is empty.</td></tr>
+          {{end}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {{if $d.ReadmeName}}
+    <section class="list-card">
+      <div class="list-head row gap-sm">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5 H10 a2 2 0 0 1 2 2 V20 a2 2 0 0 0-2-2 H4 Z M20 5 H14 a2 2 0 0 0-2 2 V20 a2 2 0 0 1 2-2 H20 Z"/></svg>
+        <h2 class="h-sm">{{$d.ReadmeName}}</h2>
+      </div>
+      {{if $d.ReadmeHTML}}<div class="markdown gh-markdown">{{$d.ReadmeHTML}}</div>
+      {{else if $d.ReadmeText}}<pre class="plain">{{$d.ReadmeText}}</pre>{{end}}
+    </section>
+    {{end}}
+  {{end}}
+  </section>
+
+  <aside class="col-side stack-lg">
+    {{template "gh-about" $v}}
+  </aside>
+</main>
+{{end}}

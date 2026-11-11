@@ -51,7 +51,8 @@ type searchCodeHit struct {
 type searchGHRepo struct {
 	tether.Repo
 	Person   tetherPerson
-	URL      string
+	URL      string // /gh/<owner>/<repo>
+	GHURL    string // on github.com
 	Desc     string
 	InStudio string // "owner/name" in Atelier when already mirrored
 }
@@ -62,7 +63,8 @@ type searchGHItem struct {
 	Repo   string
 	State  string
 	IsPull bool
-	URL    string
+	URL    string // /gh/…
+	GHURL  string // on github.com
 	Person tetherPerson
 }
 
@@ -232,7 +234,7 @@ func (a *App) searchGitHub(ctx context.Context, who Actor, q string, d *searchDa
 			continue
 		}
 		g := searchGHRepo{Repo: rp, Person: a.tetherPersonView(rp.Owner.Login, rp.Owner.AvatarURL, badges),
-			URL: a.tetherWebURL(rp.FullName), Desc: eventExcerpt(rp.Description, 200)}
+			URL: ghLocalURL(rp.FullName), GHURL: a.tetherWebURL(rp.FullName), Desc: eventExcerpt(rp.Description, 200)}
 		if _, err := a.db.RepoByName(ctx, mine.Name, rp.Name); err == nil {
 			g.InStudio = mine.Name + "/" + rp.Name
 		}
@@ -249,7 +251,8 @@ func (a *App) searchGitHub(ctx context.Context, who Actor, q string, d *searchDa
 		}
 		d.GHItems = append(d.GHItems, searchGHItem{Number: is.Number, Title: eventExcerpt(is.Title, 200), Repo: repo,
 			State: is.State, IsPull: is.IsPull(), Person: a.tetherPersonView(is.User.Login, is.User.AvatarURL, badges),
-			URL: a.tetherWebURL(fmt.Sprintf("%s/%s/%d", repo, kind, is.Number))})
+			URL:   ghLocalURL(fmt.Sprintf("%s/%s/%d", repo, kind, is.Number)),
+			GHURL: a.tetherWebURL(fmt.Sprintf("%s/%s/%d", repo, kind, is.Number))})
 	}
 }
 
@@ -262,7 +265,11 @@ func (a *App) tetherMirrorToStudio(w http.ResponseWriter, r *http.Request) {
 	who := a.actor(r)
 	full := strings.TrimSpace(r.FormValue("repo"))
 	back := "/search?" + url.Values{"q": {r.FormValue("q")}, "src": {r.FormValue("src")}}.Encode()
-	fail := func(msg string) { http.Redirect(w, r, back+"&err="+url.QueryEscape(msg), http.StatusSeeOther) }
+	sep := "&"
+	if b := r.FormValue("back"); ghSafeBack(b) {
+		back, sep = b, "?" // a /gh/… page (gh.go): errors go back there
+	}
+	fail := func(msg string) { http.Redirect(w, r, back+sep+"err="+url.QueryEscape(msg), http.StatusSeeOther) }
 	if !tether.ValidRepo(full) {
 		fail("That isn't a GitHub repository.")
 		return

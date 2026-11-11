@@ -1,0 +1,40 @@
+{{define "head"}}{{template "gh-css"}}<link rel="stylesheet" href="/static/issues.css">{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$v := $d.V}}
+{{template "gh-repohead" $v}}
+<main class="wrap stack gh-page">
+  {{template "gh-notices" $v}}
+  <section class="list-card" aria-labelledby="gh-items-h">
+    <h1 id="gh-items-h" class="sr-only">{{if $d.Pulls}}Pull requests{{else}}Issues{{end}}</h1>
+    <div class="list-head issues-head">
+      <nav class="issues-states" aria-label="State">
+        <a href="{{$d.OpenURL}}" {{if eq $d.State "open"}}aria-current="page"{{end}}><span>Open</span></a>
+        <a href="{{$d.ClosedURL}}" {{if eq $d.State "closed"}}aria-current="page"{{end}}><span>Closed</span></a>
+      </nav>
+      <a class="small" href="{{$v.GH}}/{{if $d.Pulls}}pulls{{else}}issues{{end}}" rel="noopener noreferrer nofollow" target="_blank">Open on GitHub ↗</a>
+    </div>
+    {{range $d.Rows}}
+    <div class="list-row issue-row">
+      {{if eq .State "open"}}<svg class="issue-icon is-open" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" role="img" aria-label="Open"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+      {{else if eq .State "merged"}}<svg class="issue-icon gh-merged" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" role="img" aria-label="Merged"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7 V17 M6 9 c0 3 4 3 10 3"/></svg>
+      {{else}}<svg class="issue-icon is-closed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Closed"><circle cx="12" cy="12" r="9"/><path d="M8 12.5 L11 15.5 L16.5 9"/></svg>{{end}}
+      <div class="stack-xs min0 grow">
+        <div class="issue-title-line">
+          <a class="issue-title" href="{{.URL}}">{{.Title}}</a>
+          {{if .Draft}}<span class="pill">Draft</span>{{end}}
+          {{range .Labels}}<span class="pill gh-label">{{.}}</span>{{end}}
+        </div>
+        <p class="small muted row gap-sm wrap-gap">#{{.Number}} opened {{ago .Created}} by {{template "tether-person" .Author}}</p>
+      </div>
+      <div class="row gap-sm">
+        {{if .Comments}}<span class="small muted issue-comments" aria-label="{{.Comments}} comments"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5 H20 V16 H9 L5 20 V16 H4 Z"/></svg>{{.Comments}}</span>{{end}}
+        <a class="btn btn-xs btn-ghost" href="{{.GH}}" rel="noopener noreferrer nofollow" target="_blank" aria-label="Open #{{.Number}} on GitHub">↗</a>
+      </div>
+    </div>
+    {{else}}
+    <div class="empty"><p class="muted">No {{$d.State}} {{if $d.Pulls}}pull requests{{else}}issues{{end}}{{if gt $d.Pager.Page 1}} on this page{{end}}.</p></div>
+    {{end}}
+  </section>
+  {{template "gh-pager" $d.Pager}}
+</main>
+{{end}}
