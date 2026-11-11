@@ -1,0 +1,10 @@
+{{/* Shown across the app to the owner while remote access is on (tunnel.go). */}}
+{{define "tunnel-banner"}}{{with tunnelBanner .Me .Accounts}}
+<link rel="stylesheet" href="/static/tunnel.css">
+<div class="tn-banner" role="status">
+  <span class="tn-banner-dot" aria-hidden="true"></span>
+  <span><strong>Remote access is on</strong>{{if .Address}} · <span class="mono">{{.Address}}</span>{{else}} · starting…{{end}}</span>
+  <a class="tn-banner-link" href="/settings/remote">Details</a>
+  <form method="post" action="/settings/remote/off"><button class="btn btn-sm btn-danger" type="submit">Turn off</button></form>
+</div>
+{{end}}{{end}}

@@ -137,32 +137,62 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Web Push (needs HTTPS and a push sender on the server, see pwa.go). The
-// payload is {"title", "body", "url"}; an empty push opens the inbox.
+// Web Push (needs HTTPS and a push sender on the server, see push.go). The
+// payload is {"title", "body", "url", "tag", "badge"}; an empty push opens the
+// inbox. Only same-origin URLs are ever opened.
+function sameOriginURL(raw) {
+  try {
+    const u = new URL(typeof raw === 'string' ? raw : '', self.location.origin);
+    if (u.origin === self.location.origin && typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//')) {
+      return u.pathname + u.search + u.hash;
+    }
+  } catch (e) { /* fall through */ }
+  return '/notifications';
+}
+
+function setBadge(n) {
+  const nav = self.navigator;
+  if (!nav || typeof n !== 'number' || !isFinite(n)) return Promise.resolve();
+  try {
+    if (n > 0 && nav.setAppBadge) return nav.setAppBadge(n).catch(() => {});
+    if (n <= 0 && nav.clearAppBadge) return nav.clearAppBadge().catch(() => {});
+  } catch (e) { /* unsupported */ }
+  return Promise.resolve();
+}
+
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
-  const title = data.title || 'Atelier';
-  const url = typeof data.url === 'string' && data.url.startsWith('/') && !data.url.startsWith('//') ? data.url : '/notifications';
-  event.waitUntil(self.registration.showNotification(title, {
-    body: data.body || 'Something needs you.',
-    icon: '/static/icons/icon-192.png',
-    badge: '/static/icons/maskable-192.png',
-    data: { url },
-    tag: data.tag || url,
-  }));
+  const title = typeof data.title === 'string' && data.title ? data.title : 'Atelier';
+  const url = sameOriginURL(data.url);
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, {
+      body: typeof data.body === 'string' && data.body ? data.body : 'Something needs you.',
+      icon: '/static/icons/icon-192.png',
+      badge: '/static/icons/maskable-192.png',
+      data: { url },
+      tag: typeof data.tag === 'string' && data.tag ? data.tag : url,
+    }),
+    setBadge(data.badge),
+  ]));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/notifications';
+  const url = sameOriginURL(event.notification.data && event.notification.data.url);
+  const target = new URL(url, self.location.origin).href;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-    for (const c of list) {
-      if (new URL(c.url).origin === self.location.origin && 'focus' in c) {
-        c.navigate(url);
-        return c.focus();
+    const mine = list.filter((c) => new URL(c.url).origin === self.location.origin);
+    // Already showing that page: just bring it forward.
+    for (const c of mine) {
+      if (c.url === target && 'focus' in c) return c.focus();
+    }
+    // Otherwise reuse an open Atelier window, else open a new one.
+    for (const c of mine) {
+      if ('navigate' in c && 'focus' in c) {
+        return c.focus().then((fc) => (fc || c).navigate(target)).catch(() => self.clients.openWindow(target));
       }
     }
-    return self.clients.openWindow(url);
+    return self.clients.openWindow(target);
   }));
 });

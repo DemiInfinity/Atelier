@@ -16,13 +16,12 @@ package web
 // On a plain-HTTP LAN address pwa.js doesn't register anything and the site
 // works exactly as before; installing to the home screen needs HTTPS.
 //
-// Web Push is not built yet. The hook point is pushHook below: when a push
-// sender sets it, every event that notifies someone is handed to it once per
-// recipient (the same people the inbox notifies, never the person who did it),
-// so the sender (VAPID keys in the data dir, subscriptions per device, opt-in
-// under Settings → Notifications) plugs in without touching the notifications
-// feature. static/sw.js already shows a notification on "push" and opens its
-// URL on click. Web Push needs HTTPS too.
+// Web Push: pushHook below is set by push.go. Every event that notifies
+// someone is handed to it once per recipient (the same people the inbox
+// notifies, never the person who did it); push.go applies the person's
+// preferences and sends to their devices in the background. static/sw.js
+// shows the notification on "push" and opens its URL on click. Web Push
+// needs HTTPS too (or http://localhost).
 
 import (
 	"context"
@@ -55,13 +54,14 @@ func init() {
 type PushMessage struct {
 	PersonID     int64
 	Kind         string
+	Reason       string // Event.Reason ("mention", "review_requested"…), may be empty
 	Title, Body  string
 	URL          string
 	RepoFullName string
 }
 
-// pushHook sends a push to the person's subscribed devices. nil (the default)
-// means Web Push is off and nothing happens.
+// pushHook sends a push to the person's subscribed devices (push.go sets it;
+// nil means Web Push is off). It must return quickly.
 var pushHook func(ctx context.Context, a *App, m PushMessage)
 
 // pwaPushHandler fans an event out to pushHook, one message per recipient.
@@ -89,7 +89,7 @@ func pwaPushHandler(ctx context.Context, a *App, ev Event) {
 		if ownAction(ev.Actor, id) {
 			continue
 		}
-		m := PushMessage{PersonID: id, Kind: ev.Kind, Title: ev.Title, Body: ev.Detail, URL: safeLocalURL(ev.URL)}
+		m := PushMessage{PersonID: id, Kind: ev.Kind, Reason: ev.Reason, Title: ev.Title, Body: ev.Detail, URL: safeLocalURL(ev.URL)}
 		if repo != nil {
 			m.RepoFullName = repo.FullName()
 		}

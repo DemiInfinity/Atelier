@@ -52,6 +52,15 @@ const (
 	CapOpen       = "open"       // "Open in editor / Fork / Finder" (Phase 5)
 	CapBackups    = "backups"    // store backup copies (later)
 	CapWorkspaces = "workspaces" // device workspaces (Phase 5)
+
+	// CapAgents is advertised by every runner that understands agent steps
+	// (Step.Agent). Agent jobs only go to runners that send it, so an older
+	// runner never gets one it would fail with "neither run nor uses".
+	CapAgents = "agents"
+	// CapClaudeCode: Claude Code is installed and signed in on this device
+	// (atelier-runner claude-code enable), so it can run agents with
+	// engine: claude-code against the owner's Claude subscription.
+	CapClaudeCode = "claude-code"
 )
 
 // Status values for jobs and steps.
@@ -170,13 +179,13 @@ type Step struct {
 // The runner connects to MCPURL with the job token and offers the model only
 // the tools listed here.
 type AgentStep struct {
-	Engine         string   `json:"engine"` // "claude"
-	Model          string   `json:"model"`
-	Effort         string   `json:"effort"`
+	Engine         string   `json:"engine"` // "claude" (Claude API) or "claude-code" (Claude Code on the runner)
+	Model          string   `json:"model"`  // "" with claude-code: Claude Code's default
+	Effort         string   `json:"effort"` // "" with claude-code: Claude Code's default
 	Task           string   `json:"task"`
 	Tools          []string `json:"tools"`      // MCP tool names, e.g. "pulls.diff"
 	MaxTurns       int      `json:"max_turns"`  // model requests
-	MaxTokens      int      `json:"max_tokens"` // budget: output + uncached input tokens over the whole run
+	MaxTokens      int      `json:"max_tokens"` // budget: output + uncached input tokens over the whole run (0 with claude-code)
 	TimeoutMinutes int      `json:"timeout_minutes"`
 	MCPURL         string   `json:"mcp_url"`
 	WorkflowName   string   `json:"workflow_name"`

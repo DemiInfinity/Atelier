@@ -131,6 +131,28 @@ func (a *App) agentGateJobs(ctx context.Context, rp store.Repo, wf *workflow.Wor
 
 // ---------- runner hand-off and job tokens ----------
 
+// agentJobCaps lists the runner capabilities an agent job needs: every agent
+// job needs a runner that understands agent steps (older runners don't send
+// "agents" and fail them), and engine: claude-code also needs Claude Code
+// signed in on that device. It reads the stored job, whose agent step
+// carries with.engine for claude-code. nil for ordinary jobs.
+func agentJobCaps(j store.ActionsJob) []string {
+	if j.JobKey != workflow.AgentJobID || j.Payload == "" {
+		return nil
+	}
+	pj, err := actDecodeJob(j.Payload)
+	if err != nil || !workflow.IsAgenticFile(pj.Workflow) {
+		return nil
+	}
+	caps := []string{actions.CapAgents}
+	for _, st := range pj.Steps {
+		if st.ID == workflow.AgentStepID && st.With[workflow.AgentWithEngine] == workflow.AgentEngineClaudeCode {
+			caps = append(caps, actions.CapClaudeCode)
+		}
+	}
+	return caps
+}
+
 // prepareAgentJob fills in the agent step when a runner takes an agent job,
 // records the job for its token scopes, and remembers the owner's approval of
 // the tool list. It returns an error message for the job, or "".
@@ -276,6 +298,7 @@ func (a *App) triggerAgentIssue(ctx context.Context, rp store.Repo, ev Event, ac
 // agentRunUsage is one run's token usage, read from the agent job's outputs.
 type agentRunUsage struct {
 	Model                                string
+	Subscription                         bool // engine: claude-code: usage counts against the Claude subscription, nothing is billed
 	Turns                                int64
 	Input, Output, CacheRead, CacheWrite int64
 	Cost                                 float64
@@ -299,7 +322,15 @@ func agentUsageFromJob(j store.ActionsJob) (agentRunUsage, bool) {
 	}
 	u := agentRunUsage{Model: o["model"], Turns: agentOutputInt(o, "turns"), Input: agentOutputInt(o, "input_tokens"),
 		Output: agentOutputInt(o, "output_tokens"), CacheRead: agentOutputInt(o, "cache_read_tokens"),
-		CacheWrite: agentOutputInt(o, "cache_write_tokens"), Stop: o["stop"]}
+		CacheWrite: agentOutputInt(o, "cache_write_tokens"), Stop: o["stop"], Subscription: o["engine"] == workflow.AgentEngineClaudeCode}
+	if u.Subscription {
+		// Claude Code's own figure, if it reported one, is what the run would
+		// have cost at API prices; nothing is billed, so no estimate of ours.
+		if c, err := strconv.ParseFloat(strings.TrimSpace(o["cost_usd"]), 64); err == nil && c >= 0 && c < 1e6 {
+			u.Cost, u.HasCost = c, true
+		}
+		return u, true
+	}
 	if c, err := strconv.ParseFloat(strings.TrimSpace(o["cost_usd"]), 64); err == nil && c >= 0 && c < 1e6 {
 		u.Cost, u.HasCost = c, true
 	} else {
@@ -316,6 +347,12 @@ func (u agentRunUsage) Tokens() string {
 
 // CostText is the estimated cost, labelled as an estimate.
 func (u agentRunUsage) CostText() string {
+	if u.Subscription {
+		if u.HasCost {
+			return "subscription usage (≈ " + agentDollars(u.Cost) + " at API prices, not billed)"
+		}
+		return "subscription usage"
+	}
 	if !u.HasCost {
 		return "no estimate for this model"
 	}
@@ -419,7 +456,7 @@ func (a *App) agentPanel(ctx context.Context, v *repoView, wf *workflow.Workflow
 			for _, j := range jobs {
 				if u, ok := agentUsageFromJob(j); ok {
 					row.Usage = &u
-					if u.HasCost {
+					if u.HasCost && !u.Subscription {
 						total, priced = total+u.Cost, true
 					}
 				}
@@ -440,9 +477,10 @@ type agentTemplate struct {
 }
 
 var agentTemplateSummaries = map[string]string{
-	"review-helper.md": "On every pull request: reads the diff and the linked issue, posts one summary comment and up to five inline notes. It can't merge.",
-	"weekly-tidy.md":   "Every Monday: closes issues fixed by merged pull requests (with a comment) and labels stale ones.",
-	"release-notes.md": "When you run it: drafts release notes since the last release as a draft release for you to publish.",
+	"review-helper.md":             "On every pull request: reads the diff and the linked issue, posts one summary comment and up to five inline notes. It can't merge.",
+	"weekly-tidy.md":               "Every Monday: closes issues fixed by merged pull requests (with a comment) and labels stale ones.",
+	"release-notes.md":             "When you run it: drafts release notes since the last release as a draft release for you to publish.",
+	"review-helper-claude-code.md": "The review helper on Claude Code: runs on a runner where you're signed in to Claude Code, so it uses your Claude subscription instead of an API key.",
 }
 
 func agentTemplates() []agentTemplate {
@@ -457,7 +495,7 @@ func agentTemplates() []agentTemplate {
 		out = append(out, agentTemplate{File: e.Name(), Title: wf.Name, Summary: agentTemplateSummaries[e.Name()], Text: string(b),
 			ID: "agent-tpl-" + strings.TrimSuffix(e.Name(), ".md")})
 	}
-	order := []string{"review-helper.md", "weekly-tidy.md", "release-notes.md"}
+	order := []string{"review-helper.md", "review-helper-claude-code.md", "weekly-tidy.md", "release-notes.md"}
 	sort.SliceStable(out, func(i, j int) bool {
 		return slices.Index(order, out[i].File) < slices.Index(order, out[j].File)
 	})

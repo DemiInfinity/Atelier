@@ -174,6 +174,15 @@ docker run --rm -v atelier_atelier-data:/data -v atelier_atelier-backups:/backup
 docker start atelier
 ```
 
+### Remote access (tunnel)
+
+**Settings → Remote access** reaches your Atelier from outside the home network through a Cloudflare Tunnel, with no port forwarding. It is **off by default**; a new install or a full restore is always off. While it's on, a banner across the app says so and has a **Turn off** button. Turning it off kills `cloudflared`, closes every remote connection and signs out every session started remotely. From the shell: `docker exec atelier atelier tunnel off`.
+
+- **Quick tunnel:** no account. You get a random `https://….trycloudflare.com` address that changes every time it starts.
+- **Named tunnel:** a stable hostname on your own domain. Create a tunnel in Cloudflare Zero Trust, paste its token (stored encrypted, and re-encrypted by `atelier secrets rotate-key`), and point the public hostname's service at `http://127.0.0.1:3001`, never port 3000.
+
+Remote requests get only what you expose: web UI and git over HTTPS by default, MCP, Pages and the API if you tick them, and never the registries. Everything else is a 404. Remotely, browsers sign in with passkeys only; your password is refused. Git and APIs need access tokens, even for public repos. A passkey belongs to one address, so at home you create a one-time link that lets the remote browser add its own passkey. The page also logs who connected (time, IP, country, what, signed in) for 7 days. `ATELIER_TUNNEL_LISTEN` (default `127.0.0.1:3001`) and `ATELIER_CLOUDFLARED` (default `cloudflared`, included in the image) rarely need changing.
+
 ### Importing repositories
 
 **Settings → Import** brings repositories in from Gitea/Forgejo (server URL and token: your own and your organizations' repositories), GitHub (token) or any git URL (optional username and token), into your personal account or a company account. Pick the repositories and their names; they import in the background, with visibility and descriptions carried over. Tick **Keep syncing as a mirror** to fetch from the source every `ATELIER_MIRROR_INTERVAL` minutes (default 30). Only mirrors store their token (in the database, never shown again); one-off imports forget it when they finish. Issues and pull requests aren't imported yet.
@@ -262,7 +271,7 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 
 **Phase 4: done**
 - MCP server at `/mcp` (32 tools) with MCP tokens and a call log: Settings → MCP
-- Agentic workflows: Markdown files in `.atelier/workflows/` run Claude on your own runners, with an approval gate, a tool allowlist and turn/token/time limits (needs an `ANTHROPIC_API_KEY` secret); templates in `docs/agents/`
+- Agentic workflows: Markdown files in `.atelier/workflows/` run Claude on your own runners, with an approval gate, a tool allowlist and turn/token/time limits (`engine: claude` needs an `ANTHROPIC_API_KEY` secret; `engine: claude-code` runs Claude Code on a runner where you're signed in, so it uses your Claude subscription and needs no key: `atelier-runner claude-code enable`); templates in `docs/agents/`
 - Tether: connect GitHub, search and feed, popular this week, repo links (home Atelier or GitHub), issue and comment sync, checks for GitHub pull requests, Merge on GitHub, and the opt-in "I use Atelier" badge
 - Apps and bots: GitHub-style signed webhooks, bot accounts (comment, suggest, checks, push-only git access, never merge), an `/api/v3` subset, Review on GitHub through Tether
 - Security: secret scanning with push protection (`.atelier/secret-scanning.yml` allowlist), masking in Actions logs, history scans, dependency update pull requests with OSV advisories

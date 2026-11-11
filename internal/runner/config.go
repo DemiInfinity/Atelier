@@ -35,6 +35,21 @@ type Config struct {
 	DiscoveryPaths []string `json:"discovery_paths,omitempty"`
 	// CodeloadURL overrides https://codeload.github.com (tests, mirrors).
 	CodeloadURL string `json:"codeload_url,omitempty"`
+	// ClaudeCodePath is the claude binary checked by `atelier-runner
+	// claude-code enable` (services start with a minimal PATH). Empty: look
+	// for claude on PATH.
+	ClaudeCodePath string `json:"claude_code_path,omitempty"`
+}
+
+// AdvertisedCaps are the capabilities sent to the server: the ones switched
+// on in the config, plus "agents" when jobs are on, since this runner
+// understands agent steps.
+func (c *Config) AdvertisedCaps() []string {
+	out := append([]string(nil), c.Capabilities...)
+	if c.HasCap(actions.CapJobs) && !slices.Contains(out, actions.CapAgents) {
+		out = append(out, actions.CapAgents)
+	}
+	return out
 }
 
 // DefaultConfigPath is os.UserConfigDir()/atelier-runner/config.json.

@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -435,6 +436,11 @@ func queuedHint(runners []store.ActionsRunner, j store.ActionsJob, offlineAfter 
 	want := strings.Join(j.RunsOn, ", ")
 	if j.NeedsDocker {
 		want += " (with Docker)"
+	}
+	if caps := agentJobCaps(j); slices.Contains(caps, actions.CapClaudeCode) {
+		want += " (with Claude Code: atelier-runner claude-code enable)"
+	} else if len(caps) > 0 {
+		want += " (an atelier-runner recent enough to run agents)"
 	}
 	if len(runners) == 0 {
 		return "Waiting for a runner. Register one in Settings → Runners."

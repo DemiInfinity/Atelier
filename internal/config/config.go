@@ -42,6 +42,11 @@ type Config struct {
 	PagesMaxBytes int64  // per deploy; ATELIER_PAGES_MAX_MB, default 1024
 	PagesMaxFiles int    // per deploy; ATELIER_PAGES_MAX_FILES, default 50000
 	PagesKeep     int    // deploys kept per site; ATELIER_PAGES_KEEP, default 5
+
+	// Remote access (internal/web/tunnel*.go). Whether it's on is a setting
+	// in the database (off by default); these only say where things are.
+	TunnelListen string // loopback listener only the tunnel helper connects to; ATELIER_TUNNEL_LISTEN, default 127.0.0.1:3001
+	TunnelBin    string // the cloudflared binary; ATELIER_CLOUDFLARED, default "cloudflared" on PATH
 }
 
 func FromEnv() Config {
@@ -71,6 +76,8 @@ func FromEnv() Config {
 		PagesMaxFiles:      envInt("ATELIER_PAGES_MAX_FILES", 50000),
 		PagesKeep:          envInt("ATELIER_PAGES_KEEP", 5),
 		SSHListen:          ":2222",
+		TunnelListen:       env("ATELIER_TUNNEL_LISTEN", "127.0.0.1:3001"),
+		TunnelBin:          env("ATELIER_CLOUDFLARED", "cloudflared"),
 	}
 	// ATELIER_SSH_LISTEN set to an empty string turns the SSH server off.
 	if v, ok := os.LookupEnv("ATELIER_SSH_LISTEN"); ok {

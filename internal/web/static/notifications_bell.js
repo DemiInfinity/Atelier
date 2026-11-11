@@ -15,6 +15,11 @@
           badge.hidden = !d.label;
         }
         bell.setAttribute("aria-label", d.unread > 0 ? "Notifications, " + d.unread + " unread" : "Notifications");
+        // The installed app's icon badge (Web Push sets it too, see sw.js).
+        try {
+          if (d.unread > 0 && navigator.setAppBadge) navigator.setAppBadge(d.unread).catch(function () {});
+          else if (!(d.unread > 0) && navigator.clearAppBadge) navigator.clearAppBadge().catch(function () {});
+        } catch (e) { /* unsupported */ }
       })
       .catch(function () {});
   }

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"atelier/internal/actions"
+	"atelier/internal/workflow"
 )
 
 // Agent steps (agentic Markdown workflows). The server sends the job's one
@@ -37,18 +38,33 @@ func (j *jobRun) runAgent(ctx context.Context, sc *scope, st stepDef, stepEnv en
 	if err != nil {
 		return 1, err
 	}
-	key := strings.TrimSpace(with["api-key"])
-	j.mask.Add(key)
 	if len(ag.Tools) > 0 {
 		if err := checkMCPURL(ag.MCPURL, j.r.Config.ServerURL); err != nil {
 			return 1, err
 		}
 	}
-	s := &agentSession{Step: *ag, APIKey: key, JobToken: j.job.JobToken, RunContext: j.agentRunContext(),
-		APIBaseURL: agentAPIBaseURL(), HTTPClient: agentHTTPClient,
-		Log: func(stream, text string) { j.log.Line(sc.logStep, stream, text) }}
-	res, runErr := s.run(ctx)
+	logf := func(stream, text string) { j.log.Line(sc.logStep, stream, text) }
+	var res agentResult
+	var runErr error
+	engine := ag.Engine
+	if engine == workflow.AgentEngineClaudeCode {
+		// Claude Code on this device, signed in to the owner's subscription (agent_claudecode.go).
+		if !j.r.Config.HasCap(actions.CapClaudeCode) {
+			return 1, errors.New("agent: this runner hasn't switched on Claude Code: run `atelier-runner claude-code enable` on it")
+		}
+		s := &claudeCodeSession{Step: *ag, JobToken: j.job.JobToken, RunContext: j.agentRunContext(),
+			Binary: j.r.Config.ClaudeCodePath, Log: logf}
+		res, runErr = s.run(ctx)
+	} else {
+		engine = workflow.AgentEngine
+		key := strings.TrimSpace(with["api-key"])
+		j.mask.Add(key)
+		s := &agentSession{Step: *ag, APIKey: key, JobToken: j.job.JobToken, RunContext: j.agentRunContext(),
+			APIBaseURL: agentAPIBaseURL(), HTTPClient: agentHTTPClient, Log: logf}
+		res, runErr = s.run(ctx)
+	}
 
+	cs.setOutput("engine", engine)
 	cs.setOutput("model", res.Model)
 	cs.setOutput("turns", strconv.Itoa(res.Turns))
 	cs.setOutput("input_tokens", strconv.FormatInt(res.Usage.Input, 10))
@@ -99,7 +115,12 @@ func agentSummary(ag actions.AgentStep, res agentResult, runErr error) string {
 		b.WriteString(f + "\n\n")
 	}
 	cost := "no estimate for this model"
-	if res.HasCost {
+	switch {
+	case res.Subscription && res.HasCost:
+		cost = fmt.Sprintf("subscription usage (≈ $%.4f at API prices, as reported by Claude Code; not billed)", res.Cost)
+	case res.Subscription:
+		cost = "subscription usage"
+	case res.HasCost:
 		cost = fmt.Sprintf("≈ $%.4f (estimate from list prices)", res.Cost)
 	}
 	fmt.Fprintf(&b, "| Model | Turns | Input | Output | Cache read | Cache write | Cost |\n|---|---|---|---|---|---|---|\n| `%s` | %d | %s | %s | %s | %s | %s |\n",

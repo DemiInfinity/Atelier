@@ -47,6 +47,7 @@ Commands:
   uninstall  remove the service [--dry-run]
   status     show configuration and service state
   workspaces enable|disable|show: "Open on <device>" workspaces (off by default)
+  claude-code enable|disable|show: run engine: claude-code agents with this device's Claude Code [--path]
   version    print the version
 
 Every command accepts --config PATH.
@@ -93,6 +94,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return statusCmd(rest, stdout)
 	case "workspaces":
 		return workspacesCmd(rest, stdout)
+	case "claude-code":
+		return claudeCodeCmd(rest, stdout)
 	case "version", "--version", "-version":
 		fmt.Fprintf(stdout, "atelier-runner %s (%s/%s, protocol %d)\n", version, runtime.GOOS, runtime.GOARCH, actions.ProtocolVersion)
 		return nil

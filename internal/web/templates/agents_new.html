@@ -12,11 +12,11 @@
   <section class="card stack-sm agent-howto" aria-labelledby="agent-howto-title">
     <h2 class="h-sm" id="agent-howto-title">Before the first run</h2>
     <ol class="small agent-steps">
-      <li>Add your Anthropic API key as the secret <span class="mono">{{$d.Secret}}</span> (repository or account secrets), or name another secret with <span class="mono">secret:</span>.</li>
+      <li>With <span class="mono">engine: claude</span>, add your Anthropic API key as the secret <span class="mono">{{$d.Secret}}</span> (repository or account secrets), or name another secret with <span class="mono">secret:</span>. With <span class="mono">engine: claude-code</span> there's no key: run <span class="mono">atelier-runner claude-code enable</span> on a device where you're signed in to Claude Code, and runs use your Claude subscription.</li>
       <li>Make sure a runner is online. Agents run on <span class="mono">self-hosted</span> by default and only need network access to this server and the Claude API.</li>
       <li>The first run waits for your approval, and so does every run after its <span class="mono">tools:</span> list changes or for a pull request someone else opened.</li>
     </ol>
-    <p class="small muted">Front matter: <span class="mono">on</span>, <span class="mono">engine: claude</span>, <span class="mono">model</span> (default {{$d.Model}}), <span class="mono">effort</span> (low, medium, high, xhigh, max), <span class="mono">tools</span>, <span class="mono">runs-on</span>, <span class="mono">max-turns</span> (≤ 100), <span class="mono">max-tokens</span> (≤ 2M), <span class="mono">timeout-minutes</span>, <span class="mono">secret</span>. Triggers: push, pull_request, schedule, workflow_dispatch, and issues (opened, labeled).</p>
+    <p class="small muted">Front matter: <span class="mono">on</span>, <span class="mono">engine: claude</span>, <span class="mono">model</span> (default {{$d.Model}}), <span class="mono">effort</span> (low, medium, high, xhigh, max), <span class="mono">tools</span>, <span class="mono">runs-on</span>, <span class="mono">max-turns</span> (≤ 100), <span class="mono">max-tokens</span> (≤ 2M), <span class="mono">timeout-minutes</span>, <span class="mono">secret</span>. <span class="mono">engine: claude-code</span> takes the same keys except <span class="mono">max-tokens</span> and <span class="mono">secret</span>, and uses Claude Code's default model and effort unless you set them. Triggers: push, pull_request, schedule, workflow_dispatch, and issues (opened, labeled).</p>
     <p class="small muted">Tools agents may use: {{range $i, $t := $d.Tools}}{{if $i}}, {{end}}<span class="mono">{{$t}}</span>{{end}}.</p>
   </section>
 

@@ -36,8 +36,18 @@ import (
 // any other job and adds the agent settings when a runner takes it.
 
 // Agent engines, limits and defaults.
+//
+// engine: claude calls the Claude API from the runner with an API key secret
+// (billed to that key). engine: claude-code runs Claude Code headless on a
+// runner where the owner is signed in (the runner capability claude-code), so
+// usage counts against their Claude subscription; max-tokens and secret don't
+// apply to it, and model and effort default to Claude Code's own.
 const (
-	AgentEngine          = "claude"
+	AgentEngine           = "claude"
+	AgentEngineClaudeCode = "claude-code"
+	// AgentWithEngine is the step's with: key naming a claude-code engine, so
+	// the scheduler can see it in the stored job without parsing the workflow.
+	AgentWithEngine      = "engine"
 	AgentDefaultModel    = "claude-opus-5-5"
 	AgentDefaultEffort   = "medium"
 	AgentDefaultTurns    = 30
@@ -94,9 +104,11 @@ func AgentToolAllowed(name string) bool {
 }
 
 var (
-	agentModelRe  = regexp.MustCompile(`^claude-[a-z0-9][a-z0-9.-]{0,62}$`)
-	agentSecretRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,99}$`)
-	agentEfforts  = []string{"low", "medium", "high", "xhigh", "max"}
+	agentModelRe = regexp.MustCompile(`^claude-[a-z0-9][a-z0-9.-]{0,62}$`)
+	// Claude Code also takes model aliases.
+	agentClaudeCodeAliases = []string{"opus", "sonnet", "haiku", "fable"}
+	agentSecretRe          = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,99}$`)
+	agentEfforts           = []string{"low", "medium", "high", "xhigh", "max"}
 )
 
 // AgentSpec is what the front matter and body say about the agent.
@@ -132,6 +144,33 @@ func (t *IssuesTrigger) Matches(action, label string) bool {
 		return slices.ContainsFunc(t.Labels, func(l string) bool { return strings.EqualFold(l, label) })
 	}
 	return true
+}
+
+// ClaudeCode reports whether the agent runs on Claude Code (subscription) rather than the Claude API.
+func (s *AgentSpec) ClaudeCode() bool { return s != nil && s.Engine == AgentEngineClaudeCode }
+
+// EngineLabel names the engine and who pays, for the workflow page.
+func (s *AgentSpec) EngineLabel() string {
+	if s.ClaudeCode() {
+		return "Claude Code · subscription"
+	}
+	return "Claude API · API key"
+}
+
+// ModelLabel is the model, or Claude Code's default when none is set.
+func (s *AgentSpec) ModelLabel() string {
+	if s.Model == "" {
+		return "Claude Code's default"
+	}
+	return s.Model
+}
+
+// EffortLabel is the effort, or Claude Code's default when none is set.
+func (s *AgentSpec) EffortLabel() string {
+	if s.Effort == "" {
+		return "Claude Code's default"
+	}
+	return s.Effort
 }
 
 // ToolsKey identifies the tool list for approvals ("" for no tools).
@@ -218,9 +257,12 @@ func AgentSpecOf(wf *Workflow) *AgentSpec {
 
 func (p *parser) agentRoot(n *yaml.Node, s *AgentSpec) {
 	sawOn := false
+	seen := map[string]bool{}
+	var model, effort *yaml.Node
 	for _, kv := range pairs(n) {
 		key, v := kv[0].Value, kv[1]
 		where := key
+		seen[key] = true
 		switch key {
 		case "name":
 			if str, ok := scalar(v); ok && strings.TrimSpace(str) != "" {
@@ -232,27 +274,17 @@ func (p *parser) agentRoot(n *yaml.Node, s *AgentSpec) {
 			p.agentTriggers(v, s)
 		case "engine":
 			str, _ := scalar(v)
-			if str != AgentEngine {
-				p.fail("engine: %q isn't supported; the only engine is %q.", str, AgentEngine)
+			switch str = strings.TrimSpace(str); str {
+			case AgentEngine, AgentEngineClaudeCode:
+				s.Engine = str
+			default:
+				p.fail("engine: %q isn't supported; use %q (the Claude API, with an API key secret) or %q (Claude Code on a runner signed in to your Claude subscription).",
+					str, AgentEngine, AgentEngineClaudeCode)
 			}
 		case "model":
-			str, _ := scalar(v)
-			str = strings.TrimSpace(str)
-			if !agentModelRe.MatchString(str) {
-				p.fail("model: %q isn't a Claude model id (for example %s).", str, AgentDefaultModel)
-				continue
-			}
-			s.Model = str
-			if _, ok := AgentPrice(str); !ok {
-				p.warn("model: %s has no price in Atelier's table, so runs show no cost estimate.", str)
-			}
+			model = v
 		case "effort":
-			str, _ := scalar(v)
-			if !slices.Contains(agentEfforts, str) {
-				p.fail("effort must be one of %s.", strings.Join(agentEfforts, ", "))
-				continue
-			}
-			s.Effort = str
+			effort = v
 		case "tools":
 			s.Tools = p.agentTools(v)
 		case "runs-on":
@@ -278,6 +310,44 @@ func (p *parser) agentRoot(n *yaml.Node, s *AgentSpec) {
 	}
 	if !sawOn {
 		p.fail("The workflow has no `on:` triggers.")
+	}
+	// Engine-dependent settings, checked once the engine is known (keys can come in any order).
+	cc := s.Engine == AgentEngineClaudeCode
+	if cc {
+		s.Model, s.Effort, s.MaxTokens, s.Secret = "", "", 0, ""
+		if seen["max-tokens"] {
+			p.fail("max-tokens doesn't apply to engine: %s: Claude Code doesn't take a token budget. Remove it and limit the run with max-turns and timeout-minutes.", AgentEngineClaudeCode)
+		}
+		if seen["secret"] {
+			p.fail("secret doesn't apply to engine: %s: it uses the Claude subscription Claude Code is signed in with on the runner, not an API key. Remove it.", AgentEngineClaudeCode)
+		}
+	}
+	if model != nil {
+		str, _ := scalar(model)
+		str = strings.TrimSpace(str)
+		switch {
+		case cc && slices.Contains(agentClaudeCodeAliases, str):
+			s.Model = str
+		case !agentModelRe.MatchString(str):
+			if cc {
+				p.fail("model: %q isn't a Claude model id or Claude Code alias (%s); leave it out to use Claude Code's default.", str, strings.Join(agentClaudeCodeAliases, ", "))
+			} else {
+				p.fail("model: %q isn't a Claude model id (for example %s).", str, AgentDefaultModel)
+			}
+		default:
+			s.Model = str
+			if _, ok := AgentPrice(str); !ok && !cc {
+				p.warn("model: %s has no price in Atelier's table, so runs show no cost estimate.", str)
+			}
+		}
+	}
+	if effort != nil {
+		str, _ := scalar(effort)
+		if !slices.Contains(agentEfforts, str) {
+			p.fail("effort must be one of %s.", strings.Join(agentEfforts, ", "))
+		} else {
+			s.Effort = str
+		}
 	}
 }
 
@@ -395,6 +465,19 @@ func (p *parser) issuesTrigger(cfg *yaml.Node) *IssuesTrigger {
 
 // compileJob is the one job an agentic workflow runs.
 func (s *AgentSpec) compileJob(name string) *Job {
+	step := Step{
+		ID: AgentStepID, Name: fmt.Sprintf("Run Claude agent (%s, %s effort)", s.Model, s.Effort),
+		// The key is referenced here so the engine resolves (and the runner
+		// masks) the secret; the runner reads it from with.api-key.
+		With:           map[string]string{"api-key": "${{ secrets." + s.Secret + " }}"},
+		TimeoutMinutes: s.TimeoutMinutes,
+	}
+	if s.ClaudeCode() {
+		// No secret: Claude Code uses the subscription it's signed in with on
+		// the runner. with.engine lets the scheduler pick a runner that has it.
+		step.Name = fmt.Sprintf("Run Claude Code agent (%s, subscription)", s.ModelLabel())
+		step.With = map[string]string{AgentWithEngine: AgentEngineClaudeCode}
+	}
 	return &Job{
 		ID: AgentJobID, Name: "Agent: " + name, RunsOn: append([]string(nil), s.RunsOn...),
 		TimeoutMinutes: s.TimeoutMinutes, Permissions: Permissions{Contents: "read"},
@@ -405,14 +488,9 @@ func (s *AgentSpec) compileJob(name string) *Job {
 			"cache_write_tokens": "${{ steps.agent.outputs.cache_write_tokens }}",
 			"stop":               "${{ steps.agent.outputs.stop }}",
 			"cost_usd":           "${{ steps.agent.outputs.cost_usd }}",
+			"engine":             "${{ steps.agent.outputs.engine }}",
 		},
-		Steps: []Step{{
-			ID: AgentStepID, Name: fmt.Sprintf("Run Claude agent (%s, %s effort)", s.Model, s.Effort),
-			// The key is referenced here so the engine resolves (and the runner
-			// masks) the secret; the runner reads it from with.api-key.
-			With:           map[string]string{"api-key": "${{ secrets." + s.Secret + " }}"},
-			TimeoutMinutes: s.TimeoutMinutes,
-		}},
+		Steps: []Step{step},
 	}
 }
 
@@ -440,8 +518,23 @@ func (s *AgentSpec) LockYAML(wf *Workflow) []byte {
 	fmt.Fprintf(&b, "    timeout-minutes: %d\n", s.TimeoutMinutes)
 	b.WriteString("    steps:\n")
 	fmt.Fprintf(&b, "      - id: %s\n        name: %s\n        uses: atelier/agent # built into atelier-runner\n        with:\n", AgentStepID, q(wf.Jobs[0].Steps[0].Name))
-	fmt.Fprintf(&b, "          engine: %s\n          model: %s\n          effort: %s\n", s.Engine, s.Model, s.Effort)
-	fmt.Fprintf(&b, "          max-turns: %d\n          max-tokens: %d\n", s.MaxTurns, s.MaxTokens)
+	if s.ClaudeCode() {
+		fmt.Fprintf(&b, "          engine: %s # Claude Code on a runner with the claude-code capability; usage counts against your Claude subscription\n", s.Engine)
+		if s.Model == "" {
+			b.WriteString("          model: default # Claude Code's default model\n")
+		} else {
+			fmt.Fprintf(&b, "          model: %s\n", s.Model)
+		}
+		if s.Effort == "" {
+			b.WriteString("          effort: default # Claude Code's default effort\n")
+		} else {
+			fmt.Fprintf(&b, "          effort: %s\n", s.Effort)
+		}
+		fmt.Fprintf(&b, "          max-turns: %d\n", s.MaxTurns)
+	} else {
+		fmt.Fprintf(&b, "          engine: %s\n          model: %s\n          effort: %s\n", s.Engine, s.Model, s.Effort)
+		fmt.Fprintf(&b, "          max-turns: %d\n          max-tokens: %d\n", s.MaxTurns, s.MaxTokens)
+	}
 	if len(s.Tools) == 0 {
 		b.WriteString("          tools: [] # no tools: the agent can only write its summary\n")
 	} else {
@@ -451,7 +544,11 @@ func (s *AgentSpec) LockYAML(wf *Workflow) []byte {
 		}
 	}
 	b.WriteString("          mcp-url: ${{ atelier.server_url }}/mcp # job token limited to this repository and these tools\n")
-	fmt.Fprintf(&b, "          api-key: ${{ secrets.%s }}\n", s.Secret)
+	if s.ClaudeCode() {
+		b.WriteString("          # no API key: Claude Code's own shell, file and web tools are off; only the tools above\n")
+	} else {
+		fmt.Fprintf(&b, "          api-key: ${{ secrets.%s }}\n", s.Secret)
+	}
 	fmt.Fprintf(&b, "          task-sha256: %s # the Markdown body (%d bytes)\n", hex.EncodeToString(taskSum[:]), len(s.Task))
 	if s.Issues != nil {
 		b.WriteString("# on.issues: " + strings.Join(s.Issues.Types, ", "))

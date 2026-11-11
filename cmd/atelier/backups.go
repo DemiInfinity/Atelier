@@ -87,6 +87,11 @@ func restoreCmd(args []string) error {
 	if err != nil {
 		return fmt.Errorf("open restored database: %w", err)
 	}
+	// Remote access never comes back on from a snapshot (tunnel.go).
+	if err := tunnelOffAfterRestore(ctx, db); err != nil {
+		db.Close()
+		return fmt.Errorf("turn remote access off: %w", err)
+	}
 	db.Close()
 	fmt.Printf("Restored %d repositories and the database from a snapshot taken %s. Start Atelier again.\n",
 		len(m.Repos), m.Created.Local().Format("2 Jan 2006 15:04"))

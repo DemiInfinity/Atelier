@@ -22,6 +22,7 @@
     <form method="post" action="/signout"><button class="btn btn-ghost btn-sm" type="submit">Sign out</button></form>
   </div>
 </header>
+{{template "tunnel-banner" .}}
 {{end}}
 
 {{define "flash"}}
@@ -60,6 +61,7 @@
   <a href="/settings/tokens" {{if eq . "tokens"}}aria-current="page"{{end}}>Access tokens</a>
   <a href="/settings/keys" {{if eq . "keys"}}aria-current="page"{{end}}>SSH keys</a>
   <a href="/settings/passkeys" {{if eq . "passkeys"}}aria-current="page"{{end}}>Passkeys</a>
+  <a href="/settings/notifications" {{if eq . "notifications"}}aria-current="page"{{end}}>Notifications</a>
   <a href="/settings/secrets" {{if eq . "secrets"}}aria-current="page"{{end}}>Secrets and variables</a>
   <a href="/settings/runners" {{if eq . "runners"}}aria-current="page"{{end}}>Runners</a>
   <a href="/settings/backups" {{if eq . "backups"}}aria-current="page"{{end}}>Backups and storage</a>
@@ -68,6 +70,7 @@
   <a href="/settings/packages" {{if eq . "packages"}}aria-current="page"{{end}}>Packages</a>
   <a href="/settings/apps" {{if eq . "apps"}}aria-current="page"{{end}}>Apps and bots</a>
   <a href="/settings/mcp" {{if eq . "mcp"}}aria-current="page"{{end}}>MCP</a>
+  <a href="/settings/remote" {{if eq . "remote"}}aria-current="page"{{end}}>Remote access</a>
 </nav>
 {{end}}
 

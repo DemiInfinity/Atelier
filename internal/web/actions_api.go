@@ -257,6 +257,11 @@ func runnerCanRun(rn store.ActionsRunner, j store.ActionsJob) bool {
 	if j.NeedsDocker && !runnerHasCap(rn.Capabilities, actions.CapDocker) {
 		return false
 	}
+	for _, c := range agentJobCaps(j) { // agent steps; engine: claude-code (actions_agent.go)
+		if !runnerHasCap(rn.Capabilities, c) {
+			return false
+		}
+	}
 	labels := runnerLabels(rn)
 	for _, l := range j.RunsOn {
 		if !labels[strings.ToLower(l)] {

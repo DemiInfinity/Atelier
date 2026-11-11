@@ -132,7 +132,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 		started := time.Now()
-		job, err := r.Client.Poll(ctx, actions.PollRequest{Labels: labels, Capabilities: r.Config.Capabilities, Busy: busy, Version: r.Version})
+		job, err := r.Client.Poll(ctx, actions.PollRequest{Labels: labels, Capabilities: r.Config.AdvertisedCaps(), Busy: busy, Version: r.Version})
 		if err != nil {
 			if ctx.Err() != nil {
 				break

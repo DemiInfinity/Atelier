@@ -108,7 +108,7 @@ func TestParseAgenticDefaultsAndErrors(t *testing.T) {
 		{"---\non: push\n", "front matter"},
 		{"---\non: push\n---\n", "task is empty"},
 		{"---\nengine: claude\n---\ntask", "no `on:`"},
-		{"---\non: push\nengine: gpt\n---\ntask", "only engine"},
+		{"---\non: push\nengine: gpt\n---\ntask", "isn't supported"},
 		{"---\non: push\ntools: [repo.info, actions.dispatch]\n---\ntask", "can't start workflows"},
 		{"---\non: push\ntools: [notifications.list]\n---\ntask", "notifications"},
 		{"---\non: push\ntools: [repo.delete]\n---\ntask", "unknown tool"},
@@ -175,7 +175,7 @@ func TestEstimateCost(t *testing.T) {
 // The templates in docs/agents must parse cleanly.
 func TestAgentTemplatesParse(t *testing.T) {
 	files, _ := filepath.Glob("../../docs/agents/*.md")
-	if len(files) != 3 {
+	if len(files) != 4 {
 		t.Fatalf("templates = %v", files)
 	}
 	for _, f := range files {

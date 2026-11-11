@@ -67,7 +67,7 @@ func TestAgenticWorkflowEndToEnd(t *testing.T) {
 	if jb.Status != actions.StatusWaiting || !strings.Contains(jb.Approval, "first run") || !strings.Contains(jb.Approval, "pulls.comment, pulls.get") {
 		t.Fatalf("agent job = %+v", jb)
 	}
-	rn := f.registerRunner(t, "Box", []string{"linux"}, []string{"jobs"})
+	rn := f.registerRunner(t, "Box", []string{"linux"}, []string{"jobs", "agents"})
 	if j := rn.poll(); j != nil {
 		t.Fatal("an unapproved agent job was handed out")
 	}
@@ -249,7 +249,7 @@ func TestAgentPullRequestsAndIssues(t *testing.T) {
 	// YAML jobs never get MCP scopes.
 	pullsCommit(t, f.work, ".atelier/workflows/ci.yml", "on: push\njobs:\n  b:\n    runs-on: linux\n    steps:\n      - run: make\n", "CI")
 	f.push(t, "feature/y")
-	rn := f.registerRunner(t, "Box", []string{"linux"}, []string{"jobs"})
+	rn := f.registerRunner(t, "Box", []string{"linux"}, []string{"jobs", "agents"})
 	for i := 0; i < 5; i++ {
 		j := rn.poll()
 		if j == nil {
@@ -293,7 +293,7 @@ func TestAgentTemplatesPage(t *testing.T) {
 			t.Errorf("%s: %v", tpl.File, w.Errors)
 		}
 	}
-	if len(agentTemplates()) != 3 {
+	if len(agentTemplates()) != 4 {
 		t.Errorf("templates = %d", len(agentTemplates()))
 	}
 }

@@ -5,7 +5,7 @@
 {{define "agents-panel"}}{{$p := .}}
 <section class="card agent-panel stack-sm" aria-labelledby="agent-panel-title">
   <div class="row-between wrap-gap">
-    <h2 class="h-sm" id="agent-panel-title"><span class="act-chip is-agent">Agent</span> Claude agent</h2>
+    <h2 class="h-sm" id="agent-panel-title"><span class="act-chip is-agent">Agent</span> Claude agent{{with $p.Spec}} <span class="pill pill-violet agent-engine">{{.EngineLabel}}</span>{{end}}</h2>
     {{if $p.Valid}}
       {{if $p.Approved}}<span class="pill pill-violet" title="Approved by {{$p.ApprovedBy}} {{datetime $p.ApprovedAt}}">Tools approved</span>
       {{else if $p.Changed}}<span class="pill pill-amber">Tools changed: next run needs approval</span>
@@ -14,10 +14,16 @@
   </div>
   {{with $p.Spec}}
   <dl class="agent-facts small">
-    <div><dt>Model</dt><dd class="mono">{{.Model}}</dd></div>
-    <div><dt>Effort</dt><dd class="mono">{{.Effort}}</dd></div>
+    <div><dt>Engine</dt><dd>{{.EngineLabel}}</dd></div>
+    <div><dt>Model</dt><dd{{if .Model}} class="mono"{{end}}>{{.ModelLabel}}</dd></div>
+    <div><dt>Effort</dt><dd{{if .Effort}} class="mono"{{end}}>{{.EffortLabel}}</dd></div>
+    {{if .ClaudeCode}}
+    <div><dt>Limits</dt><dd>{{.MaxTurns}} turns · {{.TimeoutMinutes}} min</dd></div>
+    <div><dt>Usage</dt><dd>counts against your Claude subscription; runs only on runners with <span class="mono">claude-code</span> switched on</dd></div>
+    {{else}}
     <div><dt>Limits</dt><dd>{{.MaxTurns}} turns · {{.MaxTokens}} tokens · {{.TimeoutMinutes}} min</dd></div>
     <div><dt>API key</dt><dd>secret <span class="mono">{{.Secret}}</span></dd></div>
+    {{end}}
     {{if .Issues}}<div><dt>Issues</dt><dd>{{range $i, $t := .Issues.Types}}{{if $i}}, {{end}}{{$t}}{{end}}{{if .Issues.Labels}} ({{range $i, $l := .Issues.Labels}}{{if $i}}, {{end}}{{$l}}{{end}}){{end}}</dd></div>{{end}}
   </dl>
   {{end}}
@@ -48,7 +54,8 @@
         <span class="muted">· <time datetime="{{.When.UTC.Format "2006-01-02T15:04:05Z"}}">{{ago .When}}</time></span></li>
       {{end}}
     </ul>
-    <p class="small muted">Costs are estimates from list prices; fallbacks and price changes aren't included.</p>
+    {{if and $p.Spec $p.Spec.ClaudeCode}}<p class="small muted">Claude Code runs use your Claude subscription, so nothing is billed; any dollar figure is Claude Code's own API-price equivalent.</p>
+    {{else}}<p class="small muted">Costs are estimates from list prices; fallbacks and price changes aren't included.</p>{{end}}
   </div>
   {{end}}
 </section>
@@ -58,7 +65,7 @@
 {{define "agents-run"}}
 <section class="card agent-run row-between wrap-gap" aria-label="Agent usage">
   {{with .Usage}}
-  <p class="small"><span class="act-chip is-agent">Agent</span> <span class="mono">{{.Model}}</span> · {{.Tokens}} · <strong class="agent-cost">{{.CostText}}</strong>{{if .Stop}} · stopped: {{.Stop}}{{end}}</p>
+  <p class="small"><span class="act-chip is-agent">Agent</span> {{if .Subscription}}Claude Code · subscription · {{end}}<span class="mono">{{.Model}}</span> · {{.Tokens}} · <strong class="agent-cost">{{.CostText}}</strong>{{if .Stop}} · stopped: {{.Stop}}{{end}}</p>
   <p class="small muted">{{.Detail}}</p>
   {{else}}
   <p class="small"><span class="act-chip is-agent">Agent</span> Token usage and an estimated cost appear here when the agent finishes.</p>

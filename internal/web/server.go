@@ -120,6 +120,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if a.servePagesHost(w, r) {
 		return
 	}
+	// A tunnel pointed at this listener instead of the remote one (tunnel_remote.go).
+	if !isRemote(r) && a.tunnelMisrouted(w, r) {
+		return
+	}
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "same-origin")
@@ -169,7 +173,11 @@ func setUIHeaders(h http.Header) {
 // ---------- request helpers ----------
 
 // scheme and host as the browser sees them, honouring nginx when trusted.
+// Requests through the tunnel always see its https address (tunnel_remote.go).
 func (a *App) external(r *http.Request) (scheme, host string) {
+	if rm, ok := remoteOf(r); ok {
+		return "https", rm.Host
+	}
 	scheme, host = "http", r.Host
 	if r.TLS != nil {
 		scheme = "https"
@@ -186,6 +194,9 @@ func (a *App) external(r *http.Request) (scheme, host string) {
 }
 
 func (a *App) baseURL(r *http.Request) string {
+	if rm, ok := remoteOf(r); ok {
+		return tunnelURL(rm.Host)
+	}
 	if a.cfg.PublicURL != "" {
 		return a.cfg.PublicURL
 	}
@@ -194,6 +205,9 @@ func (a *App) baseURL(r *http.Request) string {
 }
 
 func (a *App) isHTTPS(r *http.Request) bool {
+	if isRemote(r) {
+		return true
+	}
 	if strings.HasPrefix(a.cfg.PublicURL, "https://") {
 		return true
 	}
@@ -202,6 +216,9 @@ func (a *App) isHTTPS(r *http.Request) bool {
 }
 
 func (a *App) clientIP(r *http.Request) string {
+	if rm, ok := remoteOf(r); ok {
+		return rm.IP // CF-Connecting-IP, trusted only on the remote listener
+	}
 	if a.cfg.TrustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			return strings.TrimSpace(strings.Split(xff, ",")[0])
@@ -245,7 +262,7 @@ func (a *App) signedIn(r *http.Request) bool {
 // person still exists.
 func (a *App) sessionActor(r *http.Request) (Actor, bool) {
 	c, err := r.Cookie(sessionCookie)
-	if err != nil {
+	if err != nil || !a.remoteSessionOK(r, c.Value) {
 		return Actor{}, false
 	}
 	id, ok := a.db.SessionPerson(r.Context(), c.Value)
@@ -272,6 +289,9 @@ func (a *App) startSession(w http.ResponseWriter, r *http.Request) error {
 func (a *App) startSessionFor(w http.ResponseWriter, r *http.Request, personID int64) error {
 	tok, err := a.db.CreateSessionFor(r.Context(), personID, sessionTTL)
 	if err != nil {
+		return err
+	}
+	if err := a.markRemoteSession(r, tok, personID); err != nil {
 		return err
 	}
 	http.SetCookie(w, &http.Cookie{

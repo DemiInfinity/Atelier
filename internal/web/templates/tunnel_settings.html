@@ -1,0 +1,150 @@
+{{define "head"}}<link rel="stylesheet" href="/static/tunnel.css"><script src="/static/tunnel.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}{{$c := $d.Config}}
+<main class="wrap">
+  <div class="layout-2">
+    <aside class="col-side">{{template "accountnav" "remote"}}</aside>
+    <div class="col-main stack-lg">
+      <div>
+        <h1 class="display">Remote access</h1>
+        <p class="muted">Reach this Atelier from outside your home network through a Cloudflare Tunnel: an outbound connection, no port forwarding. It's off until you turn it on, and turning it off cuts every remote connection at once.</p>
+      </div>
+      {{template "flash" .}}
+      {{if $d.Saved}}<div class="flash flash-ok" role="status">Saved.</div>{{end}}
+
+      <section class="card stack tn-status {{if $d.On}}tn-on{{end}}" aria-labelledby="tn-status-h" data-tn-status data-tn-on="{{if $d.On}}1{{end}}" data-tn-address="{{$d.Address}}">
+        <div class="row-between wrap-gap">
+          <h2 class="h-sm" id="tn-status-h">Status</h2>
+          <span class="pill tn-phase tn-phase-{{$d.Phase}}" data-tn-phase>{{if eq $d.Phase "off"}}Off{{else if eq $d.Phase "connected"}}Connected{{else if eq $d.Phase "restarting"}}Restarting{{else}}Starting…{{end}}</span>
+        </div>
+        {{if $d.On}}
+        <div class="stack-sm">
+          <span class="small muted">Address</span>
+          {{if $d.Address}}
+          <div class="clone">
+            <input class="clone-url" id="tn-address" value="{{$d.Address}}" readonly aria-label="Remote address">
+            <button type="button" class="clone-copy" data-copy="#tn-address" aria-label="Copy address"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+          </div>
+          {{if eq $c.Mode "quick"}}<p class="hint">Quick tunnels get a new address every time they start.</p>{{end}}
+          {{else}}<p class="muted">Waiting for Cloudflare to hand out an address…</p>{{end}}
+        </div>
+        <dl class="tn-facts">
+          <div><dt>Requests now</dt><dd data-tn-inflight>{{$d.InFlight}}</dd></div>
+          <div><dt>Visitors, last 5 min</dt><dd data-tn-visitors>{{$d.Visitors}}</dd></div>
+          <div><dt>Remote sessions</dt><dd data-tn-sessions>{{$d.Sessions}}</dd></div>
+          <div><dt>Helper connections</dt><dd data-tn-conns>{{$d.Conns}}</dd></div>
+        </dl>
+        {{end}}
+        {{with $d.LastError}}<p class="flash flash-error" role="alert" data-tn-error>{{.}}</p>{{end}}
+        {{if $d.On}}
+        <form method="post" action="/settings/remote/off" class="row-end">
+          <button class="btn btn-danger btn-lg" type="submit">Turn off remote access</button>
+        </form>
+        {{else if $d.Remote}}
+        {{else}}
+        {{if not $d.HaveBinary}}<p class="hint">cloudflared isn't installed here (<code>{{$d.Binary}}</code>). The Docker image includes it; elsewhere, install it or set <code>ATELIER_CLOUDFLARED</code>.</p>{{end}}
+        <form method="post" action="/settings/remote/on" class="row-end">
+          <button class="btn btn-primary btn-lg" type="submit">Turn on remote access</button>
+        </form>
+        {{end}}
+        <p class="hint">From the server's shell: <code>docker exec atelier atelier tunnel off</code> turns it off just as fast.</p>
+      </section>
+
+      {{if $d.On}}{{if not $d.Remote}}
+      <section class="card stack-sm" aria-labelledby="tn-pk-h">
+        <h2 class="h-sm" id="tn-pk-h">Passkey for this address</h2>
+        <p class="small muted">Through remote access only passkeys sign in, never your password. A passkey belongs to one address, so the one you use at home won't work at {{if $d.Address}}<span class="mono">{{$d.Address}}</span>{{else}}the remote address{{end}}. Make a one-time link, open it on the device you'll use away from home (within 15 minutes), add a passkey there, then sign out and sign in with it.</p>
+        {{with $d.EnrollLink}}
+        <div class="clone">
+          <input class="clone-url" id="tn-enroll" value="{{.}}" readonly aria-label="One-time passkey link">
+          <button type="button" class="clone-copy" data-copy="#tn-enroll" aria-label="Copy link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
+        </div>
+        <p class="hint">Works once, for 15 minutes, and only lets that browser add a passkey. Treat it like a password until it's used.</p>
+        {{else}}
+        <form method="post" action="/settings/remote/enroll-link" class="row-end">
+          <button class="btn" type="submit" {{if not $d.Address}}disabled{{end}}>Create a one-time passkey link</button>
+        </form>
+        {{end}}
+      </section>
+      {{end}}{{end}}
+
+      {{if $d.Remote}}
+      <section class="card stack-sm"><p class="small muted">You're viewing this through remote access. Settings can only be changed from your home network; from here you can turn it off.</p></section>
+      {{else}}
+      <form method="post" action="/settings/remote" class="card stack" aria-labelledby="tn-setup-h">
+        <h2 class="h-sm" id="tn-setup-h">Tunnel</h2>
+        <label class="choice"><input type="radio" name="mode" value="quick" {{if eq $c.Mode "quick"}}checked{{end}}><span><strong>Quick tunnel</strong><span class="small muted">No account. A random <span class="mono">https://….trycloudflare.com</span> address that changes every start. Good for trying it out.</span></span></label>
+        <label class="choice"><input type="radio" name="mode" value="named" {{if eq $c.Mode "named"}}checked{{end}}><span><strong>Named tunnel</strong><span class="small muted">A stable address on your own domain, set up in the Cloudflare dashboard.</span></span></label>
+
+        <fieldset class="stack tn-named">
+          <legend class="small muted">Named tunnel</legend>
+          <ol class="small muted tn-steps">
+            <li>In Cloudflare Zero Trust, open Networks → Tunnels and create a tunnel (cloudflared).</li>
+            <li>Copy the token from the install command (the long value after <code>--token</code>) and paste it below.</li>
+            <li>Add a public hostname (e.g. <span class="mono">git.example.com</span>) with service type <strong>HTTP</strong> and URL <code>{{$d.Listen}}</code>. Not port 3000: requests there skip every remote-access rule, so Atelier refuses them.</li>
+          </ol>
+          <div class="field">
+            <label for="tn-host">Public hostname</label>
+            <input id="tn-host" name="hostname" value="{{$c.Hostname}}" placeholder="git.example.com" maxlength="253" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="tn-token">Tunnel token</label>
+            <input id="tn-token" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="{{if $c.HasToken}}Saved (encrypted). Paste a new one to replace it{{else}}eyJh…{{end}}">
+            {{if $c.HasToken}}<label class="row gap-sm small"><input type="checkbox" name="remove_token" value="1"> Remove the saved token</label>{{end}}
+            <p class="hint">Stored encrypted with your secrets key and never shown again.</p>
+          </div>
+          <div class="field">
+            <label for="tn-pages">Pages hostname <span class="muted">(optional)</span></label>
+            <input id="tn-pages" name="pages_hostname" value="{{$c.PagesHostname}}" placeholder="pages.example.com" maxlength="253" autocomplete="off" spellcheck="false">
+            <p class="hint">Pages need their own hostname, routed to the same service.</p>
+          </div>
+        </fieldset>
+
+        <fieldset class="stack-sm">
+          <legend class="h-sm">What's reachable remotely</legend>
+          <label class="choice"><input type="checkbox" name="expose_web" value="1" {{if $c.ExposeWeb}}checked{{end}}><span><strong>Web UI</strong><span class="small muted">Sign in with a passkey only.</span></span></label>
+          <label class="choice"><input type="checkbox" name="expose_git" value="1" {{if $c.ExposeGit}}checked{{end}}><span><strong>Git over HTTPS</strong><span class="small muted">Clone and push with an access token. Always needs one, even for public repositories.</span></span></label>
+          <label class="choice"><input type="checkbox" name="expose_mcp" value="1" {{if $c.ExposeMCP}}checked{{end}}><span><strong>MCP</strong><span class="small muted">The <span class="mono">/mcp</span> endpoint, with MCP tokens.</span></span></label>
+          <label class="choice"><input type="checkbox" name="expose_pages" value="1" {{if $c.ExposePages}}checked{{end}}><span><strong>Pages</strong><span class="small muted">Named tunnels with a Pages hostname only.</span></span></label>
+          <label class="choice"><input type="checkbox" name="expose_api" value="1" {{if $c.ExposeAPI}}checked{{end}}><span><strong>API and inbound webhooks</strong><span class="small muted"><span class="mono">/api/…</span> with tokens, including runners.</span></span></label>
+          <label class="choice tn-never"><input type="checkbox" disabled><span><strong>Container and package registries</strong><span class="small muted">Never exposed.</span></span></label>
+          <p class="hint">Everything else answers 404 through the tunnel.</p>
+        </fieldset>
+        <div class="row-end"><button class="btn btn-primary" type="submit">Save</button></div>
+      </form>
+      {{end}}
+
+      <section class="list-card" aria-labelledby="tn-log-h">
+        <div class="list-head" id="tn-log-h">Who's connected <span class="muted small">· remote requests, last 7 days</span></div>
+        <div class="table-scroll">
+          <table class="tn-table">
+            <thead><tr><th scope="col">Time</th><th scope="col">IP</th><th scope="col">Country</th><th scope="col">What</th><th scope="col">Result</th><th scope="col">Signed in</th></tr></thead>
+            <tbody>
+            {{range $d.Log}}
+            <tr>
+              <td class="nowrap">{{datetime .At}}</td>
+              <td class="mono small">{{.IP}}</td>
+              <td>{{if .Country}}{{.Country}}{{else}}—{{end}}</td>
+              <td><span class="pill">{{.Class}}</span> <span class="small muted">{{.Method}}</span></td>
+              <td class="mono small">{{.Status}}</td>
+              <td>{{if .SignedIn}}{{if .Who}}{{.Who}}{{else}}yes{{end}}{{else}}<span class="muted">no</span>{{end}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="6" class="muted">No remote requests yet.</td></tr>
+            {{end}}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {{if $d.Status.Log}}
+      <details class="card tn-helper">
+        <summary class="small">cloudflared output</summary>
+        <pre class="small">{{range $d.Status.Log}}{{.}}
+{{end}}</pre>
+      </details>
+      {{end}}
+    </div>
+  </div>
+</main>
+{{end}}

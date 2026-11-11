@@ -103,14 +103,15 @@ func (a *App) signinPage(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) signinData(r *http.Request, errMsg string) map[string]any {
 	_, host := a.external(r)
-	if a.cfg.PublicURL != "" {
+	if a.cfg.PublicURL != "" && !isRemote(r) {
 		if u, err := url.Parse(a.cfg.PublicURL); err == nil {
 			host = u.Host
 		}
 	}
 	return map[string]any{
 		"Next":    safeNext(r.FormValue("next")),
-		"GitHub":  a.cfg.GitHubEnabled(),
+		"GitHub":  a.cfg.GitHubEnabled() && !isRemote(r),
+		"Remote":  isRemote(r), // through the tunnel: passkeys only
 		"Host":    host,
 		"Message": errMsg,
 	}

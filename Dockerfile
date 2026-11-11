@@ -36,6 +36,27 @@ VOLUME ["/runner"]
 ENTRYPOINT ["/usr/local/bin/atelier-runner"]
 CMD ["run", "--config", "/runner/config.json"]
 
+# ---- cloudflared, for remote access (Settings → Remote access) ----
+# A pinned release, checked against the SHA-256 sums Cloudflare publishes in
+# the release notes (and GitHub's asset digests) for
+# https://github.com/cloudflare/cloudflared/releases/tag/2026.10.4
+# To upgrade: change the version and both sums together.
+FROM alpine:3.22 AS cloudflared
+ARG TARGETARCH
+ARG CLOUDFLARED_VERSION=2026.10.4
+ARG CLOUDFLARED_SHA256_AMD64=ae5e8add7884b0531d66bbca4570d1de491ff6da51e4ebe7eb160cdf241d9e42
+ARG CLOUDFLARED_SHA256_ARM64=2b7203b4fb0ba28a0c1e12f8855ce2c25f76d266a8d5edafac5540b6812acff6
+RUN set -eu; \
+    arch="${TARGETARCH:-amd64}"; \
+    case "$arch" in \
+      amd64) sum="$CLOUDFLARED_SHA256_AMD64" ;; \
+      arm64) sum="$CLOUDFLARED_SHA256_ARM64" ;; \
+      *) echo "cloudflared: no pinned build for $arch" >&2; exit 1 ;; \
+    esac; \
+    wget -q -O /tmp/cloudflared "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}"; \
+    echo "$sum  /tmp/cloudflared" | sha256sum -c -; \
+    install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
+
 # ---- runtime ----
 FROM alpine:3.22
 
@@ -52,6 +73,9 @@ RUN apk add --no-cache git git-daemon ca-certificates tzdata \
 COPY deploy/ca/ /tmp/ca/
 RUN find /tmp/ca -maxdepth 1 -type f -name '*.crt' -exec cp {} /usr/local/share/ca-certificates/ \; ; rm -rf /tmp/ca; update-ca-certificates 2>/dev/null; true
 COPY --from=build /out/atelier /usr/local/bin/atelier
+# Remote access is off until turned on in Settings; Atelier runs cloudflared
+# itself and it connects back to 127.0.0.1:3001 inside the container only.
+COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 
 ENV ATELIER_LISTEN=:3000 \
     ATELIER_SSH_LISTEN=:2222 \

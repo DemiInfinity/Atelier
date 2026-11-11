@@ -122,7 +122,7 @@ func (a *App) actionsBaseURL() string {
 }
 
 func (a *App) rememberBaseURL(base string) {
-	if a.cfg.PublicURL != "" || base == "" {
+	if a.cfg.PublicURL != "" || base == "" || a.isTunnelURL(base) {
 		return
 	}
 	st := a.actions()

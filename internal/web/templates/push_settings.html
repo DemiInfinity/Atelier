@@ -1,0 +1,71 @@
+{{define "head"}}<link rel="stylesheet" href="/static/push.css"><script src="/static/push.js" defer></script>{{end}}
+{{define "content"}}
+{{$d := .Data}}
+<main class="wrap layout-2">
+  <aside class="col-side">{{template "accountnav" "notifications"}}</aside>
+  <div class="col-main stack-lg">
+    <div>
+      <h1 class="display">Notifications</h1>
+      <p class="muted">Get Atelier's notifications on your phone and computers, even when Atelier isn't open. Your inbox keeps everything either way.</p>
+    </div>
+    {{template "flash" .}}
+    {{with $d.Message}}<div class="flash flash-ok" role="status">{{.}}</div>{{end}}
+    <div class="flash flash-error" role="alert" data-push-error hidden></div>
+    <div class="flash flash-ok" role="status" data-push-ok hidden></div>
+
+    <section class="card stack" data-push-device data-push-key="{{$d.PublicKey}}" aria-labelledby="push-device-h">
+      <h2 class="h-sm" id="push-device-h">Notifications on this device</h2>
+      {{if $d.Secure}}
+      <p class="small text-2" data-push-status>Checking whether this browser can receive notifications…</p>
+      <noscript><p class="hint">Turning on notifications needs JavaScript.</p></noscript>
+      <div class="row wrap-gap">
+        <button class="btn btn-primary" type="button" data-push-enable hidden>Enable notifications</button>
+        <button class="btn" type="button" data-push-test hidden>Send a test notification</button>
+        <button class="btn btn-danger" type="button" data-push-disable hidden>Turn off on this device</button>
+      </div>
+      {{else}}
+      <p class="small text-2">Browsers only allow notifications on secure pages. You're using <span class="mono break">{{$d.Origin}}</span>. Open Atelier at its <span class="mono">https://</span> address to turn them on.</p>
+      {{end}}
+      <div class="push-ios stack-sm" role="note" data-push-ios>
+        <h3 class="push-h">On iPhone and iPad</h3>
+        <p class="small text-2">iOS only delivers web notifications to apps on the Home Screen, from iOS 16.4 on. In Safari, tap <strong>Share</strong> → <strong>Add to Home Screen</strong>, open Atelier from the new icon, come back to this page and tap <strong>Enable notifications</strong>. Safari tabs can't receive them.</p>
+      </div>
+    </section>
+
+    <section class="list-card" aria-labelledby="push-devices-h">
+      <div class="list-head" id="push-devices-h">Your devices</div>
+      {{range $d.Devices}}
+      <div class="list-row push-row" data-push-row data-push-hash="{{.Hash}}" data-push-id="{{.ID}}">
+        <span class="push-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg></span>
+        <div class="grow min0">
+          <strong class="break">{{.Label}}</strong> <span class="pill" data-push-this hidden>This device</span>
+          <div class="small muted">Added {{ago .CreatedAt}} · {{if .LastSuccess}}Last delivered {{ago .LastSuccess.UTC}}{{else}}Nothing delivered yet{{end}}{{if .FailureCount}} · <span class="push-fail">{{.FailureCount}} failed {{if eq .FailureCount 1}}delivery{{else}}deliveries{{end}}{{with .LastError}}: {{.}}{{end}}</span>{{end}}</div>
+        </div>
+        <div class="row gap-sm push-actions">
+          <form method="post" action="/settings/notifications/test"><input type="hidden" name="id" value="{{.ID}}"><button class="btn btn-sm" type="submit" aria-label="Send a test notification to {{.Label}}">Test</button></form>
+          <form method="post" action="/settings/notifications/remove"><input type="hidden" name="id" value="{{.ID}}"><button class="btn btn-danger btn-sm" type="submit" aria-label="Remove {{.Label}}">Remove</button></form>
+        </div>
+      </div>
+      {{else}}
+      <div class="list-row muted">No devices yet. Enable notifications above on each phone or computer you want them on.</div>
+      {{end}}
+    </section>
+
+    <form class="card stack" method="post" action="/settings/notifications/preferences" aria-labelledby="push-kinds-h">
+      <div>
+        <h2 class="h-sm" id="push-kinds-h">What to send</h2>
+        <p class="small text-2">Applies to all your devices. Things you do yourself never notify you.</p>
+      </div>
+      <div class="stack-sm">
+        {{range $d.Kinds}}
+        <label class="push-kind">
+          <input type="checkbox" name="kind_{{.Key}}" value="on" {{if .On}}checked{{end}}>
+          <span><strong>{{.Name}}</strong>{{if .Default}} <span class="pill">Recommended</span>{{end}}<br><span class="small muted">{{.Hint}}</span></span>
+        </label>
+        {{end}}
+      </div>
+      <div><button class="btn btn-primary" type="submit">Save preferences</button></div>
+    </form>
+  </div>
+</main>
+{{end}}

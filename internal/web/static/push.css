@@ -1,0 +1,26 @@
+/* Settings → Notifications (Web Push). */
+
+.push-row { align-items: flex-start; }
+.push-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--amber-chip);
+  color: var(--amber);
+  flex: 0 0 auto;
+}
+.push-actions { flex: 0 0 auto; }
+.push-fail { color: var(--danger); }
+.push-h { font-size: 14px; font-weight: 600; margin: 0; }
+.push-ios { border-top: 1px solid var(--border); padding-top: 12px; }
+.push-ios[hidden], [data-push-this][hidden], [data-push-error][hidden], [data-push-ok][hidden],
+[data-push-enable][hidden], [data-push-test][hidden], [data-push-disable][hidden] { display: none; }
+.push-kind { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.push-kind input { margin-top: 3px; flex: 0 0 auto; }
+@media (max-width: 520px) {
+  .push-row { flex-wrap: wrap; }
+  .push-actions { margin-left: 44px; }
+}

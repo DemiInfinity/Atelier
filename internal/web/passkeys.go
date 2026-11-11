@@ -52,7 +52,7 @@ const (
 // WebAuthn there (plain HTTP other than localhost, or an IP address).
 func (a *App) passkeyRP(r *http.Request) (rpID, origin string, ok bool) {
 	scheme, host := a.external(r)
-	if a.cfg.PublicURL != "" {
+	if a.cfg.PublicURL != "" && !isRemote(r) { // through the tunnel: its own address
 		if u, err := url.Parse(a.cfg.PublicURL); err == nil && u.Host != "" {
 			scheme, host = u.Scheme, u.Host
 		}

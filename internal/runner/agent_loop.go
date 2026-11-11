@@ -68,6 +68,9 @@ type agentResult struct {
 	Final   string // the model's last text
 	Cost    float64
 	HasCost bool
+	// Subscription: engine claude-code, so usage counts against the Claude
+	// subscription and Cost (if any) is Claude Code's API-price figure.
+	Subscription bool
 }
 
 // agentStop is an error that ends the run with a stop reason.
