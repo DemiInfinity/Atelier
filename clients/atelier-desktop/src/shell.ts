@@ -3,9 +3,12 @@
 
 import { api, asError, on, type AppState, type Events, type NeedAction, type Overview, type Target, type Toast, type Tone } from "./api";
 import type { Ctx, MenuItem, Screen } from "./ctx";
-import { confirmDialog, logDialog, openMenu, promptDialog } from "./dialogs";
+import { composeDialog, confirmDialog, logDialog, openMenu, promptDialog, typedConfirmDialog } from "./dialogs";
 import { h, icon, mark, mount, settingsIcon } from "./dom";
 import { needStep, routeFor } from "./logic/needs";
+import { sidebarGroups, toggled } from "./logic/sidebar";
+import { manageMenu } from "./manage";
+import { sideRepos, type SideActions } from "./sideview";
 import { sidebarKey, type Route } from "./routes";
 import { addScreen } from "./screens/add";
 import { deviceScreen } from "./screens/device";
@@ -36,8 +39,8 @@ export class Shell {
 
   readonly ctx: Ctx = {
     app: () => this.state,
-    reloadApp: async () => {
-      this.state = await api.appState();
+    reloadApp: async (fresh = false) => {
+      this.state = await api.appState(fresh);
       this.drawSidebar();
       return this.state;
     },
@@ -54,6 +57,8 @@ export class Shell {
     fail: (error) => this.fail(error),
     confirm: confirmDialog,
     prompt: promptDialog,
+    confirmTyped: typedConfirmDialog,
+    compose: composeDialog,
     showLog: (repo, runId, webPath) => logDialog(repo, runId, webPath ?? null, (path) => void this.openWeb(path)),
     runNeed: (action) => this.runNeed(action),
     busy: (button, work) => this.busy(button, work),
@@ -217,7 +222,18 @@ export class Shell {
     });
     void on("navigate", (target) => this.follow(target));
     // Coming back to the window is a good moment to look again.
-    window.addEventListener("focus", () => void this.refresh());
+    window.addEventListener("focus", () => {
+      void this.refresh();
+      // What this device may do (rename, delete) is switched in the studio.
+      if (this.state.signed_in) {
+        void api.appState(true).then(
+          (state) => {
+            if (state.signed_in) this.state = state;
+          },
+          () => {},
+        );
+      }
+    });
   }
 
   // ------------------------------------------------------------- helpers
@@ -313,6 +329,18 @@ export class Shell {
 
   // ------------------------------------------------------------- sidebar
 
+  /** Folds an owner's group shut or open, and remembers it. */
+  private fold(key: string, shut: boolean): void {
+    this.state.prefs.collapsed = toggled(this.state.prefs.collapsed, key, shut);
+    this.drawSidebar();
+    api.setGroupCollapsed(key, shut).catch((e) => this.fail(e));
+  }
+
+  /** After a pin, rename or delete from the sidebar: the open repository looks again. */
+  private afterManage(path: string): void {
+    if (this.route.screen === "repo" && this.route.path === path) this.screen?.onOverview?.(this.view as Overview);
+  }
+
   private drawSidebar(): void {
     if (!this.state?.signed_in) return;
     const key = sidebarKey(this.route);
@@ -329,11 +357,19 @@ export class Shell {
         count > 0 ? h("span", { class: ["count", hot && "hot"], text: count }) : null,
       );
 
-    const groups = new Map<string, NonNullable<Overview["copies"]>>();
-    for (const copy of view?.copies ?? []) {
-      const name = copy.owner || "Other folders";
-      groups.set(name, [...(groups.get(name) ?? []), copy]);
-    }
+    const groups = sidebarGroups(view?.copies ?? [], view?.others ?? [], this.state.prefs.collapsed);
+    const actions: SideActions = {
+      currentKey: key,
+      open: (copy) => this.go({ screen: "repo", path: copy.path }),
+      more: (copy, anchor) => openMenu(anchor, manageMenu(this.ctx, copy, () => this.afterManage(copy.path))),
+      toggle: (group) => this.fold(group.key, !group.collapsed),
+      publish: (copy) => this.go({ screen: "add", tab: "publish", path: copy.path }),
+      othersOpen: this.othersOpen,
+      toggleOthers: () => {
+        this.othersOpen = !this.othersOpen;
+        this.drawSidebar();
+      },
+    };
 
     mount(
       this.sidebar,
@@ -373,28 +409,7 @@ export class Shell {
       h(
         "nav",
         { class: "repos", "aria-label": "Repositories" },
-        [...groups].map(([name, copies]) =>
-          h(
-            "div",
-            { class: "group" },
-            h("span", { class: "group-name", text: name }),
-            copies.map((copy) =>
-              h(
-                "button",
-                {
-                  type: "button",
-                  class: "side-link side-repo",
-                  title: `${copy.name} · ${copy.branch} · ${copy.state}`,
-                  "aria-current": current(`repo:${copy.path}`),
-                  onclick: () => this.go({ screen: "repo", path: copy.path, tab: "changes" }),
-                },
-                h("span", { class: ["sq", copy.tone === "yours" && "hot"], "aria-hidden": "true" }),
-                h("span", { class: "grow clip", text: copy.name }),
-                h("span", { class: `state tone-${copy.tone}`, text: copy.short }),
-              ),
-            ),
-          ),
-        ),
+        sideRepos(groups, view?.others ?? [], actions),
         view && view.copies.length === 0 && view.others.length === 0
           ? h(
               "div",
@@ -402,55 +417,6 @@ export class Shell {
               h("span", { text: `No repositories found on this ${this.state.machine} yet` }),
               h("button", { type: "button", class: "btn sm", text: "Add a folder…", onclick: (e) => void this.addFolder(e.currentTarget as HTMLButtonElement) }),
               h("button", { type: "button", class: "btn sm", text: "Clone…", onclick: () => this.go({ screen: "add", tab: "clone" }) }),
-            )
-          : null,
-        view && view.others.length > 0
-          ? h(
-              "div",
-              { class: "group" },
-              h(
-                "button",
-                {
-                  type: "button",
-                  class: "group-name group-toggle",
-                  "aria-expanded": this.othersOpen ? "true" : "false",
-                  onclick: () => {
-                    this.othersOpen = !this.othersOpen;
-                    this.drawSidebar();
-                  },
-                },
-                h("span", { class: ["twist", this.othersOpen && "open"], "aria-hidden": "true" }, icon("chevron", 10, 2.4)),
-                h("span", { class: "grow", text: "Other folders" }),
-                h("span", { class: "count", text: view.others.length }),
-              ),
-              this.othersOpen
-                ? view.others.map((copy) =>
-                    h(
-                      "div",
-                      { class: "side-other" },
-                      h(
-                        "button",
-                        {
-                          type: "button",
-                          class: "side-link side-repo",
-                          title: `${copy.name} · ${copy.owner} · not in your studio`,
-                          "aria-current": current(`repo:${copy.path}`),
-                          onclick: () => this.go({ screen: "repo", path: copy.path, tab: "changes" }),
-                        },
-                        h("span", { class: "sq", "aria-hidden": "true" }),
-                        h("span", { class: "grow clip", text: copy.name }),
-                      ),
-                      h("button", {
-                        type: "button",
-                        class: "side-publish",
-                        text: "Publish",
-                        title: `Publish ${copy.name} to Atelier`,
-                        "aria-label": `Publish ${copy.name} to Atelier`,
-                        onclick: () => this.go({ screen: "add", tab: "publish", path: copy.path }),
-                      }),
-                    ),
-                  )
-                : null,
             )
           : null,
       ),

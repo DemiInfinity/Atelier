@@ -380,7 +380,7 @@ async fn pull_requests_list_detail_merge_when_green_and_cancel() {
         .await;
     world.mock_get("/repos", json!({"repos": []})).await;
 
-    let list = world.desk.pulls_list().await.unwrap();
+    let list = world.desk.pulls_list(None).await.unwrap();
     let rows: Vec<(&str, &str, &str, Option<&str>)> = list
         .iter()
         .map(|p| {

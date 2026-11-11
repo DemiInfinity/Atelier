@@ -230,3 +230,7 @@
 }
 .branch-name { min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .branch-do { display: flex; justify-content: flex-end; }
+
+/* Pin and "…" at the end of the bar */
+.repo-icon-btn { width: 30px; padding: 0; justify-content: center; color: var(--ink2); }
+.repo-pin.on { color: var(--amber); border-color: var(--amber-line); }

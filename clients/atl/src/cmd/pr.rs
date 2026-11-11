@@ -1,8 +1,8 @@
 //! `atl pr`, `atl pr N`, `atl pr merge N`.
 
 use atelier_core::api::{
-    Check, CheckCounts, CheckStatus, MergeMethod, MergeOutcome, MergeRequest, Pull, PullState,
-    PullSummary, Via,
+    Check, CheckCounts, CheckStatus, ChecksState, MergeMethod, MergeOutcome, MergeRequest, Pull,
+    PullState, PullSummary, Via,
 };
 use atelier_core::messages::Vars;
 use atelier_core::Client;
@@ -38,8 +38,39 @@ fn symbol(ui: &Ui, status: CheckStatus) -> String {
     }
 }
 
+/// `3 of 4 passed`, `1 failing`, `running`, `all 4 passed`: the checks in
+/// a few words. `None` when there are no checks.
+fn checks_summary(ui: &Ui, counts: &CheckCounts) -> Option<String> {
+    let total = counts.count();
+    Some(match counts.summary() {
+        ChecksState::None => return None,
+        ChecksState::Failing => ui.red(&format!("{} failing", counts.failed.max(1))),
+        ChecksState::Pending if counts.passed > 0 => {
+            ui.amber(&format!("{} of {total} passed", counts.passed))
+        }
+        ChecksState::Pending if counts.pending == 0 => ui.violet("waiting for you"),
+        ChecksState::Pending => ui.amber("running"),
+        ChecksState::Passing | ChecksState::Unknown if total > 1 => {
+            ui.green(&format!("all {total} passed"))
+        }
+        ChecksState::Passing | ChecksState::Unknown => ui.green("passed"),
+    })
+}
+
+/// The summary, then the counts behind it when they say more.
 fn counts_line(ui: &Ui, counts: &CheckCounts) -> String {
-    let mut parts = Vec::new();
+    let Some(summary) = checks_summary(ui, counts) else {
+        return ui.muted("no checks");
+    };
+    let mut parts = vec![summary];
+    let kinds = [counts.failed, counts.passed, counts.pending, counts.waiting]
+        .iter()
+        .filter(|n| **n > 0)
+        .count();
+    if kinds < 2 {
+        // One kind of check only: the summary has said it all.
+        return parts.remove(0);
+    }
     if counts.failed > 0 {
         parts.push(format!("{}{} failed", ui.red("✗ "), counts.failed));
     }
@@ -55,9 +86,6 @@ fn counts_line(ui: &Ui, counts: &CheckCounts) -> String {
             ui.violet("◆ "),
             counts.waiting
         ));
-    }
-    if parts.is_empty() {
-        return ui.muted("no checks");
     }
     parts.join("   ")
 }

@@ -1,4 +1,4 @@
-//! `atl repo list | clone | publish`.
+//! `atl repo list | clone | publish | rename | delete`.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -13,7 +13,7 @@ use crate::cmd::auth::{account_label, needs_yes};
 use crate::ctx::{find_repo, split_full_name, Ctx};
 use crate::error::{CliError, CliResult};
 use crate::ui::{column, count, out, outln, pad};
-use crate::{CloneArgs, PublishArgs};
+use crate::{CloneArgs, PublishArgs, RepoScope};
 
 pub async fn list(ctx: &Ctx) -> CliResult<()> {
     let client = ctx.client()?;
@@ -390,5 +390,155 @@ pub async fn publish(ctx: &Ctx, args: PublishArgs) -> CliResult<()> {
         ui.muted("  origin now points at your studio. Your folder stayed where it is.")
     );
     ctx.print_friendly(&message);
+    Ok(())
+}
+
+/// The studio repository named by `--repo`, or the one this folder belongs
+/// to, with the working copy when it is this folder's.
+async fn target(
+    ctx: &Ctx,
+    client: &atelier_core::Client,
+    scope: &RepoScope,
+) -> CliResult<(Repo, Option<PathBuf>)> {
+    let repos = client.repos().await.map_err(|e| ctx.err(e))?;
+    if let Some(name) = scope.repo.as_deref() {
+        return Ok((find_repo(&repos, name)?.clone(), None));
+    }
+    match ctx.here().await? {
+        Some(here) => match here.studio_repo(&repos) {
+            Some(repo) => Ok((repo.clone(), Some(here.path.clone()))),
+            None => Err(CliError::plain("This folder isn’t in your studio yet.")
+                .hint("Name a repository with --repo owner/name.")),
+        },
+        None => Err(CliError::plain("You’re not inside a repository.")
+            .hint("Go to one, or name one with --repo owner/name.")),
+    }
+}
+
+/// `atl repo rename NEW`: renames in the studio, then points this folder's
+/// remotes that named the old address at the new one.
+pub async fn rename(ctx: &Ctx, new: &str, scope: RepoScope) -> CliResult<()> {
+    let client = ctx.client()?;
+    let new = new.trim();
+    if new.is_empty() || new.contains(char::is_whitespace) || new.contains(['/', '\\']) {
+        return Err(
+            CliError::plain(format!("“{new}” isn’t a name a repository can have."))
+                .hint("Use one word, like my-new-name."),
+        );
+    }
+    let (old, folder) = target(ctx, &client, &scope).await?;
+    if old.name == new {
+        return Err(CliError::plain(format!(
+            "{} is called that already.",
+            old.full_name
+        )));
+    }
+    let renamed = client
+        .rename_repo(&old.owner, &old.name, new)
+        .await
+        .map_err(|e| ctx.err(e))?;
+    let full_name = if renamed.full_name.is_empty() {
+        format!("{}/{new}", old.owner)
+    } else {
+        renamed.full_name.clone()
+    };
+    let remotes = match (&folder, renamed.name.is_empty()) {
+        (Some(folder), false) => ctx
+            .git()
+            .retarget_remotes(folder, &old, &renamed)
+            .await
+            .map_err(|e| ctx.err(e))?,
+        _ => Vec::new(),
+    };
+    if ctx.json {
+        crate::print_json(&json!({
+            "renamed": true, "from": old.full_name, "full_name": full_name, "remotes": remotes,
+        }));
+        return Ok(());
+    }
+    let ui = &ctx.ui;
+    outln!(
+        "Renamed {} to {}.",
+        old.full_name,
+        ui.amber_bold(&full_name)
+    );
+    match remotes.as_slice() {
+        [] if folder.is_some() => outln!("{}", ui.muted("This folder’s remotes needed no change.")),
+        [] => {}
+        [one] => outln!(
+            "{}",
+            ui.muted(&format!(
+                "This folder’s remote {one} points at the new address."
+            ))
+        ),
+        many => outln!(
+            "{}",
+            ui.muted(&format!(
+                "This folder’s remotes {} point at the new address.",
+                many.join(", ")
+            ))
+        ),
+    }
+    Ok(())
+}
+
+/// `atl repo delete`: deletes from the studio only, after the name was
+/// typed (or given to `--yes`). Nothing on this machine is touched.
+pub async fn delete(ctx: &Ctx, yes: Option<String>, scope: RepoScope) -> CliResult<()> {
+    let client = ctx.client()?;
+    let ui = &ctx.ui;
+    let (repo, _) = target(ctx, &client, &scope).await?;
+    let matches = |typed: &str| typed.trim() == repo.full_name || typed.trim() == repo.name;
+    match yes {
+        Some(given) if given.trim() == repo.full_name => {}
+        Some(given) => {
+            return Err(
+                CliError::plain(format!("“{given}” isn’t this repository’s full name."))
+                    .hint(format!("To delete it, pass --yes {}.", repo.full_name))
+                    .kind("confirm_mismatch"),
+            )
+        }
+        None if ctx.json => return Err(needs_yes("deleting it")),
+        None => {
+            outln!(
+                "This deletes {} from your studio for good: its code there, pull requests, issues and runs.",
+                ui.bold(&repo.full_name)
+            );
+            outln!(
+                "{}",
+                ui.muted(&format!(
+                    "The folder on {} is kept exactly as it is.",
+                    crate::ui::this_machine()
+                ))
+            );
+            out!("Type {} to delete it: ", ui.amber(&repo.name));
+            let mut typed = String::new();
+            let read = std::io::stdin().read_line(&mut typed).unwrap_or(0);
+            if read == 0 || !matches(&typed) {
+                if read == 0 {
+                    outln!();
+                }
+                return Err(CliError::plain("Nothing was deleted.")
+                    .hint(format!(
+                        "Type the name exactly, or pass --yes {}.",
+                        repo.full_name
+                    ))
+                    .kind("confirm_mismatch"));
+            }
+        }
+    }
+    client
+        .delete_repo(&repo.owner, &repo.name)
+        .await
+        .map_err(|e| ctx.err(e))?;
+    if ctx.json {
+        crate::print_json(&json!({"deleted": true, "full_name": repo.full_name}));
+        return Ok(());
+    }
+    outln!("Deleted {} from your studio.", repo.full_name);
+    outln!(
+        "{}",
+        ui.muted("Any folder with it on this machine is still there.")
+    );
     Ok(())
 }

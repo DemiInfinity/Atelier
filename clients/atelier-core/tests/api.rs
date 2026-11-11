@@ -616,9 +616,13 @@ async fn pulls_across_repos_and_per_repo() {
             passed: 2,
             failed: 0,
             pending: 1,
-            waiting: 1
+            waiting: 1,
+            ..CheckCounts::default()
         }
     );
+    // An older studio sends no total and no state: both are worked out.
+    assert_eq!(pull.checks.count(), 4);
+    assert_eq!(pull.checks.summary(), ChecksState::Pending);
     assert!(client
         .repo_pulls("DemiInfinity", "Atelier", PullState::Merged)
         .await
@@ -1383,4 +1387,368 @@ async fn merge_and_cancel_as_built() {
     );
     // The log tail is capped at the server's 2000.
     client.job_log(1, Some(50_000)).await.unwrap();
+}
+
+#[tokio::test]
+async fn repo_rename_and_its_refusals() {
+    let server = MockServer::start().await;
+    let mut renamed = serde_json::from_str::<serde_json::Value>(REPOS).unwrap()["repos"][0].clone();
+    renamed["name"] = json!("Studio");
+    renamed["full_name"] = json!("DemiInfinity/Studio");
+    renamed["clone_https"] = json!("https://studio.example/DemiInfinity/Studio.git");
+    Mock::given(method("PATCH"))
+        .and(path("/api/app/v1/repos/DemiInfinity/Atelier"))
+        .and(header("authorization", bearer().as_str()))
+        .and(body_json(json!({"name": "Studio"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(renamed))
+        .expect(1)
+        .mount(&server)
+        .await;
+    for (name, status, body) in [
+        ("Tray", 409, r#"{"error":"name_taken"}"#),
+        ("no good", 422, r#"{"error":"invalid_name"}"#),
+        ("Nope", 403, r#"{"error":"forbidden"}"#),
+    ] {
+        Mock::given(method("PATCH"))
+            .and(path("/api/app/v1/repos/DemiInfinity/Atelier"))
+            .and(body_json(json!({"name": name})))
+            .respond_with(raw(status, body))
+            .mount(&server)
+            .await;
+    }
+    let client = client(&server);
+    let repo = client
+        .rename_repo("DemiInfinity", "Atelier", "Studio")
+        .await
+        .unwrap();
+    assert_eq!(repo.full_name, "DemiInfinity/Studio");
+    assert_eq!(repo.name, "Studio");
+    assert_eq!(
+        repo.clone_https,
+        "https://studio.example/DemiInfinity/Studio.git"
+    );
+
+    let taken = client
+        .rename_repo("DemiInfinity", "Atelier", "Tray")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (taken.status(), taken.code()),
+        (Some(409), Some("name_taken"))
+    );
+    assert_eq!(taken.to_string(), "That name is already taken.");
+    let invalid = client
+        .rename_repo("DemiInfinity", "Atelier", "no good")
+        .await
+        .unwrap_err();
+    assert_eq!(invalid.status(), Some(422));
+    assert_eq!(
+        invalid.to_string(),
+        "That isn’t a name a repository can have."
+    );
+    let forbidden = client
+        .rename_repo("DemiInfinity", "Atelier", "Nope")
+        .await
+        .unwrap_err();
+    assert_eq!(forbidden.status(), Some(403));
+}
+
+#[tokio::test]
+async fn repo_delete_sends_the_full_name_to_confirm() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/api/app/v1/repos/DemiInfinity/Atelier"))
+        .and(header("authorization", bearer().as_str()))
+        .and(body_json(json!({"confirm": "DemiInfinity/Atelier"})))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/api/app/v1/repos/DemiInfinity/Other"))
+        .respond_with(raw(
+            422,
+            r#"{"error":"confirm_mismatch","message":"Type the repository’s full name to delete it."}"#,
+        ))
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    client.delete_repo("DemiInfinity", "Atelier").await.unwrap();
+    let refused = client
+        .delete_repo("DemiInfinity", "Other")
+        .await
+        .unwrap_err();
+    assert_eq!(refused.status(), Some(422));
+    assert_eq!(
+        refused.to_string(),
+        "Type the repository’s full name to delete it."
+    );
+}
+
+#[tokio::test]
+async fn pulls_of_one_repo_with_the_checks_summary() {
+    let server = MockServer::start().await;
+    // A studio that doesn't know `repo` yet answers with everything.
+    Mock::given(method("GET"))
+        .and(path("/api/app/v1/pulls"))
+        .and(query_param("state", "open"))
+        .and(query_param("repo", "demiinfinity/atelier"))
+        .respond_with(raw(
+            200,
+            r#"{"pulls":[
+              {"repo":"DemiInfinity/Atelier","number":14,"title":"A","state":"open",
+               "checks":{"total":4,"passed":3,"failed":0,"pending":1,"state":"pending"}},
+              {"repo":"DemiInfinity/Atelier","number":15,"title":"B","state":"open",
+               "checks":{"total":2,"passed":1,"failed":1,"pending":0,"state":"failing"}},
+              {"repo":"DemiInfinity/Atelier","number":16,"title":"C","state":"open",
+               "checks":{"total":0,"passed":0,"failed":0,"pending":0,"state":"none"}},
+              {"repo":"DemiInfinity/Atelier","number":17,"title":"D","state":"open",
+               "checks":{"total":2,"passed":2,"failed":0,"pending":0,"state":"some_new_word"}},
+              {"repo":"DemiInfinity/Atelier","number":18,"title":"E","state":"open"},
+              {"repo":"DemiInfinity/Tray","number":9,"title":"elsewhere","state":"open",
+               "checks":{"total":2,"passed":2,"failed":0,"pending":0,"state":"passing"}}]}"#,
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let pulls = client(&server)
+        .pulls_in("demiinfinity/atelier")
+        .await
+        .unwrap();
+    assert_eq!(
+        pulls.iter().map(|p| p.number).collect::<Vec<_>>(),
+        [14, 15, 16, 17, 18]
+    );
+    assert_eq!(pulls[0].checks.total, Some(4));
+    assert_eq!(pulls[0].checks.state, Some(ChecksState::Pending));
+    assert_eq!(pulls[0].checks.summary(), ChecksState::Pending);
+    assert_eq!(pulls[1].checks.summary(), ChecksState::Failing);
+    assert_eq!(pulls[2].checks.summary(), ChecksState::None);
+    // A state this version doesn't know falls back to the counts.
+    assert_eq!(pulls[3].checks.state, Some(ChecksState::Unknown));
+    assert_eq!(pulls[3].checks.summary(), ChecksState::Passing);
+    // No `checks` at all (an older studio, or a hiccup): no checks.
+    assert_eq!(pulls[4].checks, CheckCounts::default());
+    assert_eq!(pulls[4].checks.summary(), ChecksState::None);
+}
+
+#[test]
+fn owners_are_optional_and_join_the_accounts() {
+    let me: Me = serde_json::from_str(ME).unwrap();
+    assert!(me.owners.is_empty());
+    assert_eq!(
+        me.all_owners()
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect::<Vec<_>>(),
+        ["DemiInfinity", "elyndrastudios"]
+    );
+    let mut with: serde_json::Value = serde_json::from_str(ME).unwrap();
+    with["owners"] = json!([
+        {"name": "demiinfinity", "display_name": "Demi", "kind": "personal"},
+        {"name": "elyndrastudios", "display_name": "Elyndra Studios LTD", "kind": "company"},
+        {"name": "sidequest", "display_name": "Side Quest", "kind": "company"}
+    ]);
+    let me: Me = serde_json::from_value(with).unwrap();
+    let all = me.all_owners();
+    assert_eq!(
+        all.iter()
+            .map(|a| (a.name.as_str(), a.display.as_str(), a.kind.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("DemiInfinity", "Demi", "user"),
+            ("elyndrastudios", "Elyndra Studios LTD", "company"),
+            ("sidequest", "Side Quest", "company")
+        ]
+    );
+    assert_eq!(all[2].commit_email, "demi@example.com");
+    // Only `owners` (no accounts): the personal one still comes first.
+    let me: Me = serde_json::from_value(json!({"owners": [
+        {"name": "co", "display_name": "Co", "kind": "company"},
+        {"name": "me", "display_name": "", "kind": "personal"}]}))
+    .unwrap();
+    assert_eq!(
+        me.all_owners()
+            .iter()
+            .map(|a| (a.name.as_str(), a.display.as_str(), a.kind.as_str()))
+            .collect::<Vec<_>>(),
+        [("me", "me", "user"), ("co", "Co", "company")]
+    );
+}
+
+#[tokio::test]
+async fn issues_list_read_open_comment_and_close() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/app/v1/issues"))
+        .and(query_param("repo", "DemiInfinity/Atelier"))
+        .and(query_param("state", "closed"))
+        .and(query_param("page", "2"))
+        .and(query_param("per_page", "30"))
+        .respond_with(raw(
+            200,
+            r##"{"issues":[{"repo":"DemiInfinity/Atelier","number":7,"title":"Tray icon is blurry","state":"closed",
+              "author":"owner:DemiInfinity","via":"tether","labels":[{"name":"bug","color":"#d73a4a"},{"name":"tray","color":null}],
+              "comments":3,"web_path":"/DemiInfinity/Atelier/issues/7","created_at":"2026-11-01T10:00:00Z","updated_at":"2026-11-02T10:00:00Z",
+              "web_url":"https://studio.example/DemiInfinity/Atelier/issues/7","later":1},
+              {"number":8,"labels":null}],"has_more":true}"##,
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/app/v1/issues"))
+        .and(query_param("repo", "DemiInfinity/Atelier"))
+        .and(query_param_is_missing("state"))
+        .and(query_param_is_missing("page"))
+        .respond_with(raw(200, r#"{"issues":null}"#))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/app/v1/repos/DemiInfinity/Atelier/issues/7"))
+        .respond_with(raw(
+            200,
+            r##"{"repo":"DemiInfinity/Atelier","number":7,"title":"Tray icon is blurry","state":"open",
+              "author":"DemiInfinity","labels":[{"name":"bug","color":"#d73a4a"}],
+              "body":"On a **retina** screen.\n<script>alert(1)</script>",
+              "comments":[{"id":88,"author":"CodeRabbit[bot]","via":"tether","kind":"bot","body":"Same here.","created_at":"2026-11-01T11:00:00Z"}],
+              "created_at":"2026-11-01T10:00:00Z","updated_at":"2026-11-02T10:00:00Z",
+              "web_url":"https://studio.example/DemiInfinity/Atelier/issues/7"}"##,
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/api/app/v1/repos/DemiInfinity/Atelier/issues"))
+        .and(header("authorization", bearer().as_str()))
+        .and(body_json(json!({"title": "New thing", "body": "Please."})))
+        .respond_with(raw(
+            201,
+            r#"{"number":9,"title":"New thing","state":"open","comments":0}"#,
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path(
+            "/api/app/v1/repos/DemiInfinity/Atelier/issues/7/comments",
+        ))
+        .and(body_json(json!({"body": "Fixed in main."})))
+        .respond_with(ResponseTemplate::new(201))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path("/api/app/v1/repos/DemiInfinity/Atelier/issues/7"))
+        .and(body_json(json!({"state": "closed"})))
+        .respond_with(raw(200, r#"{"number":7,"state":"closed"}"#))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path("/api/app/v1/repos/DemiInfinity/Atelier/issues/7"))
+        .and(body_json(json!({"state": "open"})))
+        .respond_with(raw(200, "{}"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client(&server);
+    let list = client
+        .issues(&IssuesQuery {
+            repo: "DemiInfinity/Atelier".into(),
+            state: "closed".into(),
+            page: Some(2),
+            per_page: Some(30),
+        })
+        .await
+        .unwrap();
+    assert!(list.has_more);
+    let issue = &list.issues[0];
+    assert_eq!((issue.number, issue.comments), (7, 3));
+    assert_eq!(issue.state, "closed");
+    assert_eq!(issue.via, Some(Via::Tether));
+    assert_eq!(issue.web_path, "/DemiInfinity/Atelier/issues/7");
+    assert_eq!(list.issues[1].via, None);
+    assert_eq!(
+        issue.labels,
+        [
+            Label {
+                name: "bug".into(),
+                color: "#d73a4a".into()
+            },
+            Label {
+                name: "tray".into(),
+                color: String::new()
+            }
+        ]
+    );
+    assert_eq!(
+        issue.web_url,
+        "https://studio.example/DemiInfinity/Atelier/issues/7"
+    );
+    assert_eq!(list.issues[1].number, 8);
+    assert!(list.issues[1].labels.is_empty());
+
+    let empty = client
+        .issues(&IssuesQuery {
+            repo: "DemiInfinity/Atelier".into(),
+            ..IssuesQuery::default()
+        })
+        .await
+        .unwrap();
+    assert!(empty.issues.is_empty() && !empty.has_more);
+
+    let full = client.issue("DemiInfinity", "Atelier", 7).await.unwrap();
+    assert!(full.body.contains("<script>"), "the body is kept as text");
+    assert_eq!(full.comments.len(), 1);
+    let said = &full.comments[0];
+    assert_eq!(
+        (said.id, said.author.as_str(), said.kind.as_str(), said.via),
+        (88, "CodeRabbit[bot]", "bot", Some(Via::Tether))
+    );
+
+    let made = client
+        .create_issue("DemiInfinity", "Atelier", "New thing", "Please.")
+        .await
+        .unwrap();
+    // The answer carries a count where the detail has a list: read as none.
+    assert_eq!((made.number, made.comments.len()), (9, 0));
+    client
+        .comment_on_issue("DemiInfinity", "Atelier", 7, "Fixed in main.")
+        .await
+        .unwrap();
+    client
+        .set_issue_open("DemiInfinity", "Atelier", 7, false)
+        .await
+        .unwrap();
+    client
+        .set_issue_open("DemiInfinity", "Atelier", 7, true)
+        .await
+        .unwrap();
+}
+
+#[test]
+fn the_device_says_whether_it_may_administer() {
+    let me: Me = serde_json::from_str(ME).unwrap();
+    let device = me.device.unwrap();
+    assert_eq!(device.can_admin, None);
+    assert!(!device.may_admin(), "older studios don't say: no");
+    // What wasn't sent isn't made up when the answer is passed on.
+    assert!(serde_json::to_value(&device)
+        .unwrap()
+        .get("can_admin")
+        .is_none());
+    let me: Me = serde_json::from_value(
+        json!({"device": {"id": 7, "name": "MacBook", "kind": "desktop", "can_admin": true}}),
+    )
+    .unwrap();
+    assert!(me.device.unwrap().may_admin());
+    for off in [json!(false), json!(null)] {
+        let me: Me =
+            serde_json::from_value(json!({"device": {"id": 7, "can_admin": off}})).unwrap();
+        assert!(!me.device.unwrap().may_admin());
+    }
+    let me: Me = serde_json::from_value(json!({"device": null})).unwrap();
+    assert_eq!(me.device, None);
 }

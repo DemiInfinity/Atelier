@@ -38,7 +38,7 @@ describe("where pop-ups lead", () => {
   it("maps targets to screens", () => {
     expect(routeFor({ screen: "device" })).toEqual({ screen: "device" });
     expect(routeFor({ screen: "pull", repo: "a/b", number: 3 })).toEqual({ screen: "pulls", repo: "a/b", number: 3 });
-    expect(routeFor({ screen: "repo", path: "/p" })).toEqual({ screen: "repo", path: "/p", tab: "changes" });
+    expect(routeFor({ screen: "repo", path: "/p" })).toEqual({ screen: "repo", path: "/p" });
     expect(routeFor({ screen: "today" })).toEqual({ screen: "today" });
     expect(routeFor({ screen: "pulls" })).toEqual({ screen: "pulls" });
   });

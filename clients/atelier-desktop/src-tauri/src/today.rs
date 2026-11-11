@@ -59,6 +59,13 @@ pub struct WorkingCopy {
     /// The account it belongs to (`deminimmo`, `Elyndra Studios`), or where
     /// its remote points when the studio doesn't know it.
     pub owner: String,
+    /// The owning account's name in the studio (`elyndrastudios`); empty
+    /// when the studio doesn't know the folder. The sidebar groups by it.
+    pub owner_name: String,
+    /// `user` (the personal account) or `company`; empty when unknown.
+    pub owner_kind: String,
+    /// Pinned to the top of the sidebar.
+    pub pinned: bool,
     /// `owner/name` in the studio, when it is there.
     pub full_name: Option<String>,
     pub branch: String,
@@ -200,6 +207,9 @@ pub fn working_copy(
         path,
         name: repo.map_or_else(|| local.folder_name(), |r| r.name.clone()),
         owner: owner_label,
+        owner_name: repo.map(|r| r.owner.clone()).unwrap_or_default(),
+        owner_kind: repo.map(|r| r.owner_kind.clone()).unwrap_or_default(),
+        pinned: false,
         full_name: repo.map(|r| r.full_name.clone()),
         branch: local
             .branch
@@ -470,6 +480,10 @@ impl Desk {
                     }
                 }
             }
+        }
+        let pinned = self.prefs().pinned;
+        for copy in copies.iter_mut().chain(others.iter_mut()) {
+            copy.pinned = pinned.contains(&copy.path);
         }
         let by_name = |a: &WorkingCopy, b: &WorkingCopy| {
             a.owner

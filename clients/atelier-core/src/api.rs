@@ -184,6 +184,33 @@ pub struct Device {
     #[serde(deserialize_with = "nd")]
     pub name: String,
     pub kind: DeviceKind,
+    /// The owner lets this device rename and delete repositories (off
+    /// unless switched on in Settings → Devices). `None` from a studio
+    /// that doesn't say; see [`Device::may_admin`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_admin: Option<bool>,
+}
+
+impl Device {
+    /// Whether this device may rename and delete repositories: only when
+    /// the studio says so.
+    pub fn may_admin(&self) -> bool {
+        self.can_admin == Some(true)
+    }
+}
+
+/// Someone a new repository can belong to: the person themselves or one of
+/// their companies. Newer studios send these as `me.owners`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Owner {
+    #[serde(deserialize_with = "nd")]
+    pub name: String,
+    #[serde(deserialize_with = "nd")]
+    pub display_name: String,
+    /// `personal` or `company`.
+    #[serde(deserialize_with = "nd")]
+    pub kind: String,
 }
 
 /// `GET /me`.
@@ -193,8 +220,44 @@ pub struct Me {
     pub person: Person,
     #[serde(deserialize_with = "nd")]
     pub accounts: Vec<Account>,
+    /// Who the person can create repositories under, when the studio says
+    /// so separately from `accounts` (older studios don't).
+    #[serde(deserialize_with = "nd", skip_serializing_if = "Vec::is_empty")]
+    pub owners: Vec<Owner>,
     pub studio: Studio,
     pub device: Option<Device>,
+}
+
+impl Me {
+    /// Every owner the studio reports, as accounts: `accounts` first, then
+    /// any of `owners` that isn't among them (names compared without
+    /// regard to case). The personal account comes first.
+    pub fn all_owners(&self) -> Vec<Account> {
+        let mut all = self.accounts.clone();
+        for owner in &self.owners {
+            if owner.name.is_empty() || all.iter().any(|a| a.name.eq_ignore_ascii_case(&owner.name))
+            {
+                continue;
+            }
+            let identity = self.accounts.first();
+            all.push(Account {
+                name: owner.name.clone(),
+                display: if owner.display_name.is_empty() {
+                    owner.name.clone()
+                } else {
+                    owner.display_name.clone()
+                },
+                kind: match owner.kind.as_str() {
+                    "personal" | "user" => "user".to_string(),
+                    other => other.to_string(),
+                },
+                commit_name: identity.map(|a| a.commit_name.clone()).unwrap_or_default(),
+                commit_email: identity.map(|a| a.commit_email.clone()).unwrap_or_default(),
+            });
+        }
+        all.sort_by_key(|a| a.kind != "user");
+        all
+    }
 }
 
 // ----------------------------------------------------------------- status
@@ -402,6 +465,18 @@ pub struct CreateRepo {
     pub description: String,
 }
 
+/// Body of `PATCH /repos/{owner}/{name}`.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct RenameRepo {
+    pub name: String,
+}
+
+/// Body of `DELETE /repos/{owner}/{name}`: the full name, typed back.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DeleteRepo {
+    pub confirm: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MirrorRequest {
     pub github: String,
@@ -533,7 +608,22 @@ pub struct Check {
     pub required: Option<bool>,
 }
 
-/// The reduced `checks` of a pull summary.
+/// The one-word state of a pull request's checks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChecksState {
+    /// There are no checks.
+    None,
+    Pending,
+    Failing,
+    Passing,
+    #[serde(other)]
+    Unknown,
+}
+
+/// The reduced `checks` of a pull summary. `total` and `state` come from
+/// newer studios; [`CheckCounts::count`] and [`CheckCounts::summary`] work
+/// them out from the counts when they are missing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CheckCounts {
@@ -541,6 +631,29 @@ pub struct CheckCounts {
     pub failed: u64,
     pub pending: u64,
     pub waiting: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<ChecksState>,
+}
+
+impl CheckCounts {
+    /// How many checks there are.
+    pub fn count(&self) -> u64 {
+        self.total
+            .unwrap_or(self.passed + self.failed + self.pending + self.waiting)
+    }
+
+    /// The state the studio sent, or the one the counts add up to.
+    pub fn summary(&self) -> ChecksState {
+        match self.state {
+            Some(state) if state != ChecksState::Unknown => state,
+            _ if self.failed > 0 => ChecksState::Failing,
+            _ if self.pending + self.waiting > 0 => ChecksState::Pending,
+            _ if self.count() == 0 => ChecksState::None,
+            _ => ChecksState::Passing,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -656,6 +769,142 @@ pub(crate) struct MergeResponse {
     #[serde(deserialize_with = "nd")]
     pub sha: String,
     pub auto_merge: Option<AutoMerge>,
+}
+
+// ----------------------------------------------------------------- issues
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Label {
+    #[serde(deserialize_with = "nd")]
+    pub name: String,
+    /// A hex colour (`#d97706` or `d97706`), when the studio sends one.
+    #[serde(deserialize_with = "nd")]
+    pub color: String,
+}
+
+/// An issue in a list: `comments` is how many there are.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IssueSummary {
+    #[serde(deserialize_with = "nd")]
+    pub repo: String,
+    pub number: u64,
+    #[serde(deserialize_with = "nd")]
+    pub title: String,
+    /// `open` or `closed`.
+    #[serde(deserialize_with = "nd")]
+    pub state: String,
+    /// `<kind>:<name>`, like a pull request's.
+    #[serde(deserialize_with = "nd")]
+    pub author: String,
+    pub via: Option<Via>,
+    #[serde(deserialize_with = "nd")]
+    pub labels: Vec<Label>,
+    #[serde(deserialize_with = "nd")]
+    pub comments: u64,
+    #[serde(deserialize_with = "nd")]
+    pub created_at: String,
+    #[serde(deserialize_with = "nd")]
+    pub updated_at: String,
+    #[serde(deserialize_with = "nd")]
+    pub web_path: String,
+    /// The issue's page in the studio, as an absolute address.
+    #[serde(deserialize_with = "nd")]
+    pub web_url: String,
+}
+
+/// `GET /issues`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IssueList {
+    #[serde(deserialize_with = "nd")]
+    pub issues: Vec<IssueSummary>,
+    #[serde(deserialize_with = "nd")]
+    pub has_more: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IssueComment {
+    #[serde(deserialize_with = "nd")]
+    pub id: u64,
+    /// A bare name, as in pull request comments.
+    #[serde(deserialize_with = "nd")]
+    pub author: String,
+    pub via: Option<Via>,
+    /// `person`, `bot` or `agent`.
+    #[serde(deserialize_with = "nd")]
+    pub kind: String,
+    #[serde(deserialize_with = "nd")]
+    pub body: String,
+    #[serde(deserialize_with = "nd")]
+    pub created_at: String,
+}
+
+/// A count where a list was expected (or nothing at all) reads as no comments.
+fn comment_list<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<IssueComment>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Either {
+        List(Vec<IssueComment>),
+        Other(serde::de::IgnoredAny),
+    }
+    Ok(match Either::deserialize(d)? {
+        Either::List(list) => list,
+        Either::Other(_) => Vec::new(),
+    })
+}
+
+/// `GET /repos/{owner}/{name}/issues/{n}`: the issue with its body and
+/// conversation.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Issue {
+    #[serde(deserialize_with = "nd")]
+    pub repo: String,
+    pub number: u64,
+    #[serde(deserialize_with = "nd")]
+    pub title: String,
+    #[serde(deserialize_with = "nd")]
+    pub state: String,
+    #[serde(deserialize_with = "nd")]
+    pub author: String,
+    pub via: Option<Via>,
+    #[serde(deserialize_with = "nd")]
+    pub labels: Vec<Label>,
+    /// Markdown source.
+    #[serde(deserialize_with = "nd")]
+    pub body: String,
+    /// Oldest first.
+    #[serde(deserialize_with = "comment_list")]
+    pub comments: Vec<IssueComment>,
+    #[serde(deserialize_with = "nd")]
+    pub created_at: String,
+    #[serde(deserialize_with = "nd")]
+    pub updated_at: String,
+    #[serde(deserialize_with = "nd")]
+    pub web_path: String,
+    #[serde(deserialize_with = "nd")]
+    pub web_url: String,
+}
+
+/// Filters for `GET /issues`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct IssuesQuery {
+    /// `owner/name`.
+    pub repo: String,
+    /// `open`, `closed` or `all` (the studio's default when empty).
+    pub state: String,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
+
+/// Body of `POST /repos/{owner}/{name}/issues`.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct NewIssue {
+    pub title: String,
+    pub body: String,
 }
 
 // -------------------------------------------------------- runs and agents

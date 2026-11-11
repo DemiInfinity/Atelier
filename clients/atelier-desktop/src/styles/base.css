@@ -490,3 +490,25 @@ button { font: inherit; color: inherit; }
 .menu-item .hint { margin-left: auto; color: var(--ink3); font-size: 12px; }
 .menu-sep { height: 1px; margin: 4px 2px; background: var(--line); }
 .menu-note { padding: 4px 8px; color: var(--ink3); font-size: 12px; }
+
+/* A repository's row in the sidebar: the link, and a "…" that shows on hover. */
+.side-row { position: relative; display: flex; align-items: center; gap: 4px; }
+.side-row .side-repo { flex: 1; min-width: 0; }
+.side-more { flex: none; width: 22px; height: 22px; padding: 0; display: none; align-items: center; justify-content: center; border: none; border-radius: 6px; background: transparent; color: var(--ink3); cursor: pointer; }
+.side-row:hover .side-more, .side-row:focus-within .side-more { display: flex; }
+.side-more:hover { background: var(--sel); color: var(--ink); }
+.group-toggle { width: 100%; }
+.group-toggle.kind-pinned { color: var(--amber); }
+.group-pin { display: flex; }
+
+/* "This belongs to": who a new repository is for. */
+.owner-choice { margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.owner-choice > legend { padding: 0; color: var(--ink3); font-size: 12px; margin-bottom: 6px; }
+.owner-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.owner-option { flex: 1 1 180px; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line2); background: var(--ground); cursor: pointer; }
+.owner-option:hover { border-color: var(--ink4); }
+.owner-option:has(input:checked) { border-color: var(--amber); background: var(--sel); }
+.owner-option:has(input:disabled) { opacity: 0.5; cursor: default; }
+.owner-option input { flex: none; accent-color: var(--amber); margin: 0; }
+.owner-option .owner-name { font-weight: 600; color: var(--ink); }
+.owner-option .owner-kind { color: var(--ink3); font-size: 12px; }

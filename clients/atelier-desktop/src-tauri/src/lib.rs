@@ -8,6 +8,8 @@ pub mod add;
 pub mod desk;
 pub mod device;
 pub mod error;
+pub mod issues;
+pub mod manage;
 pub mod notify;
 pub mod paths;
 pub mod prefs;

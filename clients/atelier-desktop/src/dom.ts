@@ -100,6 +100,8 @@ const ICONS = {
   chevron: "M6 9 L12 15 L18 9",
   close: "M6 6 L18 18 M18 6 L6 18",
   check: "M5 12 L10 17 L19 7",
+  more: "M5 12 h0.01 M12 12 h0.01 M19 12 h0.01",
+  pin: "M9 4 H15 L14 10 L17 14 H7 L10 10 Z M12 14 V20",
 } as const;
 
 export type IconName = keyof typeof ICONS;

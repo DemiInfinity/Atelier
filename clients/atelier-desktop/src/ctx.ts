@@ -23,11 +23,27 @@ export interface PromptOptions {
   mono?: boolean;
 }
 
+export interface TypedConfirmOptions {
+  title: string;
+  /** What will happen, and what won't, in plain sentences (one per paragraph). */
+  body: string[];
+  /** What has to be typed, exactly, before the button works. */
+  expect: string;
+  confirm: string;
+}
+
+export interface ComposeOptions {
+  title: string;
+  titleLabel: string;
+  bodyLabel: string;
+  confirm: string;
+}
+
 export interface Ctx {
   /** The app's state as last read (studio, accounts, editors, preferences). */
   app(): AppState;
   /** Reads the app's state again (after changing a setting, say). */
-  reloadApp(): Promise<AppState>;
+  reloadApp(fresh?: boolean): Promise<AppState>;
   /** After `api.disconnect()`: forget everything and show first run again. */
   signedOut(): Promise<void>;
   /** The overview as last read: needs, working copies, runner. May be null early on. */
@@ -51,6 +67,10 @@ export interface Ctx {
   confirm(options: ConfirmOptions): Promise<boolean>;
   /** Asks for one line of text. Resolves null when cancelled. */
   prompt(options: PromptOptions): Promise<string | null>;
+  /** Asks for a name to be typed before something that can't be undone. Resolves to what was typed, or null. */
+  confirmTyped(options: TypedConfirmOptions): Promise<string | null>;
+  /** Asks for a title and a longer text. Resolves null when cancelled. */
+  compose(options: ComposeOptions): Promise<{ title: string; body: string } | null>;
   /** Shows a failed run's log in a dialog. */
   showLog(repo: string, runId: number, webPath?: string | null): void;
   /** Does what a "needs you" (or check) button says. */

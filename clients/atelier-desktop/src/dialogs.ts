@@ -1,7 +1,7 @@
 // Confirmation, one-line prompt, log viewer, and the small anchored menu.
 
 import { api, asError } from "./api";
-import type { ConfirmOptions, MenuItem, PromptOptions } from "./ctx";
+import type { ComposeOptions, ConfirmOptions, MenuItem, PromptOptions, TypedConfirmOptions } from "./ctx";
 import { h, mount } from "./dom";
 
 function modal(build: (close: () => void) => HTMLElement, onDismiss: () => void): void {
@@ -111,6 +111,121 @@ export function promptDialog(options: PromptOptions): Promise<string | null> {
           input.focus();
           input.select();
         });
+        return form;
+      },
+      () => resolve(null),
+    );
+  });
+}
+
+/**
+ * Asks before something that can't be undone: the red button only works
+ * once `expect` has been typed exactly.
+ */
+export function typedConfirmDialog(options: TypedConfirmOptions): Promise<string | null> {
+  return new Promise((resolve) => {
+    modal(
+      (close) => {
+        const done = (value: string | null) => {
+          close();
+          resolve(value);
+        };
+        const confirm = h("button", { type: "submit", class: "btn lg danger", text: options.confirm, disabled: true });
+        const input = h("input", {
+          class: "input mono",
+          id: "typed-confirm-input",
+          spellcheck: "false",
+          autocapitalize: "off",
+          autocomplete: "off",
+          oninput: () => {
+            confirm.disabled = input.value.trim() !== options.expect;
+          },
+        });
+        const form = h(
+          "form",
+          {
+            class: "dialog",
+            role: "alertdialog",
+            "aria-modal": "true",
+            "aria-label": options.title,
+            onsubmit: (e) => {
+              e.preventDefault();
+              if (input.value.trim() === options.expect) done(input.value.trim());
+            },
+          },
+          h("div", { class: "dialog-head", text: options.title }),
+          h(
+            "div",
+            { class: "dialog-body" },
+            options.body.map((line) => h("span", { text: line })),
+            h(
+              "div",
+              { class: "field" },
+              h("label", { for: "typed-confirm-input" }, "Type ", h("span", { class: "mono selectable", text: options.expect }), " to confirm"),
+              input,
+            ),
+          ),
+          h(
+            "div",
+            { class: "dialog-foot" },
+            h("button", { type: "button", class: "btn lg", text: "Cancel", onclick: () => done(null) }),
+            confirm,
+          ),
+        );
+        queueMicrotask(() => input.focus());
+        return form;
+      },
+      () => resolve(null),
+    );
+  });
+}
+
+/** A title and a longer text (a new issue). */
+export function composeDialog(options: ComposeOptions): Promise<{ title: string; body: string } | null> {
+  return new Promise((resolve) => {
+    modal(
+      (close) => {
+        const done = (value: { title: string; body: string } | null) => {
+          close();
+          resolve(value);
+        };
+        const submit = h("button", { type: "submit", class: "btn lg primary", text: options.confirm, disabled: true });
+        const title = h("input", {
+          class: "input",
+          id: "compose-title",
+          autocomplete: "off",
+          oninput: () => {
+            submit.disabled = title.value.trim() === "";
+          },
+        });
+        const body = h("textarea", { class: "textarea compose-body", id: "compose-body", rows: "8" });
+        const form = h(
+          "form",
+          {
+            class: "dialog wide",
+            role: "dialog",
+            "aria-modal": "true",
+            "aria-label": options.title,
+            onsubmit: (e) => {
+              e.preventDefault();
+              if (title.value.trim()) done({ title: title.value.trim(), body: body.value });
+            },
+          },
+          h("div", { class: "dialog-head", text: options.title }),
+          h(
+            "div",
+            { class: "dialog-body" },
+            h("div", { class: "field" }, h("label", { for: "compose-title", text: options.titleLabel }), title),
+            h("div", { class: "field" }, h("label", { for: "compose-body", text: options.bodyLabel }), body),
+          ),
+          h(
+            "div",
+            { class: "dialog-foot" },
+            h("button", { type: "button", class: "btn lg", text: "Cancel", onclick: () => done(null) }),
+            submit,
+          ),
+        );
+        queueMicrotask(() => title.focus());
         return form;
       },
       () => resolve(null),

@@ -14,11 +14,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use serde_json::{json, Value};
 use tokio::sync::broadcast;
@@ -34,6 +34,14 @@ struct Mock {
     remote_on: Mutex<bool>,
     messages: Mutex<Value>,
     approved_agents: Mutex<Vec<u64>>,
+    /// Whether this device may rename and delete (off, as in a real studio,
+    /// unless started with `--can-admin` or switched through `/_mock/admin`).
+    can_admin: Mutex<bool>,
+    /// `(full name, owner kind, github link, open pulls)`; renamed and
+    /// deleted through the API.
+    repos: Mutex<Vec<(String, String, Value, u64)>>,
+    /// Full issues (with `body` and a `comments` list), newest first.
+    issues: Mutex<Vec<Value>>,
     events: broadcast::Sender<(String, Value)>,
 }
 
@@ -112,9 +120,17 @@ async fn me(State(mock): App, headers: HeaderMap) -> Response {
             {"name": "elyndrastudios", "display": "Elyndra Studios LTD", "kind": "company", "commit_name": "Demi", "commit_email": "demi@company.example"}
         ],
         "studio": {"name": "Atelier", "url": mock.origin, "version": "mock", "ssh": null, "tether": true, "connect": false},
-        "device": {"id": 7, "name": "MacBook", "kind": "desktop"}
+        "device": {"id": 7, "name": "MacBook", "kind": "desktop", "can_admin": *mock.can_admin.lock().unwrap()}
     }))
     .into_response()
+}
+
+/// `POST /_mock/admin/on` or `/off`: the "Can rename and delete
+/// repositories" switch of Settings → Devices.
+async fn set_admin(State(mock): App, Path(state): Path<String>) -> Response {
+    *mock.can_admin.lock().unwrap() = state == "on";
+    println!("device can_admin = {}", state == "on");
+    Json(json!({"can_admin": state == "on"})).into_response()
 }
 
 async fn status(State(mock): App, headers: HeaderMap) -> Response {
@@ -156,27 +172,151 @@ fn repo(mock: &Mock, full_name: &str, kind: &str, github: Value, pulls: u64) -> 
         "github": github, "open_pulls": pulls, "updated_at": now()})
 }
 
+fn default_repos() -> Vec<(String, String, Value, u64)> {
+    vec![
+        ("DemiInfinity/Atelier".into(), "user".into(), Value::Null, 2),
+        ("DemiInfinity/Marbl".into(), "user".into(), Value::Null, 0),
+        ("DemiInfinity/Tray".into(), "user".into(), Value::Null, 1),
+        (
+            "elyndrastudios/sparky-ventures".into(),
+            "company".into(),
+            json!({"repo": "elyndrastudios/sparky-ventures", "home": "github"}),
+            1,
+        ),
+    ]
+}
+
 async fn repos(State(mock): App, headers: HeaderMap) -> Response {
     guard!(headers);
+    let list: Vec<Value> = mock
+        .repos
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(full, kind, github, pulls)| repo(&mock, full, kind, github.clone(), *pulls))
+        .collect();
     Json(json!({
-        "repos": [
-            repo(&mock, "DemiInfinity/Atelier", "user", Value::Null, 1),
-            repo(&mock, "DemiInfinity/Marbl", "user", Value::Null, 0),
-            repo(&mock, "DemiInfinity/Tray", "user", Value::Null, 1),
-            repo(&mock, "elyndrastudios/sparky-ventures", "company", json!({"repo": "elyndrastudios/sparky-ventures", "home": "github"}), 1),
-        ],
+        "repos": list,
         "github_hits": [{"full_name": "maralind/loopkit", "description": "", "atelier_badge": true}]
     }))
     .into_response()
 }
 
-fn pull(full: bool) -> Value {
-    let mut pull = json!({"repo": "DemiInfinity/Atelier", "number": 14, "title": "Remote access switch in the tray menu", "state": "open",
+/// The repository Atelier was renamed to (or still is), so its pull
+/// requests, runs and issues follow a rename.
+fn main_repo(mock: &Mock) -> String {
+    mock.repos
+        .lock()
+        .unwrap()
+        .first()
+        .map(|r| r.0.clone())
+        .unwrap_or_else(|| "DemiInfinity/Atelier".into())
+}
+
+/// Renaming and deleting need the device's switch to be on.
+fn admin_refused(mock: &Mock) -> Option<Response> {
+    (!*mock.can_admin.lock().unwrap()).then(|| {
+        refuse(
+            StatusCode::FORBIDDEN,
+            "device_not_allowed",
+            "This device isn't allowed to rename or delete repositories. Turn it on in Settings → Devices.",
+        )
+    })
+}
+
+async fn repo_rename(
+    State(mock): App,
+    headers: HeaderMap,
+    Path((owner, name)): Path<(String, String)>,
+    Json(body): Json<Value>,
+) -> Response {
+    guard!(headers);
+    if let Some(no) = admin_refused(&mock) {
+        return no;
+    }
+    let new = body["name"].as_str().unwrap_or_default().trim().to_string();
+    if new.is_empty() || new.contains(char::is_whitespace) || new.contains('/') {
+        return refuse(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_name",
+            "That isn’t a name a repository can have.",
+        );
+    }
+    let full = format!("{owner}/{name}");
+    let renamed = format!("{owner}/{new}");
+    let mut repos = mock.repos.lock().unwrap();
+    if repos
+        .iter()
+        .any(|r| r.0.eq_ignore_ascii_case(&renamed) && !r.0.eq_ignore_ascii_case(&full))
+    {
+        return refuse(
+            StatusCode::CONFLICT,
+            "name_taken",
+            &format!("There is already a repository called {new}."),
+        );
+    }
+    let Some(entry) = repos.iter_mut().find(|r| r.0.eq_ignore_ascii_case(&full)) else {
+        return refuse(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "Your studio couldn’t find that.",
+        );
+    };
+    println!("repo renamed: {full} -> {renamed}");
+    entry.0 = renamed.clone();
+    let (kind, github, pulls) = (entry.1.clone(), entry.2.clone(), entry.3);
+    drop(repos);
+    for issue in mock.issues.lock().unwrap().iter_mut() {
+        if issue["repo"] == json!(full) {
+            issue["repo"] = json!(renamed);
+        }
+    }
+    Json(repo(&mock, &renamed, &kind, github, pulls)).into_response()
+}
+
+async fn repo_delete(
+    State(mock): App,
+    headers: HeaderMap,
+    Path((owner, name)): Path<(String, String)>,
+    body: Option<Json<Value>>,
+) -> Response {
+    guard!(headers);
+    if let Some(no) = admin_refused(&mock) {
+        return no;
+    }
+    let full = format!("{owner}/{name}");
+    let confirm = body
+        .as_ref()
+        .and_then(|b| b["confirm"].as_str())
+        .unwrap_or_default();
+    if !confirm.eq_ignore_ascii_case(&full) {
+        return refuse(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "confirm_mismatch",
+            &format!("Send confirm with the repository's full name, {full}, to delete it."),
+        );
+    }
+    let mut repos = mock.repos.lock().unwrap();
+    let before = repos.len();
+    repos.retain(|r| !r.0.eq_ignore_ascii_case(&full));
+    if repos.len() == before {
+        return refuse(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "Your studio couldn’t find that.",
+        );
+    }
+    println!("repo deleted: {full} (confirm {confirm})");
+    StatusCode::NO_CONTENT.into_response()
+}
+
+fn pull(repo: &str, full: bool) -> Value {
+    let mut pull = json!({"repo": repo, "number": 14, "title": "Remote access switch in the tray menu", "state": "open",
         "head": "feature/tunnel-ui", "base": "main", "author": "owner:DemiInfinity", "commits": 2, "files": 3, "via": null,
         "merge": {"can_merge": false, "reason": "1 check is still running and 1 agent is waiting for you.", "methods": ["squash", "merge"],
                   "on_github": false, "auto_merge": null},
-        "checks": {"passed": 2, "failed": 0, "pending": 1, "waiting": 1},
-        "web_path": "/DemiInfinity/Atelier/pulls/14", "updated_at": now()});
+        "checks": {"total": 4, "passed": 2, "failed": 0, "pending": 1, "waiting": 1, "state": "pending"},
+        "web_path": format!("/{repo}/pulls/14"), "updated_at": now()});
     if full {
         pull["checks"] = json!([
             {"name": "ci · test", "status": "success", "detail": "MacBook · 1m 48s", "run_id": 207, "job_id": 410},
@@ -194,18 +334,45 @@ fn pull(full: bool) -> Value {
     pull
 }
 
-async fn pulls(headers: HeaderMap) -> Response {
+/// `GET /pulls[?repo=owner/name]`. The summaries carry the checks at a
+/// glance; one is as an older studio sends it (counts only).
+async fn pulls(
+    State(mock): App,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> Response {
     guard!(headers);
-    Json(json!({"pulls": [
-        pull(false),
-        {"repo": "DemiInfinity/Tray", "number": 9, "title": "Update okhttp to 5.1", "state": "open", "head": "atelier-updates/okhttp", "base": "main",
-         "author": "atelier-updates", "via": "bot", "merge": {"can_merge": true, "methods": ["squash"]}, "checks": {"passed": 2, "failed": 0, "pending": 0, "waiting": 0},
-         "web_path": "/DemiInfinity/Tray/pulls/9"},
-        {"repo": "elyndrastudios/sparky-ventures", "number": 63, "title": "Soften the pricing copy", "state": "open", "head": "copy", "base": "main",
+    let main = main_repo(&mock);
+    let known: Vec<String> = mock
+        .repos
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|r| r.0.clone())
+        .collect();
+    let mut list = vec![
+        pull(&main, false),
+        json!({"repo": main, "number": 15, "title": "SSH handshake retries", "state": "open", "head": "feature/ssh", "base": "main",
+         "author": "owner:DemiInfinity", "via": null, "merge": {"can_merge": false, "methods": ["squash"]},
+         "checks": {"total": 2, "passed": 1, "failed": 1, "pending": 0, "waiting": 0, "state": "failing"},
+         "web_path": format!("/{main}/pulls/15")}),
+        json!({"repo": "DemiInfinity/Tray", "number": 9, "title": "Update okhttp to 5.1", "state": "open", "head": "atelier-updates/okhttp", "base": "main",
+         "author": "atelier-updates", "via": "bot", "merge": {"can_merge": true, "methods": ["squash"]},
+         "checks": {"total": 2, "passed": 2, "failed": 0, "pending": 0, "waiting": 0, "state": "passing"},
+         "web_path": "/DemiInfinity/Tray/pulls/9"}),
+        json!({"repo": "elyndrastudios/sparky-ventures", "number": 63, "title": "Soften the pricing copy", "state": "open", "head": "copy", "base": "main",
          "author": "cursor agent on GitHub", "via": "tether", "merge": {"can_merge": true, "methods": ["merge"], "on_github": true},
-         "checks": {"passed": 1, "failed": 0, "pending": 0, "waiting": 0}, "web_path": "/elyndrastudios/sparky-ventures/pulls/63"}
-    ]}))
-    .into_response()
+         "checks": {"passed": 0, "failed": 0, "pending": 0, "waiting": 0}, "web_path": "/elyndrastudios/sparky-ventures/pulls/63"}),
+    ];
+    list.retain(|p| known.iter().any(|k| p["repo"] == json!(k)));
+    if let Some(repo) = query.get("repo") {
+        list.retain(|p| {
+            p["repo"]
+                .as_str()
+                .is_some_and(|r| r.eq_ignore_ascii_case(repo))
+        });
+    }
+    Json(json!({"pulls": list})).into_response()
 }
 
 async fn pull_detail(
@@ -213,8 +380,8 @@ async fn pull_detail(
     Path((owner, name, number)): Path<(String, String, u64)>,
 ) -> Response {
     guard!(headers);
-    if owner == "DemiInfinity" && name == "Atelier" && number == 14 {
-        return Json(pull(true)).into_response();
+    if number == 14 {
+        return Json(pull(&format!("{owner}/{name}"), true)).into_response();
     }
     Json(json!({"repo": format!("{owner}/{name}"), "number": number, "title": format!("Pull request {number}"), "state": "open",
         "head": "feature", "base": "main", "author": "atelier-updates", "commits": 1, "files": 1,
@@ -242,18 +409,219 @@ async fn cancel_merge(headers: HeaderMap) -> Response {
     Json(json!({"cancelled": true})).into_response()
 }
 
-async fn runs(headers: HeaderMap) -> Response {
+async fn runs(
+    State(mock): App,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> Response {
     guard!(headers);
-    Json(json!({"runs": [
-        {"run_id": 207, "repo": "DemiInfinity/Atelier", "workflow": "ci", "event": "push", "branch": "feature/tunnel-ui", "status": "success",
-         "started_at": now(), "duration_s": 108, "web_path": "/DemiInfinity/Atelier/actions/runs/207",
+    let main = main_repo(&mock);
+    let mut list = vec![
+        json!({"run_id": 207, "repo": main, "workflow": "ci", "event": "push", "branch": "feature/tunnel-ui", "status": "success",
+         "started_at": now(), "duration_s": 108, "web_path": format!("/{main}/actions/runs/207"),
          "jobs": [{"job_id": 410, "name": "test", "status": "success", "runner": "MacBook", "duration_s": 108, "kind": "job"},
-                  {"job_id": 411, "name": "lint", "status": "success", "runner": "MacBook", "duration_s": 22, "kind": "job"}]},
-        {"run_id": 208, "repo": "DemiInfinity/Atelier", "workflow": "ci", "event": "push", "branch": "feature/ssh", "status": "failure",
-         "started_at": now(), "duration_s": 123, "web_path": "/DemiInfinity/Atelier/actions/runs/208",
-         "jobs": [{"job_id": 421, "name": "test", "status": "failure", "runner": "MacBook", "duration_s": 123, "kind": "job"}]}
-    ]}))
-    .into_response()
+                  {"job_id": 411, "name": "lint", "status": "success", "runner": "MacBook", "duration_s": 22, "kind": "job"}]}),
+        json!({"run_id": 208, "repo": main, "workflow": "ci", "event": "push", "branch": "feature/ssh", "status": "failure",
+         "started_at": now(), "duration_s": 123, "web_path": format!("/{main}/actions/runs/208"),
+         "jobs": [{"job_id": 421, "name": "test", "status": "failure", "runner": "MacBook", "duration_s": 123, "kind": "job"}]}),
+        json!({"run_id": 206, "repo": main, "workflow": "pages", "event": "push", "branch": "main", "status": "success",
+         "started_at": now(), "duration_s": 41, "web_path": format!("/{main}/actions/runs/206"),
+         "jobs": [{"job_id": 409, "name": "build", "status": "success", "runner": "MacBook", "duration_s": 41, "kind": "job"}]}),
+    ];
+    if let Some(repo) = query.get("repo") {
+        list.retain(|r| {
+            r["repo"]
+                .as_str()
+                .is_some_and(|x| x.eq_ignore_ascii_case(repo))
+        });
+    }
+    Json(json!({"runs": list})).into_response()
+}
+
+// ------------------------------------------------------------------ issues
+
+fn default_issues(origin: &str) -> Vec<Value> {
+    let issue = |number: u64,
+                 title: &str,
+                 state: &str,
+                 author: &str,
+                 via: Value,
+                 labels: Value,
+                 body: &str,
+                 comments: Value| {
+        json!({"repo": "DemiInfinity/Atelier", "number": number, "title": title, "state": state, "author": author, "via": via,
+            "labels": labels, "body": body, "comments": comments, "created_at": now(), "updated_at": now(),
+            "web_path": format!("/DemiInfinity/Atelier/issues/{number}"),
+            "web_url": format!("{origin}/DemiInfinity/Atelier/issues/{number}")})
+    };
+    vec![
+        issue(21, "Tray icon flickers", "open", "owner:DemiInfinity", Value::Null,
+            json!([{"name": "bug", "color": "#d73a4a"}, {"name": "tray", "color": "#f2b85c"}]),
+            "The icon flickers when a job starts.\n\n- happens on **battery**\n- `<script>alert(1)</script>` stays text",
+            json!([{"id": 88, "author": "CodeRabbit[bot]", "via": "tether", "kind": "bot", "body": "Possibly the redraw in tray.go.", "created_at": now()}])),
+        issue(20, "Docs: say how to pair a runner", "open", "person:maralind", json!("tether"),
+            json!([{"name": "docs", "color": "#7cc0ff"}]), "From GitHub: the README skips the pairing step.", json!([])),
+        issue(18, "Clone over SSH fails on port 22", "closed", "owner:DemiInfinity", Value::Null, json!([]),
+            "Fixed by using the studio's own port.", json!([])),
+    ]
+}
+
+/// The list form of an issue: no body, comments as a count.
+fn issue_summary(issue: &Value) -> Value {
+    let mut out = issue.clone();
+    if let Some(map) = out.as_object_mut() {
+        map.remove("body");
+        let n = issue["comments"].as_array().map_or(0, Vec::len);
+        map.insert("comments".into(), json!(n));
+    }
+    out
+}
+
+async fn issues(
+    State(mock): App,
+    headers: HeaderMap,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    guard!(headers);
+    let state = query.get("state").map_or("open", String::as_str);
+    let list: Vec<Value> = mock
+        .issues
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|i| {
+            query.get("repo").is_none_or(|r| {
+                i["repo"]
+                    .as_str()
+                    .is_some_and(|x| x.eq_ignore_ascii_case(r))
+            })
+        })
+        .filter(|i| state == "all" || i["state"] == json!(state))
+        .map(issue_summary)
+        .collect();
+    Json(json!({"issues": list, "has_more": false})).into_response()
+}
+
+fn find_issue<'a>(
+    issues: &'a mut [Value],
+    owner: &str,
+    name: &str,
+    number: u64,
+) -> Option<&'a mut Value> {
+    let full = format!("{owner}/{name}");
+    issues.iter_mut().find(|i| {
+        i["number"] == json!(number)
+            && i["repo"]
+                .as_str()
+                .is_some_and(|r| r.eq_ignore_ascii_case(&full))
+    })
+}
+
+fn no_issue() -> Response {
+    refuse(
+        StatusCode::NOT_FOUND,
+        "not_found",
+        "Your studio couldn’t find that.",
+    )
+}
+
+async fn issue_detail(
+    State(mock): App,
+    headers: HeaderMap,
+    Path((owner, name, number)): Path<(String, String, u64)>,
+) -> Response {
+    guard!(headers);
+    match find_issue(&mut mock.issues.lock().unwrap(), &owner, &name, number) {
+        Some(issue) => Json(issue.clone()).into_response(),
+        None => no_issue(),
+    }
+}
+
+async fn issue_create(
+    State(mock): App,
+    headers: HeaderMap,
+    Path((owner, name)): Path<(String, String)>,
+    Json(body): Json<Value>,
+) -> Response {
+    guard!(headers);
+    let title = body["title"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if title.is_empty() || title.contains('\n') {
+        return refuse(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_title",
+            "An issue needs a title of one line.",
+        );
+    }
+    let mut issues = mock.issues.lock().unwrap();
+    let number = issues
+        .iter()
+        .filter_map(|i| i["number"].as_u64())
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let issue = json!({"repo": format!("{owner}/{name}"), "number": number, "title": title, "state": "open",
+        "author": "token:device:MacBook", "via": null, "labels": [], "body": body["body"].as_str().unwrap_or_default(),
+        "comments": [], "created_at": now(), "updated_at": now(),
+        "web_path": format!("/{owner}/{name}/issues/{number}"), "web_url": format!("{}/{owner}/{name}/issues/{number}", mock.origin)});
+    println!("issue opened: {owner}/{name}#{number} {}", issue["title"]);
+    issues.insert(0, issue.clone());
+    (StatusCode::CREATED, Json(issue)).into_response()
+}
+
+async fn issue_comment(
+    State(mock): App,
+    headers: HeaderMap,
+    Path((owner, name, number)): Path<(String, String, u64)>,
+    Json(body): Json<Value>,
+) -> Response {
+    guard!(headers);
+    let text = body["body"].as_str().unwrap_or_default().trim().to_string();
+    if text.is_empty() {
+        return refuse(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "empty_body",
+            "Write something first.",
+        );
+    }
+    let mut issues = mock.issues.lock().unwrap();
+    let Some(issue) = find_issue(&mut issues, &owner, &name, number) else {
+        return no_issue();
+    };
+    let comment = json!({"id": 100 + mock.sequence.fetch_add(1, Ordering::SeqCst), "author": "device:MacBook", "via": null,
+        "kind": "person", "body": text, "created_at": now()});
+    println!("issue {number} commented: {}", comment["body"]);
+    if let Some(list) = issue["comments"].as_array_mut() {
+        list.push(comment.clone());
+    }
+    (StatusCode::CREATED, Json(comment)).into_response()
+}
+
+async fn issue_patch(
+    State(mock): App,
+    headers: HeaderMap,
+    Path((owner, name, number)): Path<(String, String, u64)>,
+    Json(body): Json<Value>,
+) -> Response {
+    guard!(headers);
+    let state = body["state"].as_str().unwrap_or_default();
+    if !matches!(state, "open" | "closed") {
+        return refuse(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_state",
+            "An issue is open or closed.",
+        );
+    }
+    let mut issues = mock.issues.lock().unwrap();
+    let Some(issue) = find_issue(&mut issues, &owner, &name, number) else {
+        return no_issue();
+    };
+    issue["state"] = json!(state);
+    println!("issue {number} is now {state}");
+    Json(issue.clone()).into_response()
 }
 
 async fn job_log(headers: HeaderMap, Path(id): Path<u64>) -> Response {
@@ -510,6 +878,9 @@ async fn main() {
         remote_on: Mutex::new(false),
         messages: Mutex::new(default_messages()),
         approved_agents: Mutex::new(Vec::new()),
+        can_admin: Mutex::new(args.iter().any(|a| a == "--can-admin")),
+        repos: Mutex::new(default_repos()),
+        issues: Mutex::new(default_issues(&origin)),
         events: events_tx,
     });
 
@@ -525,7 +896,21 @@ async fn main() {
         .route("/me", get(me))
         .route("/status", get(status))
         .route("/repos", get(repos))
+        .route(
+            "/repos/{owner}/{name}",
+            patch(repo_rename).delete(repo_delete),
+        )
         .route("/pulls", get(pulls))
+        .route("/issues", get(issues))
+        .route("/repos/{owner}/{name}/issues", post(issue_create))
+        .route(
+            "/repos/{owner}/{name}/issues/{number}",
+            get(issue_detail).patch(issue_patch),
+        )
+        .route(
+            "/repos/{owner}/{name}/issues/{number}/comments",
+            post(issue_comment),
+        )
         .route("/repos/{owner}/{name}/pulls/{number}", get(pull_detail))
         .route(
             "/repos/{owner}/{name}/pulls/{number}/merge",
@@ -543,6 +928,7 @@ async fn main() {
     let app = Router::new()
         .nest("/api/app/v1", api)
         .route("/_mock/notify", post(push_notify))
+        .route("/_mock/admin/{state}", post(set_admin))
         .fallback(page)
         .with_state(mock);
 

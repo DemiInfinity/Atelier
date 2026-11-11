@@ -47,10 +47,20 @@ scripts/try-with-mock.sh selftest atl  # the same, starting as someone who signe
 
 `try-with-mock.sh` starts `examples/mock_studio.rs` (the contract's example
 answers, a device flow that approves itself, live events, a fake runner
-socket) and the app in a throwaway home with its own config, token file, SSH
+socket, repositories that can be renamed and deleted, issues that can be
+opened, commented on and closed) and the app in a throwaway home with its own config, token file, SSH
 folder and two working copies. `curl -X POST http://127.0.0.1:4780/_mock/notify`
-makes a pop-up appear. The self-test types the address, clicks through first
-run, visits each screen and prints what it sees as `[selftest] …` lines.
+makes a pop-up appear. The mock studio starts, like a real one, with this
+device not allowed to rename or delete repositories;
+`curl -X POST http://127.0.0.1:4780/_mock/admin/on` (or `/off`) is the switch
+of Settings → Devices, and `mock_studio --can-admin` starts with it on. The
+self-test types the address, clicks through first run, visits each screen and
+prints what it sees as `[selftest] …` lines: a repository opening on History,
+its own pull requests with their checks, issues, runs by pull request, pinning,
+folding an owner's group, the refusal to rename, then (once the harness has
+flipped the switch) a rename, a delete with the name typed, and the owner
+chooser when publishing. Afterwards the script prints each folder's `origin`
+and `[desktop]` from the config, to show that the folders are still there.
 
 Environment (on top of the ones in [`../README.md`](../README.md), which the
 app honours too: `ATELIER_CONFIG_DIR`, `ATELIER_TOKEN_STORE=file`,
@@ -71,7 +81,10 @@ src-tauri/src/
                 No Tauri in it, so tests drive it directly.
   today.rs      Today / sidebar / popover data (needs, working copies, feed)
   repo.rs       one working copy: changes, diffs, commit, history, branches
+  manage.rs     rename / delete in the studio, pins, folded groups, runs
+                by pull request
   pulls.rs      pull requests       device.rs   the runner and its jobs
+  issues.rs     a repository's issues
   add.rs        publish / clone / start new
   studio.rs     remote access, messages, the app's own settings
   notify.rs     a notify event → the words, colour and target of a pop-up
@@ -83,7 +96,12 @@ src-tauri/src/
 src/
   api.ts        every command and data shape (the contract with Rust)
   shell.ts      main window: sidebar, router, toasts, dialogs  → ctx.ts
+  sideview.ts   the sidebar's repositories: Pinned, a group per owner
+  manage.ts     pin, rename, delete: shared by the sidebar and the bar
   screens/*.ts  one module per screen       tray.ts  the popover
+                (repo.ts and its tabs: repo-history, repo-changes,
+                pulls.ts scoped to the repository, repo-issues,
+                repo-branches, repo-runs)
   logic/*.ts    pure view logic with tests  dom.ts   element builder
   styles/*.css  tokens in base.css, one file per screen
 ```
@@ -113,8 +131,29 @@ src/
   aren't in the studio are listed under "Other folders". Someone who signed
   in with `atl` sees "Find your folders" once, with folders in their home
   folder that contain git repositories suggested.
+- **A repository** opens on History, always; its tabs are History, Changes,
+  Pull requests, Issues, Branches and Actions (the last four only for a
+  repository in the studio). Pull requests there are that repository's; the
+  sidebar's "Pull requests" is every repository's. Each row carries its
+  checks at a glance (`3 of 4 passed`, `1 failing`, `running`, `waiting for
+  you`, `no checks`); jobs and logs stay a click away. Actions gathers runs
+  under the open pull request whose branch they ran on: the studio doesn't
+  say which pull request a run belongs to, so the branch decides.
+- **Rename and delete** go to the studio (`PATCH` / `DELETE
+  /repos/{owner}/{name}`). After a rename every remote of the folder that
+  named the old address is pointed at the new one, keeping the rest of the
+  address. Delete needs the repository's name typed, removes it from the
+  studio only and never touches the folder, which then shows under "Other
+  folders". A studio lets a device do either only once its owner switched
+  that on in Settings → Devices (`device.can_admin` in `/me`, read again when
+  the window comes back); until then the app says so and offers that page.
+- **Issue text** (titles, bodies, comments, label names) is shown as plain
+  text, the Markdown source with its line breaks; nothing from the studio is
+  ever turned into markup. A label's colour is checked to be a hex colour in
+  Rust before it tints a dot.
 - **State** lives where `atl` keeps it: `config.toml` (the app's own
-  preferences under `[desktop]`) and the keychain.
+  preferences under `[desktop]`: `pinned`, `collapsed` owner groups,
+  `default_owner` for "This belongs to", …) and the keychain.
 
 ### Commands
 
@@ -124,6 +163,8 @@ src/
 | Today | `overview` `run_log` |
 | Repository | `repo_view` `repo_changes` `repo_diff` `repo_commit` `repo_discard` `repo_undo_commit` `repo_history` `repo_commit_detail` `repo_branches` `repo_switch` `repo_new_branch` `repo_fetch` `repo_pull` `repo_push` `repo_open` `repo_hand_over` |
 | Links | `open_web` `open_studio` `open_github` |
+| Looking after a repository | `repo_rename` `repo_delete` `repo_set_pinned` `set_group_collapsed` `repo_runs` |
+| Issues | `issues_list` `issue_detail` `issue_create` `issue_comment` `issue_set_open` |
 | Pull requests | `pulls_list` `pull_detail` `pull_merge` `pull_cancel_merge` `pull_checkout` `agent_approve` |
 | This device | `device_view` `runner_set_taking` `runner_set_rule` `runner_tail` `job_stop` |
 | Folders | `add_watch_folder` `remove_watch_folder` `choose_clone_root` `open_folder` |

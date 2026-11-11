@@ -50,6 +50,13 @@ pub struct Prefs {
     /// "Find your folders" was shown once (in first run, or later for
     /// someone who signed in with `atl`).
     pub folders_done: bool,
+    /// Working copies pinned to the top of the sidebar, by folder.
+    pub pinned: Vec<String>,
+    /// Owner groups folded shut in the sidebar, by account name.
+    pub collapsed: Vec<String>,
+    /// The account a new repository belonged to last time ("This belongs
+    /// to"), offered first next time.
+    pub default_owner: Option<String>,
 }
 
 impl Default for Prefs {
@@ -61,6 +68,9 @@ impl Default for Prefs {
             hide_dock: false,
             picked: Vec::new(),
             folders_done: false,
+            pinned: Vec::new(),
+            collapsed: Vec::new(),
+            default_owner: None,
         }
     }
 }
@@ -105,5 +115,23 @@ mod tests {
         assert!(text.contains("picked = [\"/tmp/x\"]"));
         assert_eq!(Prefs::read(&toml::from_str(&text).unwrap()), prefs);
         assert_eq!(Prefs::read(&Config::default()), Prefs::default());
+    }
+
+    #[test]
+    fn pins_folds_and_the_default_owner_are_kept() {
+        let mut config = Config::default();
+        let mut prefs = Prefs::read(&config);
+        assert!(prefs.pinned.is_empty() && prefs.collapsed.is_empty());
+        assert_eq!(prefs.default_owner, None);
+        prefs.pinned.push("/tmp/a".into());
+        prefs.collapsed.push("elyndrastudios".into());
+        prefs.default_owner = Some("elyndrastudios".into());
+        prefs.write(&mut config);
+        let text = toml::to_string(&config).unwrap();
+        assert!(text.contains("[desktop]"));
+        assert!(text.contains("pinned = [\"/tmp/a\"]"));
+        assert!(text.contains("collapsed = [\"elyndrastudios\"]"));
+        assert!(text.contains("default_owner = \"elyndrastudios\""));
+        assert_eq!(Prefs::read(&toml::from_str(&text).unwrap()), prefs);
     }
 }

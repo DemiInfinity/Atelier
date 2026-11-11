@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use atelier_core::api::{GithubLink, Repo};
-use atelier_core::git::{discover_repos, PublishOptions, PublishStep, RemoteRef, Transport};
+use atelier_core::git::{
+    discover_repos, renamed_url, PublishOptions, PublishStep, RemoteRef, Transport,
+};
 use atelier_core::{Error, Git};
 use serde_json::json;
 use wiremock::matchers::{body_json, method, path};
@@ -713,4 +715,85 @@ async fn the_device_key_is_remembered_for_ssh_remotes() {
         .await
         .is_err());
     assert_eq!(std::fs::read_to_string(clone.join("f")).unwrap(), "x");
+}
+
+#[test]
+fn renamed_urls_keep_everything_but_the_name() {
+    assert_eq!(
+        renamed_url("https://studio.example/Demi/Old.git", "Old", "New").as_deref(),
+        Some("https://studio.example/Demi/New.git")
+    );
+    assert_eq!(
+        renamed_url("ssh://git@studio.example:2223/Demi/old.git/", "Old", "New").as_deref(),
+        Some("ssh://git@studio.example:2223/Demi/New.git")
+    );
+    assert_eq!(
+        renamed_url("git@studio.example:Demi/Old", "Old", "New").as_deref(),
+        Some("git@studio.example:Demi/New")
+    );
+    assert_eq!(
+        renamed_url("https://studio.example/Demi/Bold.git", "Old", "New"),
+        None
+    );
+    assert_eq!(
+        renamed_url("https://studio.example/Demi/Other.git", "Old", "New"),
+        None
+    );
+    assert_eq!(renamed_url("", "Old", "New"), None);
+}
+
+#[tokio::test]
+async fn a_rename_moves_only_the_remotes_that_pointed_at_the_old_address() {
+    let sandbox = Sandbox::new();
+    let repo = sandbox.repo("work").await;
+    sandbox.commit(&repo, "a.txt", "a\n").await;
+    for (name, url) in [
+        ("origin", "https://studio.example/Demi/Old.git"),
+        ("ssh", "ssh://git@studio.example:2223/demi/old.git"),
+        ("github", "https://github.com/Demi/Old.git"),
+        ("backup", "/tmp/somewhere/Old.git"),
+    ] {
+        sandbox.g(&repo, &["remote", "add", name, url]).await;
+    }
+    let old = studio_repo(
+        "Demi/Old",
+        "https://studio.example/Demi/Old.git",
+        "ssh://git@studio.example:2223/Demi/Old.git",
+    );
+    let new = studio_repo(
+        "Demi/New",
+        "https://studio.example/Demi/New.git",
+        "ssh://git@studio.example:2223/Demi/New.git",
+    );
+    let mut changed = sandbox
+        .git
+        .retarget_remotes(&repo, &old, &new)
+        .await
+        .unwrap();
+    changed.sort();
+    assert_eq!(changed, ["origin", "ssh"]);
+    let url = |name: &'static str| {
+        let (sandbox, repo) = (&sandbox, &repo);
+        async move { sandbox.g(repo, &["remote", "get-url", name]).await }
+    };
+    assert_eq!(
+        url("origin").await.trim(),
+        "https://studio.example/Demi/New.git"
+    );
+    assert_eq!(
+        url("ssh").await.trim(),
+        "ssh://git@studio.example:2223/demi/New.git"
+    );
+    assert_eq!(
+        url("github").await.trim(),
+        "https://github.com/Demi/Old.git"
+    );
+    assert_eq!(url("backup").await.trim(), "/tmp/somewhere/Old.git");
+    // Again: nothing points at the old address any more.
+    assert!(sandbox
+        .git
+        .retarget_remotes(&repo, &old, &new)
+        .await
+        .unwrap()
+        .is_empty());
 }

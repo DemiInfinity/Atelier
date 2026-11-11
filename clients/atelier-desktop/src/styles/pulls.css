@@ -113,3 +113,16 @@
 
 .pulls-foot { flex: none; gap: 8px; }
 .pulls-foot-btn { height: 32px; font-size: 13px; }
+
+/* Checks at a glance, on a row */
+.checks-chip { display: inline-flex; align-items: center; gap: 6px; height: 20px; color: var(--ink2); font-size: 12px; }
+.checks-chip .dot { background: var(--tone); }
+.checks-chip.is-none { color: var(--ink3); }
+.checks-chip.is-none .dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink4); }
+.checks-chip.is-failing { color: var(--red); }
+.checks-chip.is-pending .dot { animation: checks-pulse 1.6s ease-in-out infinite; }
+@keyframes checks-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .checks-chip.is-pending .dot { animation: none; } }
+
+/* Inside a repository: no screen heading of its own. */
+.screen.pulls.scoped .pulls-head { padding: 10px 16px; min-height: 48px; }

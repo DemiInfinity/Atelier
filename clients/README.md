@@ -40,8 +40,12 @@ atl repo list
 atl repo clone NAME           from your studio; --github owner/name mirrors it first
 atl repo publish              turn this folder into a repository
                               (--owner --name --public --description --yes --replace-origin --https)
+atl repo rename NEW           a new name in your studio; this folder's remote follows (-R owner/name)
+atl repo delete               from your studio only, after you type its name (--yes owner/name for scripts)
 atl pr [N]                    pull requests here (-R owner/name, --all, --state)
 atl pr merge N                [--when-green] [--method squash|merge|rebase] [--delete-branch] [--cancel]
+atl issue [list]              this repository's issues (--state open|closed|all, -R owner/name)
+atl issue view N | new TITLE [-b BODY] | close N
 atl run [list]                recent runs (--limit, -R, --runner)
 atl run log ID                the log of a run's failed jobs (--job: ID is a job id; --tail N)
 atl run watch                 what is running, live

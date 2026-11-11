@@ -1,7 +1,7 @@
 // Pull requests: the open ones across the studio on the left, the picked
 // one on the right with its merge status, checks and conversation.
 
-import { api, asError, type CheckRow, type CommentRow, type Events, type PullRow, type PullView } from "../api";
+import { api, asError, type CheckRow, type ChecksBrief, type CommentRow, type Events, type PullRow, type PullView } from "../api";
 import type { Ctx, MenuItem, Screen } from "../ctx";
 import { ago, h, icon, mount, pill, plural } from "../dom";
 import { pickMethod, pickPull, shortRepo, visiblePulls, type PullKey } from "../logic/pulls";
@@ -27,12 +27,52 @@ function rememberMethod(id: string): void {
   }
 }
 
+/** A pull request's checks at a glance: a dot in the state's colour and a few words. */
+export function checksChip(checks: ChecksBrief): HTMLElement {
+  return h(
+    "span",
+    { class: `checks-chip tone-${checks.tone} is-${checks.state}`, title: checks.title, "aria-label": `Checks: ${checks.text}` },
+    h("span", { class: "dot xs", "aria-hidden": "true" }),
+    h("span", { text: checks.text }),
+  );
+}
+
+/** One pull request in a list. `showRepo` is false inside a repository, where it would only repeat. */
+export function pullCard(row: PullRow, current: boolean, showRepo: boolean, pick: () => void): HTMLElement {
+  return h(
+    "button",
+    { type: "button", class: "pulls-card", "aria-current": current ? "true" : "false", onclick: pick },
+    h("span", { class: "pulls-card-title", text: row.title }),
+    h("span", { class: "muted", text: showRepo ? `${row.repo_short} · ${row.by}` : `pull request ${row.number} · ${row.by}` }),
+    h(
+      "span",
+      { class: "row wrap pulls-card-pills" },
+      pill(row.status.text, row.status.tone),
+      row.via ? pill(row.via.text, row.via.tone) : null,
+      checksChip(row.checks),
+    ),
+  );
+}
+
+/** The global "Pull requests" screen: every repository's. */
 export function pullsScreen(ctx: Ctx, route: Extract<Route, { screen: "pulls" }>): Screen {
+  return pullsView(ctx, route, null);
+}
+
+/**
+ * The list and the picked pull request. With `scope`, only that
+ * repository's (the Pull requests tab of a repository).
+ */
+export function pullsView(
+  ctx: Ctx,
+  route: { repo?: string; number?: number },
+  scope: { repo: string; name: string } | null,
+): Screen & { reload(): Promise<void> } {
   const machine = ctx.app().machine;
 
   let rows: PullRow[] | null = null;
   let listError: string | null = null;
-  let onlyRepo: string | null = route.repo !== undefined && route.number === undefined ? route.repo : null;
+  let onlyRepo: string | null = !scope && route.repo !== undefined && route.number === undefined ? route.repo : null;
   let picked: PullKey | null =
     route.repo !== undefined && route.number !== undefined ? { repo: route.repo, number: route.number } : null;
   let detail: PullView | null = null;
@@ -49,14 +89,14 @@ export function pullsScreen(ctx: Ctx, route: Extract<Route, { screen: "pulls" }>
 
   const el = h(
     "div",
-    { class: "screen pulls" },
+    { class: ["screen pulls", scope && "scoped"] },
     h(
       "div",
       { class: "pulls-side" },
       h(
         "header",
         { class: "pulls-head", "data-tauri-drag-region": true },
-        h("h1", { class: "h-screen grow", text: "Pull requests" }),
+        scope ? null : h("h1", { class: "h-screen grow", text: "Pull requests" }),
         count,
       ),
       list,
@@ -74,7 +114,7 @@ export function pullsScreen(ctx: Ctx, route: Extract<Route, { screen: "pulls" }>
       mount(list, h("span", { class: "muted pulls-note", text: listError ?? "Reading your pull requests…" }));
       return;
     }
-    count.textContent = `${rows.length} open across your studio`;
+    count.textContent = scope ? `${rows.length} open in ${scope.name}` : `${rows.length} open across your studio`;
     const visible = visiblePulls(rows, onlyRepo);
     const only = onlyRepo;
     mount(
@@ -96,26 +136,13 @@ export function pullsScreen(ctx: Ctx, route: Extract<Route, { screen: "pulls" }>
           )
         : null,
       visible.length === 0
-        ? h("span", { class: "muted pulls-note", text: "No open pull requests. Quiet is good." })
+        ? h("span", {
+            class: "muted pulls-note",
+            text: scope ? `No open pull requests in ${scope.name}. Quiet is good.` : "No open pull requests. Quiet is good.",
+          })
         : visible.map((row) => {
             const key = { repo: row.repo, number: row.number };
-            return h(
-              "button",
-              {
-                type: "button",
-                class: "pulls-card",
-                "aria-current": same(key, picked) ? "true" : "false",
-                onclick: () => select(key),
-              },
-              h("span", { class: "pulls-card-title", text: row.title }),
-              h("span", { class: "muted", text: `${row.repo_short} · ${row.by}` }),
-              h(
-                "span",
-                { class: "row wrap pulls-card-pills" },
-                pill(row.status.text, row.status.tone),
-                row.via ? pill(row.via.text, row.via.tone) : null,
-              ),
-            );
+            return pullCard(row, same(key, picked), !scope, () => select(key));
           }),
     );
   }
@@ -123,7 +150,7 @@ export function pullsScreen(ctx: Ctx, route: Extract<Route, { screen: "pulls" }>
   async function loadList(): Promise<void> {
     const seq = ++listSeq;
     try {
-      const next = await api.pullsList();
+      const next = await api.pullsList(scope?.repo);
       if (disposed || seq !== listSeq) return;
       rows = next;
       listError = null;
@@ -366,7 +393,7 @@ export function pullsScreen(ctx: Ctx, route: Extract<Route, { screen: "pulls" }>
           const out = await api.pullCheckout(view.repo, view.number);
           ctx.say(`Switched to ${out.branch}.`);
           await ctx.refresh();
-          ctx.go({ screen: "repo", path: out.path, tab: "changes" });
+          ctx.go({ screen: "repo", path: out.path });
         }),
     });
     const local = view.local_path;
@@ -421,6 +448,9 @@ export function pullsScreen(ctx: Ctx, route: Extract<Route, { screen: "pulls" }>
 
   return {
     el,
+    async reload() {
+      await Promise.all([loadList(), loadDetail(false)]);
+    },
     dispose() {
       disposed = true;
       clearTimeout(timer);

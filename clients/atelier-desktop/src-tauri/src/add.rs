@@ -235,9 +235,17 @@ impl Desk {
 
     async fn account(&self, owner: &str) -> Option<Account> {
         let me = self.me(Duration::from_secs(300)).await.ok()?;
-        me.accounts
+        me.all_owners()
             .into_iter()
             .find(|a| a.name.eq_ignore_ascii_case(owner))
+    }
+
+    /// Remembers who a new repository belonged to, to offer it first next
+    /// time. Failing to write it down never fails the thing just done.
+    fn remember_owner(&self, owner: &str) {
+        if self.prefs().default_owner.as_deref() != Some(owner) {
+            let _ = self.update_prefs(|prefs| prefs.default_owner = Some(owner.to_string()));
+        }
     }
 
     /// Sets the account's commit identity in the repository's own config.
@@ -315,6 +323,7 @@ impl Desk {
                 other => CmdError::from(other),
             })?;
         self.forget_repos();
+        self.remember_owner(owner);
         self.apply_identity(&repo, owner).await;
         Ok(Added {
             path: repo.to_string_lossy().into_owned(),
@@ -519,6 +528,7 @@ impl Desk {
                 .await,
         )?;
         self.forget_repos();
+        self.remember_owner(&owner);
         let git = self.git();
         git.clone_repo(&self.clone_url(&repo)?, &dest).await?;
         let branch = if repo.default_branch.is_empty() {

@@ -6,11 +6,12 @@ use crate::ctx::Ctx;
 use crate::error::CliResult;
 use crate::ui::outln;
 
-const COMMANDS: [(&str, &str); 9] = [
+const COMMANDS: [(&str, &str); 10] = [
     ("atl status", "what needs you, across your studio"),
     ("atl repo publish", "turn this folder into a repository"),
     ("atl repo clone NAME", "clone from your studio or GitHub"),
     ("atl pr", "pull requests for this repository"),
+    ("atl issue", "issues of this repository"),
     ("atl run", "jobs and agents, live"),
     ("atl agent approve", "let a waiting agent run"),
     ("atl open", "open this repository in your editor"),

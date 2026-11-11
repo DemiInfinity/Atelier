@@ -4,8 +4,8 @@
 use std::time::Duration;
 
 use atelier_core::api::{
-    Check, CheckStatus, MergeMethod, MergeOutcome, MergeRequest, Pull, PullComment, PullState,
-    PullSummary, Via,
+    Check, CheckCounts, CheckStatus, ChecksState, MergeMethod, MergeOutcome, MergeRequest, Pull,
+    PullComment, PullState, PullSummary, Via,
 };
 use serde::Serialize;
 
@@ -29,6 +29,75 @@ fn badge(text: &str, tone: &'static str) -> Badge {
     }
 }
 
+/// A pull request's checks in a few words, for a row in a list.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ChecksBrief {
+    /// `none`, `pending`, `failing` or `passing`.
+    pub state: &'static str,
+    /// `3 of 4 passed`, `1 failing`, `running`, `no checks`.
+    pub text: String,
+    /// `pass`, `fail`, `yours` (running), `agents` (waiting for you) or `quiet`.
+    pub tone: &'static str,
+    /// The same in a full sentence, for a tooltip.
+    pub title: String,
+}
+
+/// The checks of a pull request at a glance.
+pub fn checks_brief(c: &CheckCounts) -> ChecksBrief {
+    let total = c.count();
+    let (state, text, tone) = match c.summary() {
+        ChecksState::None => ("none", "no checks".to_string(), "quiet"),
+        ChecksState::Failing => ("failing", format!("{} failing", c.failed.max(1)), "fail"),
+        ChecksState::Pending if c.passed > 0 => (
+            "pending",
+            format!("{} of {total} passed", c.passed),
+            "yours",
+        ),
+        ChecksState::Pending if c.pending == 0 && c.waiting > 0 => {
+            ("pending", "waiting for you".to_string(), "agents")
+        }
+        ChecksState::Pending => ("pending", "running".to_string(), "yours"),
+        ChecksState::Passing | ChecksState::Unknown => (
+            "passing",
+            match total {
+                0 | 1 => "passed".to_string(),
+                n => format!("all {n} passed"),
+            },
+            "pass",
+        ),
+    };
+    let mut parts = Vec::new();
+    for (n, word) in [
+        (c.passed, "passed"),
+        (c.failed, "failed"),
+        (c.pending, "running"),
+        (c.waiting, "waiting for you"),
+    ] {
+        if n > 0 {
+            parts.push(format!("{n} {word}"));
+        }
+    }
+    let title = if parts.is_empty() {
+        "This pull request has no checks.".to_string()
+    } else {
+        format!(
+            "{} · {}",
+            if total == 1 {
+                "1 check".to_string()
+            } else {
+                format!("{total} checks")
+            },
+            parts.join(", ")
+        )
+    };
+    ChecksBrief {
+        state,
+        text,
+        tone,
+        title,
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct PullRow {
     pub repo: String,
@@ -38,6 +107,9 @@ pub struct PullRow {
     pub by: String,
     pub status: Badge,
     pub via: Option<Badge>,
+    pub checks: ChecksBrief,
+    /// The branch it comes from.
+    pub head: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -115,6 +187,8 @@ pub struct CheckedOut {
 
 /// `owner:DemiInfinity` → `you` for the person themselves.
 pub fn author_label(author: &str, login: Option<&str>) -> String {
+    // An issue opened from a device is by `token:device:MacBook`.
+    let author = author.strip_prefix("token:").unwrap_or(author);
     let (kind, name) = author.split_once(':').unwrap_or(("", author));
     match (kind, login) {
         ("owner" | "person" | "", Some(login)) if name.eq_ignore_ascii_case(login) => {
@@ -294,8 +368,17 @@ impl Desk {
         self.me_cached().map(|me| me.person.login)
     }
 
-    pub async fn pulls_list(&self) -> CmdResult<Vec<PullRow>> {
-        let pulls = self.watch(self.client()?.pulls().await)?;
+    /// The open pull requests: across the studio, or of one repository
+    /// (`owner/name`).
+    pub async fn pulls_list(&self, repo: Option<&str>) -> CmdResult<Vec<PullRow>> {
+        let client = self.client()?;
+        let pulls = match repo {
+            Some(full_name) => {
+                paths::split_full_name(full_name)?;
+                self.watch(client.pulls_in(full_name).await)?
+            }
+            None => self.watch(client.pulls().await)?,
+        };
         let _ = self.me(Duration::from_secs(300)).await;
         let login = self.login();
         Ok(pulls
@@ -308,6 +391,8 @@ impl Desk {
                 by: author_label(&p.author, login.as_deref()),
                 status: summary_badge(p),
                 via: via_badge(p.via),
+                checks: checks_brief(&p.checks),
+                head: p.head.clone(),
             })
             .collect())
     }
@@ -452,6 +537,7 @@ mod tests {
             failed,
             pending,
             waiting,
+            ..CheckCounts::default()
         };
         assert_eq!(
             summary_badge(&summary(c(2, 0, 0, 0), true)),
@@ -487,6 +573,56 @@ mod tests {
     }
 
     #[test]
+    fn checks_at_a_glance() {
+        let c = |passed, failed, pending, waiting| CheckCounts {
+            passed,
+            failed,
+            pending,
+            waiting,
+            ..CheckCounts::default()
+        };
+        let brief = |counts: CheckCounts| {
+            let b = checks_brief(&counts);
+            (b.state, b.text, b.tone)
+        };
+        assert_eq!(brief(c(0, 0, 0, 0)), ("none", "no checks".into(), "quiet"));
+        assert_eq!(
+            brief(c(3, 0, 1, 0)),
+            ("pending", "3 of 4 passed".into(), "yours")
+        );
+        assert_eq!(brief(c(0, 0, 2, 0)), ("pending", "running".into(), "yours"));
+        assert_eq!(
+            brief(c(0, 0, 0, 1)),
+            ("pending", "waiting for you".into(), "agents")
+        );
+        assert_eq!(
+            brief(c(2, 1, 1, 0)),
+            ("failing", "1 failing".into(), "fail")
+        );
+        assert_eq!(
+            brief(c(4, 0, 0, 0)),
+            ("passing", "all 4 passed".into(), "pass")
+        );
+        assert_eq!(brief(c(1, 0, 0, 0)), ("passing", "passed".into(), "pass"));
+        // What a newer studio sends wins over the counts.
+        let sent = CheckCounts {
+            total: Some(5),
+            state: Some(ChecksState::Pending),
+            passed: 3,
+            ..CheckCounts::default()
+        };
+        assert_eq!(brief(sent), ("pending", "3 of 5 passed".into(), "yours"));
+        assert_eq!(
+            checks_brief(&c(2, 1, 1, 0)).title,
+            "4 checks · 2 passed, 1 failed, 1 running"
+        );
+        assert_eq!(
+            checks_brief(&c(0, 0, 0, 0)).title,
+            "This pull request has no checks."
+        );
+    }
+
+    #[test]
     fn authors() {
         assert_eq!(
             author_label("owner:DemiInfinity", Some("demiinfinity")),
@@ -498,5 +634,13 @@ mod tests {
             "atelier-updates"
         );
         assert_eq!(author_label("device:MacBook", None), "you, from MacBook");
+        assert_eq!(
+            author_label("token:device:MacBook", Some("DemiInfinity")),
+            "you, from MacBook"
+        );
+        assert_eq!(
+            author_label("person:maralind", Some("DemiInfinity")),
+            "maralind"
+        );
     }
 }

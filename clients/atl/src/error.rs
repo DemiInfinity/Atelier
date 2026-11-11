@@ -47,6 +47,9 @@ impl CliError {
             Error::Api { code, .. } if code == "name_taken" => {
                 Some("Pick another with --name.".to_string())
             }
+            Error::Api { code, .. } if code == "device_not_allowed" => Some(format!(
+                "Allow it for this device at {studio}/settings/devices, or do it in the browser."
+            )),
             Error::Api { code, .. } if code == "remote_only_off" => {
                 Some("Turn it on from home.".to_string())
             }

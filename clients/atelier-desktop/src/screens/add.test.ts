@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FolderPlan } from "../api";
-import { accountLabel, nameOk, openedWords, publishStep, TABS } from "./add";
+import { accountLabel, defaultOwner, nameOk, openedWords, ownerChooser, publishStep, TABS } from "./add";
 
 const plan = (over: Partial<FolderPlan> = {}): FolderPlan => ({
   path: "/home/me/thing",
@@ -95,5 +95,59 @@ describe("openedWords", () => {
       line: "This isn't a git folder yet.",
       canOpen: false,
     });
+  });
+});
+
+describe("This belongs to", () => {
+  const base = { commit_name: "", commit_email: "" };
+  const accounts = [
+    { ...base, name: "DemiInfinity", display: "Demi", kind: "user" },
+    { ...base, name: "elyndrastudios", display: "Elyndra Studios LTD", kind: "company" },
+    { ...base, name: "sidequest", display: "", kind: "company" },
+  ];
+
+  it("starts with the personal account, then with whoever was chosen last", () => {
+    expect(defaultOwner(accounts, null)).toBe("DemiInfinity");
+    expect(defaultOwner(accounts, "ElyndraStudios")).toBe("elyndrastudios");
+    // An owner the studio no longer reports is forgotten.
+    expect(defaultOwner(accounts, "gone")).toBe("DemiInfinity");
+    expect(defaultOwner([], "gone")).toBe("");
+  });
+
+  it("lists every owner the studio reports, with what kind each is", () => {
+    const chooser = ownerChooser("who", accounts, "elyndrastudios");
+    expect(chooser.el.querySelector("legend")?.textContent).toBe("This belongs to");
+    const options = [...chooser.el.querySelectorAll(".owner-option")];
+    expect(options.map((o) => [o.querySelector(".owner-name")?.textContent, o.querySelector(".owner-kind")?.textContent])).toEqual([
+      ["DemiInfinity", "personal account"],
+      ["Elyndra Studios LTD", "company"],
+      ["sidequest", "company"],
+    ]);
+    const radios = [...chooser.el.querySelectorAll<HTMLInputElement>("input[type=radio]")];
+    expect(radios.map((r) => r.checked)).toEqual([false, true, false]);
+    expect(chooser.value()).toBe("elyndrastudios");
+  });
+
+  it("follows a click and can be set from outside", () => {
+    let changes = 0;
+    const chooser = ownerChooser("who", accounts, "DemiInfinity", () => (changes += 1));
+    const radios = [...chooser.el.querySelectorAll<HTMLInputElement>("input[type=radio]")];
+    (radios[1] as HTMLInputElement).checked = true;
+    radios[1]?.dispatchEvent(new Event("change"));
+    expect(chooser.value()).toBe("elyndrastudios");
+    expect(changes).toBe(1);
+    chooser.set("sidequest");
+    expect(chooser.value()).toBe("sidequest");
+    expect(radios[2]?.checked).toBe(true);
+    chooser.set("nobody");
+    expect(chooser.value()).toBe("sidequest");
+    chooser.disable(true);
+    expect(radios.every((r) => r.disabled)).toBe(true);
+  });
+
+  it("says so when the studio reports nobody", () => {
+    const chooser = ownerChooser("who", [], "");
+    expect(chooser.el.querySelectorAll("input")).toHaveLength(0);
+    expect(chooser.el.textContent).toContain("didn't say who");
   });
 });

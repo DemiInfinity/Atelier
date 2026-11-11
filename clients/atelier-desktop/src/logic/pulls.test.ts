@@ -10,6 +10,8 @@ const row = (repo: string, number: number): PullRow => ({
   by: "you",
   status: { text: "Ready to merge", tone: "pass" },
   via: null,
+  checks: { state: "passing", text: "passed", tone: "pass", title: "1 check · 1 passed" },
+  head: "feature",
 });
 
 describe("pull request list", () => {

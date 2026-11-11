@@ -43,7 +43,7 @@ export function routeFor(target: Target): Route | null {
     case "pull":
       return { screen: "pulls", repo: target.repo, number: target.number };
     case "repo":
-      return { screen: "repo", path: target.path, tab: "changes" };
+      return { screen: "repo", path: target.path };
     case "add":
       return { screen: "add", tab: target.tab };
     case "settings":

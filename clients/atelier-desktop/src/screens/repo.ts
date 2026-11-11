@@ -1,16 +1,47 @@
 // A working copy: the bar (branch, fetch/pull/push, open in an editor) and
 // the tabs under it. The bar stays mounted while the tabs swap, so switching
-// between Changes, History and Branches never goes through `ctx.go`.
+// between History, Changes and the rest never goes through `ctx.go`. A
+// repository always opens on History.
 
 import "../styles/repo.css";
 
-import { api, asError, type RepoView } from "../api";
+import { api, asError, type Events, type RepoView } from "../api";
 import type { Ctx, MenuItem, Screen } from "../ctx";
 import { h, icon, mount } from "../dom";
-import type { RepoTab, Route } from "../routes";
+import { manageMenu } from "../manage";
+import { DEFAULT_REPO_TAB, type RepoTab, type Route } from "../routes";
+import { pullsView } from "./pulls";
 import { aheadBehind, branchesTab } from "./repo-branches";
 import { changesTab } from "./repo-changes";
 import { historyTab } from "./repo-history";
+import { issuesTab } from "./repo-issues";
+import { runsTab } from "./repo-runs";
+
+export interface TabSpec {
+  id: RepoTab;
+  label: string;
+  count: number | null;
+}
+
+/**
+ * The tabs of a repository, in order: History first, then Changes. Pull
+ * requests, Issues and Actions only exist for a repository in the studio.
+ */
+export function repoTabs(view: Pick<RepoView, "changes" | "branches" | "open_pulls" | "full_name">): TabSpec[] {
+  const inStudio = view.full_name !== null;
+  return [
+    { id: "history", label: "History", count: null },
+    { id: "changes", label: "Changes", count: view.changes },
+    ...(inStudio
+      ? ([
+          { id: "pulls", label: "Pull requests", count: view.open_pulls },
+          { id: "issues", label: "Issues", count: null },
+        ] as TabSpec[])
+      : []),
+    { id: "branches", label: "Branches", count: view.branches },
+    ...(inStudio ? ([{ id: "actions", label: "Actions", count: null }] as TabSpec[]) : []),
+  ];
+}
 
 /** What the tabs may ask of the screen around them. */
 export interface RepoHost {
@@ -37,13 +68,15 @@ export interface TabView {
   reload(): Promise<void>;
   /** The bar's data was read again. */
   onView?(view: RepoView): void;
+  /** An event from the Rust side, for tabs that follow the studio. */
+  onEvent?<K extends keyof Events>(name: K, payload: Events[K]): void;
   dispose?(): void;
 }
 
 export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>): Screen {
   const path = route.path;
   let view: RepoView | null = null;
-  let tab: RepoTab = route.tab ?? "changes";
+  let tab: RepoTab = route.tab ?? DEFAULT_REPO_TAB;
   let current: TabView | null = null;
   let disposed = false;
   // True while our own `ctx.refresh()` is on its way, so the overview it
@@ -98,13 +131,53 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
     if (!disposed && tab === "changes") await current?.reload();
   }
 
+  function makeTab(id: RepoTab): TabView {
+    const fullName = view?.full_name ?? null;
+    switch (id) {
+      case "changes":
+        return changesTab(host);
+      case "branches":
+        return branchesTab(host);
+      case "pulls":
+        if (fullName) return pullsView(ctx, {}, { repo: fullName, name: (view as RepoView).name });
+        break;
+      case "issues":
+        if (fullName) return issuesTab(host, fullName);
+        break;
+      case "actions":
+        if (fullName) return runsTab(host, fullName);
+        break;
+    }
+    return historyTab(host);
+  }
+
   function showTab(next: RepoTab): void {
     current?.dispose?.();
-    tab = next;
-    current = next === "history" ? historyTab(host) : next === "branches" ? branchesTab(host) : changesTab(host);
+    // A tab that needs the studio falls back to History without it.
+    tab = view && repoTabs(view).some((t) => t.id === next) ? next : DEFAULT_REPO_TAB;
+    current = makeTab(tab);
     mount(body, current.el);
     drawBar();
-    void current.reload();
+    // The studio tabs read by themselves when they are made.
+    if (tab === "history" || tab === "changes" || tab === "branches") void current.reload();
+  }
+
+  /** After a pin, a rename or a delete: read everything again. */
+  async function afterManage(): Promise<void> {
+    const before = view?.full_name ?? null;
+    try {
+      await loadView();
+    } catch (e) {
+      ctx.fail(e);
+      return;
+    }
+    // Renamed or gone from the studio: the studio tabs belong to the old name.
+    if ((view?.full_name ?? null) !== before && (tab === "pulls" || tab === "issues" || tab === "actions")) showTab(tab);
+  }
+
+  function isPinned(): boolean {
+    const overview = ctx.overview();
+    return [...(overview?.copies ?? []), ...(overview?.others ?? [])].some((c) => c.path === (view?.path ?? path) && c.pinned);
   }
 
   // ---------------------------------------------------------------- actions
@@ -277,27 +350,57 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
             type: "button",
             class: "btn",
             text: "Publish…",
-            onclick: () => ctx.go({ screen: "add", tab: "publish" }),
+            onclick: () => ctx.go({ screen: "add", tab: "publish", path: v.path }),
           }),
         ];
 
-    const tabButton = (label: string, count: number | null, active: boolean, pick: (b: HTMLButtonElement) => void) =>
+    const tabButton = (spec: TabSpec) =>
       h(
         "button",
         {
           type: "button",
           class: "repo-tab",
-          "aria-current": active ? "page" : undefined,
-          onclick: (e) => pick(e.currentTarget as HTMLButtonElement),
+          dataset: { tab: spec.id },
+          "aria-current": tab === spec.id ? "page" : undefined,
+          onclick: () => {
+            if (tab !== spec.id) showTab(spec.id);
+          },
         },
-        label,
-        count !== null && count > 0 ? h("span", { class: "count", text: count }) : null,
+        spec.label,
+        spec.count !== null && spec.count > 0 ? h("span", { class: "count", text: spec.count }) : null,
       );
-    const inner = (id: RepoTab, label: string, count: number | null) =>
-      tabButton(label, count, tab === id, () => {
-        if (tab !== id) showTab(id);
-      });
-    const fullName = v.full_name;
+
+    const pinned = isPinned();
+    const managed = { path: v.path, name: v.name, full_name: v.full_name, pinned };
+    const pin: HTMLButtonElement = h(
+      "button",
+      {
+        type: "button",
+        class: ["btn repo-icon-btn repo-pin", pinned && "on"],
+        title: pinned ? "Unpin from the top of the sidebar" : "Pin to the top of the sidebar",
+        "aria-label": pinned ? "Unpin" : "Pin",
+        "aria-pressed": pinned ? "true" : "false",
+        onclick: () =>
+          void ctx.busy(pin, async () => {
+            await api.repoSetPinned(v.path, !pinned);
+            await ctx.refresh();
+            drawBar();
+          }),
+      },
+      icon("pin", 14, 2),
+    );
+    const more: HTMLButtonElement = h(
+      "button",
+      {
+        type: "button",
+        class: "btn repo-icon-btn repo-more",
+        title: "More",
+        "aria-label": `More for ${v.name}`,
+        "aria-haspopup": "menu",
+        onclick: () => ctx.menu(more, manageMenu(ctx, managed, () => afterManage())),
+      },
+      icon("more", 14, 3),
+    );
 
     mount(
       bar,
@@ -311,21 +414,9 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
           v.name,
         ),
         branch,
-        h("div", { class: "repo-actions" }, fetch, pull, pushButton, open, handOver, studio),
+        h("div", { class: "repo-actions" }, fetch, pull, pushButton, open, handOver, studio, pin, more),
       ),
-      h(
-        "nav",
-        { class: "repo-tabs", "aria-label": "Repository", "data-tauri-drag-region": true },
-        inner("changes", "Changes", v.changes),
-        inner("history", "History", null),
-        inner("branches", "Branches", v.branches),
-        fullName
-          ? tabButton("Pull requests", v.open_pulls, false, () => ctx.go({ screen: "pulls", repo: fullName }))
-          : null,
-        webPath
-          ? tabButton("Actions", null, false, (b) => void ctx.busy(b, () => api.openWeb(`${webPath}/actions`)))
-          : null,
-      ),
+      h("nav", { class: "repo-tabs", "aria-label": "Repository", "data-tauri-drag-region": true }, repoTabs(v).map(tabButton)),
     );
   }
 
@@ -368,6 +459,10 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
     },
     onOverview() {
       if (!ownRefresh) void lookAgain();
+      else drawBar();
+    },
+    onEvent(name, payload) {
+      current?.onEvent?.(name, payload);
     },
   };
 }

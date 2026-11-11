@@ -16,6 +16,88 @@ export function accountLabel(account: Account): string {
   return account.kind === "user" ? `${account.name} (personal)` : `${account.display} (company)`;
 }
 
+/** `personal account` or `company`, under an owner's name. */
+export function ownerKind(account: Pick<Account, "kind">): string {
+  return account.kind === "user" ? "personal account" : "company";
+}
+
+/** An owner's name as shown: the display name, or the account name for the personal one. */
+export function ownerName(account: Pick<Account, "name" | "display" | "kind">): string {
+  return account.kind === "user" || !account.display ? account.name : account.display;
+}
+
+/**
+ * Who a new repository belongs to unless the person says otherwise: the
+ * owner chosen last time while the studio still reports it, else the first
+ * (the personal account).
+ */
+export function defaultOwner(accounts: readonly Pick<Account, "name">[], remembered: string | null): string {
+  const kept = remembered ? accounts.find((a) => a.name.toLowerCase() === remembered.toLowerCase()) : undefined;
+  return (kept ?? accounts[0])?.name ?? "";
+}
+
+export interface OwnerChooser {
+  el: HTMLElement;
+  /** The chosen account's name: what the studio takes as `owner`. */
+  value(): string;
+  set(name: string): void;
+  disable(off: boolean): void;
+}
+
+/** "This belongs to": every owner the studio reports, one of them chosen. */
+export function ownerChooser(id: string, accounts: readonly Account[], initial: string, onchange: () => void = () => {}): OwnerChooser {
+  let chosen = initial;
+  const inputs = accounts.map((account) =>
+    h("input", {
+      type: "radio",
+      name: id,
+      value: account.name,
+      checked: account.name === chosen,
+      onchange: () => {
+        chosen = account.name;
+        onchange();
+      },
+    }),
+  );
+  const el = h(
+    "fieldset",
+    { class: "owner-choice", id },
+    h("legend", { text: "This belongs to" }),
+    accounts.length === 0
+      ? h("span", { class: "muted", text: "Your studio didn't say who you can create repositories for." })
+      : h(
+          "div",
+          { class: "owner-options" },
+          accounts.map((account, i) =>
+            h(
+              "label",
+              { class: "owner-option" },
+              inputs[i],
+              h(
+                "span",
+                { class: "col" },
+                h("span", { class: "owner-name clip", text: ownerName(account) }),
+                h("span", { class: "owner-kind", text: ownerKind(account) }),
+              ),
+            ),
+          ),
+        ),
+  );
+  return {
+    el,
+    value: () => chosen,
+    set(name) {
+      const input = inputs.find((i) => i.value === name);
+      if (!input) return;
+      chosen = name;
+      input.checked = true;
+    },
+    disable(off) {
+      for (const input of inputs) input.disabled = off;
+    },
+  };
+}
+
 export interface PublishStep {
   /** `none`: no folder yet. `init`: not a git folder. `open`: nothing to publish. */
   kind: "none" | "init" | "open" | "publish";
@@ -109,7 +191,20 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
   const built = new Map<AddTab, TabView>();
   // Set by the Publish tab once it is built: shows a folder there as if it
   // had been chosen with "Choose…".
-  let loadPlan: ((plan: FolderPlan) => void) | null = null;
+  let loadPlan: ((plan: FolderPlan, owner?: string) => void) | null = null;
+  // Who a new repository belongs to: the owner chosen last time, shared by
+  // the tabs so a choice made in one is the choice in the others.
+  let owner = defaultOwner(app.accounts, app.prefs.default_owner);
+  const choosers: OwnerChooser[] = [];
+  function chooser(id: string, onchange: () => void): OwnerChooser {
+    const made: OwnerChooser = ownerChooser(id, app.accounts, owner, () => {
+      owner = made.value();
+      for (const other of choosers) if (other !== made) other.set(owner);
+      onchange();
+    });
+    choosers.push(made);
+    return made;
+  }
 
   const tablist = h("div", { class: "add-tabs", role: "tablist", "aria-label": "How to add it" });
   const body = h("div", { class: "add-body", role: "tabpanel", id: "add-panel" });
@@ -171,14 +266,6 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
     loadPlan?.(plan);
   }
 
-  function accountSelect(id: string): HTMLSelectElement {
-    return h(
-      "select",
-      { id, class: "select" },
-      app.accounts.map((account) => h("option", { value: account.name, text: accountLabel(account) })),
-    );
-  }
-
   const field = (id: string, label: string, control: HTMLElement) =>
     h("div", { class: "field add-field" }, h("label", { for: id, text: label }), control);
 
@@ -192,7 +279,7 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
     let mirror = false;
 
     const where = h("span", { class: "col grow" });
-    const account = accountSelect("add-publish-account");
+    const account = chooser("add-publish-owner", () => sync());
     const name = h("input", { id: "add-publish-name", class: "input", type: "text", autocomplete: "off", spellcheck: "false", oninput: () => sync() });
     const privateRow = checkbox({
       checked: true,
@@ -243,15 +330,16 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
       note.classList.toggle("hidden", !step.note);
       // The account and name only matter when there is something to publish.
       const idle = step.kind === "init" || step.kind === "open";
-      for (const control of [account, name, ...[privateRow, mirrorRow].map((row) => row?.querySelector("input"))]) {
+      for (const control of [name, ...[privateRow, mirrorRow].map((row) => row?.querySelector("input"))]) {
         if (control) control.disabled = idle;
       }
+      account.disable(idle);
       primary.textContent = step.label;
-      primary.disabled = step.kind === "none" || (step.kind === "publish" && (!account.value || !nameOk(name.value)));
+      primary.disabled = step.kind === "none" || (step.kind === "publish" && (!account.value() || !nameOk(name.value)));
     }
 
     async function publish(folder: FolderPlan): Promise<Added | null> {
-      const send = (replace: boolean) => api.publish(folder.path, account.value, name.value.trim(), isPrivate, replace);
+      const send = (replace: boolean) => api.publish(folder.path, account.value(), name.value.trim(), isPrivate, replace);
       try {
         return await send(false);
       } catch (e) {
@@ -272,18 +360,20 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
       if (!folder || step.kind === "none") return Promise.resolve();
       return ctx.busy(primary, async () => {
         if (step.kind === "open") {
-          ctx.go({ screen: "repo", path: folder.path, tab: "changes" });
+          ctx.go({ screen: "repo", path: folder.path });
           return;
         }
         if (step.kind === "init") {
           await api.folderInit(folder.path);
           await ctx.refresh();
           ctx.say("It's a git folder now.", "Commit something first, then publish it.");
-          ctx.go({ screen: "repo", path: folder.path, tab: "changes" });
+          ctx.go({ screen: "repo", path: folder.path });
           return;
         }
         const added = await publish(folder);
         if (!added) return;
+        // The owner just used is the one offered first next time.
+        await ctx.reloadApp().catch(() => {});
         await ctx.refresh();
         if (mirror) {
           // The app can't set the mirror up itself; the studio's page can.
@@ -296,7 +386,7 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
         } else {
           ctx.say("Published.", added.note ?? `${added.full_name} is in your studio now.`);
         }
-        ctx.go({ screen: "repo", path: added.path, tab: "changes" });
+        ctx.go({ screen: "repo", path: added.path });
       });
     }
 
@@ -308,11 +398,11 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
       ),
       h("div", { class: "add-folder" }, where, choose),
       note,
-      h("div", { class: "add-fields" }, field("add-publish-account", "Account", account), field("add-publish-name", "Name", name)),
+      account.el,
+      h("div", { class: "add-fields" }, field("add-publish-name", "Name", name)),
       privateRow,
       mirrorRow,
     );
-    account.addEventListener("change", sync);
     sync();
     return { panel, foot, primary };
   }
@@ -375,7 +465,7 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
 
     function take(hit: Hit, button: HTMLButtonElement): Promise<void | undefined> {
       if (hit.action === "open") {
-        if (hit.local_path) ctx.go({ screen: "repo", path: hit.local_path, tab: "changes" });
+        if (hit.local_path) ctx.go({ screen: "repo", path: hit.local_path });
         return Promise.resolve();
       }
       return ctx.busy(button, async () => {
@@ -394,7 +484,7 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
         await ctx.refresh();
         if (added.already) ctx.say("It was already here.", added.note ?? added.full_name);
         else ctx.say(`Cloned ${added.full_name}.`, added.note ?? "");
-        ctx.go({ screen: "repo", path: added.path, tab: "changes" });
+        ctx.go({ screen: "repo", path: added.path });
       });
     }
 
@@ -427,7 +517,7 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
   function newTab(): TabView {
     let readme = true;
     let openEditor = true;
-    const account = accountSelect("add-new-account");
+    const account = chooser("add-new-owner", () => sync());
     const name = h("input", {
       id: "add-new-name",
       class: "input",
@@ -443,14 +533,15 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
       text: "Create repository",
       onclick: () =>
         void ctx.busy(primary, async () => {
-          const added = await api.createNew(account.value, name.value.trim(), true, readme, openEditor);
+          const added = await api.createNew(account.value(), name.value.trim(), true, readme, openEditor);
+          await ctx.reloadApp().catch(() => {});
           await ctx.refresh();
           if (added.note) ctx.say(added.note);
           ctx.go({ screen: "repo", path: added.path });
         }),
     });
     const sync = () => {
-      primary.disabled = !account.value || !nameOk(name.value);
+      primary.disabled = !account.value() || !nameOk(name.value);
     };
     sync();
 
@@ -464,7 +555,8 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
         },
       },
       intro(`Start from nothing. Atelier makes the repository in your studio and an empty working copy on this ${machine}.`),
-      h("div", { class: "add-fields" }, field("add-new-account", "Account", account), field("add-new-name", "Name", name)),
+      account.el,
+      h("div", { class: "add-fields" }, field("add-new-name", "Name", name)),
       checkbox({ checked: true, label: "Add a README and a .gitignore", onchange: (next) => (readme = next) }),
       checkbox({ checked: true, label: `Open it in ${app.editor.label} when it's ready`, onchange: (next) => (openEditor = next) }),
     );
@@ -476,7 +568,9 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
   function openTab(): TabView {
     const result = h("div", { class: "add-opened hidden", "aria-live": "polite" });
 
-    const toRepo = (path: string) => ctx.go({ screen: "repo", path, tab: "changes" });
+    const toRepo = (path: string) => ctx.go({ screen: "repo", path });
+    // Asked here already, so the choice is made before the Publish tab opens.
+    const belongs = chooser("add-open-owner", () => {});
 
     function showResult(opened: OpenedFolder, words: OpenedWords): void {
       const plan = opened.plan;
@@ -506,6 +600,7 @@ export function addScreen(ctx: Ctx, route: Extract<Route, { screen: "add" }>): S
           words.remote ? [" ", h("span", { class: ["mono selectable", words.github && "add-via"], text: words.remote })] : null,
         ),
         plan ? h("span", { class: "muted", text: plan.summary }) : null,
+        plan ? belongs.el : null,
         h("div", { class: "add-opened-actions" }, publish, anyway),
       );
       result.classList.remove("hidden");

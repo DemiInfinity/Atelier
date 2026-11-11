@@ -1,6 +1,8 @@
 // The screens of the main window.
 
-export type RepoTab = "changes" | "history" | "branches";
+/** A repository's tabs, in the order they are shown. History comes first and is where a repository opens. */
+export type RepoTab = "history" | "changes" | "pulls" | "issues" | "branches" | "actions";
+export const DEFAULT_REPO_TAB: RepoTab = "history";
 export type AddTab = "publish" | "clone" | "new" | "open";
 
 export type Route =

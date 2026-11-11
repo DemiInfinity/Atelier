@@ -336,6 +336,42 @@ impl Client {
         Ok(self.post(&["repos"], Some(request)).await?.1)
     }
 
+    /// `PATCH /repos/{owner}/{name}`: gives the repository a new name and
+    /// returns it as it is now. `409 name_taken`, `422` (not a name) and
+    /// `403` come back as [`Error::Api`].
+    pub async fn rename_repo(&self, owner: &str, name: &str, new_name: &str) -> Result<Repo> {
+        let body = RenameRepo {
+            name: new_name.to_string(),
+        };
+        let (_, bytes) = self
+            .call(
+                Method::PATCH,
+                &["repos", owner, name],
+                &[],
+                Some(&body),
+                true,
+            )
+            .await?;
+        decode(&bytes)
+    }
+
+    /// `DELETE /repos/{owner}/{name}`: removes the repository from the
+    /// studio. The body repeats `owner/name`, as the studio insists.
+    pub async fn delete_repo(&self, owner: &str, name: &str) -> Result<()> {
+        let body = DeleteRepo {
+            confirm: format!("{owner}/{name}"),
+        };
+        self.call(
+            Method::DELETE,
+            &["repos", owner, name],
+            &[],
+            Some(&body),
+            true,
+        )
+        .await
+        .map(|_| ())
+    }
+
     /// `POST /repos/mirror`: mirror a GitHub repository (`owner/name`) into the studio.
     pub async fn mirror_repo(&self, github: &str) -> Result<Mirrored> {
         let body = MirrorRequest {
@@ -350,6 +386,19 @@ impl Client {
     pub async fn pulls(&self) -> Result<Vec<PullSummary>> {
         let query = [("state", "open".to_string())];
         Ok(self.get::<PullList>(&["pulls"], &query).await?.pulls)
+    }
+
+    /// `GET /pulls?state=open&repo=owner/name`: one repository's open pull
+    /// requests. A studio that doesn't know the `repo` filter answers with
+    /// all of them, so the answer is narrowed here as well.
+    pub async fn pulls_in(&self, full_name: &str) -> Result<Vec<PullSummary>> {
+        let query = [
+            ("state", "open".to_string()),
+            ("repo", full_name.to_string()),
+        ];
+        let mut pulls = self.get::<PullList>(&["pulls"], &query).await?.pulls;
+        pulls.retain(|p| p.repo.eq_ignore_ascii_case(full_name));
+        Ok(pulls)
     }
 
     /// `GET /repos/{owner}/{repo}/pulls?state=…`.
@@ -405,6 +454,99 @@ impl Client {
             &["repos", owner, repo, "pulls", &n, "merge"],
             &[],
             None,
+            true,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    // ------------------------------------------------------------- issues
+
+    /// `GET /issues?repo=owner/name&state=…&page=…&per_page=…`.
+    pub async fn issues(&self, query: &IssuesQuery) -> Result<IssueList> {
+        let mut q = vec![("repo", query.repo.clone())];
+        if !query.state.is_empty() {
+            q.push(("state", query.state.clone()));
+        }
+        if let Some(page) = query.page {
+            q.push(("page", page.to_string()));
+        }
+        if let Some(per_page) = query.per_page {
+            q.push(("per_page", per_page.to_string()));
+        }
+        self.get(&["issues"], &q).await
+    }
+
+    /// `GET /repos/{owner}/{name}/issues/{n}`.
+    pub async fn issue(&self, owner: &str, repo: &str, number: u64) -> Result<Issue> {
+        let n = number.to_string();
+        self.get(&["repos", owner, repo, "issues", &n], &[]).await
+    }
+
+    /// `POST /repos/{owner}/{name}/issues`: opens an issue and returns what
+    /// the studio said about it (its number, when it says).
+    pub async fn create_issue(
+        &self,
+        owner: &str,
+        repo: &str,
+        title: &str,
+        body: &str,
+    ) -> Result<Issue> {
+        let new = NewIssue {
+            title: title.to_string(),
+            body: body.to_string(),
+        };
+        Ok(self
+            .post(&["repos", owner, repo, "issues"], Some(&new))
+            .await?
+            .1)
+    }
+
+    /// `POST …/issues/{n}/comments`.
+    pub async fn comment_on_issue(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        body: &str,
+    ) -> Result<()> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            body: &'a str,
+        }
+        let n = number.to_string();
+        self.call(
+            Method::POST,
+            &["repos", owner, repo, "issues", &n, "comments"],
+            &[],
+            Some(&Body { body }),
+            true,
+        )
+        .await
+        .map(|_| ())
+    }
+
+    /// `PATCH …/issues/{n}` `{"state": "open" | "closed"}`.
+    pub async fn set_issue_open(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        open: bool,
+    ) -> Result<()> {
+        #[derive(Serialize)]
+        struct Body {
+            state: &'static str,
+        }
+        let n = number.to_string();
+        let body = Body {
+            state: if open { "open" } else { "closed" },
+        };
+        self.call(
+            Method::PATCH,
+            &["repos", owner, repo, "issues", &n],
+            &[],
+            Some(&body),
             true,
         )
         .await
@@ -535,6 +677,14 @@ fn default_message(status: StatusCode, code: &str) -> String {
     match (status.as_u16(), code) {
         (_, "revoked") => "This device was signed out of your studio.".into(),
         (_, "name_taken") => "That name is already taken.".into(),
+        (_, "invalid_name") => "That isn’t a name a repository can have.".into(),
+        (_, "device_not_allowed") => {
+            "This device isn’t allowed to rename or delete repositories.".into()
+        }
+        (_, "confirm_mismatch") => "The name typed to confirm didn’t match.".into(),
+        (_, "invalid_title") => "An issue needs a title of one line.".into(),
+        (_, "body_too_long") => "That text is too long.".into(),
+        (_, "empty_body") => "Write something first.".into(),
         (_, "no_auto_merge") => "That pull request wasn’t waiting to merge.".into(),
         (_, "not_waiting") => "That agent isn’t waiting for approval any more.".into(),
         (_, "finished") => "That job has already finished.".into(),

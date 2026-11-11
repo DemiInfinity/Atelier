@@ -185,7 +185,7 @@ async fn pr_text() {
     // Outside a repository, or with --all: every open pull request, in short.
     let all = "\
 #14  Remote access switch in the tray menu   feature/tunnel-ui → main   Atelier
-     ✓ 2 passed   ◐ 1 running   ◆ 1 waiting for you
+     2 of 4 passed   ✓ 2 passed   ◐ 1 running   ◆ 1 waiting for you
 ";
     assert_eq!(sb.atl(&["pr"]).await.ok(), all);
     assert_eq!(sb.atl_in(&atelier, &["pr", "--all"]).await.ok(), all);
@@ -1299,6 +1299,7 @@ Atelier · not signed in yet. Start with atl login <studio>.
   atl repo publish      turn this folder into a repository
   atl repo clone NAME   clone from your studio or GitHub
   atl pr                pull requests for this repository
+  atl issue             issues of this repository
   atl run               jobs and agents, live
   atl agent approve     let a waiting agent run
   atl open              open this repository in your editor
@@ -1594,4 +1595,283 @@ async fn pr_merge_as_built() {
         .await;
     assert_eq!(none.code, 1);
     assert_eq!(none.stderr, "That pull request wasn’t waiting to merge.\n");
+}
+
+// ------------------------------------------------- repo rename and delete
+
+const RENAMED: &str = r##"{"full_name":"DemiInfinity/Studio","owner":"DemiInfinity","owner_kind":"user","name":"Studio",
+  "private":true,"default_branch":"main",
+  "clone_https":"https://studio.example/DemiInfinity/Studio.git",
+  "clone_ssh":"ssh://git@studio.example:2223/DemiInfinity/Studio.git","github":null,"open_pulls":1}"##;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn repo_rename_moves_the_remote_along() {
+    let sb = Sandbox::new().await;
+    sb.get("/repos", REPOS).await;
+    sb.respond("PATCH", "/repos/DemiInfinity/Atelier", 200, RENAMED)
+        .await;
+    sb.respond(
+        "PATCH",
+        "/repos/DemiInfinity/Marbl",
+        409,
+        r#"{"error":"name_taken","message":"There is already a repository called Atelier."}"#,
+    )
+    .await;
+    let atelier = working_copies(&sb);
+
+    assert_eq!(
+        sb.atl_in(&atelier, &["repo", "rename", "Studio"]).await.ok(),
+        "Renamed DemiInfinity/Atelier to DemiInfinity/Studio.\nThis folder’s remote origin points at the new address.\n"
+    );
+    assert_eq!(
+        sb.bodies("PATCH", "/repos/DemiInfinity/Atelier").await,
+        [json!({"name": "Studio"})]
+    );
+    assert_eq!(
+        sb.git(&atelier, &["remote", "get-url", "origin"]),
+        "ssh://git@studio.example:2223/DemiInfinity/Studio.git"
+    );
+
+    // Named with -R from elsewhere: nothing here to move. A taken name says so.
+    let taken = sb
+        .atl(&["repo", "rename", "Atelier", "-R", "DemiInfinity/Marbl"])
+        .await;
+    assert_eq!(taken.code, 1);
+    assert_eq!(
+        taken.stderr,
+        "There is already a repository called Atelier. Pick another with --name.\n"
+    );
+    // Not a name: the studio isn't asked.
+    let bad = sb.atl_in(&atelier, &["repo", "rename", "two words"]).await;
+    assert_eq!(bad.code, 1);
+    assert!(bad.stderr.contains("isn’t a name a repository can have"));
+    assert_eq!(sb.count("PATCH", "/repos/DemiInfinity/Atelier").await, 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn repo_delete_wants_the_name_and_leaves_the_folder() {
+    let sb = Sandbox::new().await;
+    sb.get("/repos", REPOS).await;
+    sb.respond("DELETE", "/repos/DemiInfinity/Atelier", 204, "")
+        .await;
+    sb.respond(
+        "DELETE",
+        "/repos/DemiInfinity/Marbl",
+        403,
+        r#"{"error":"device_not_allowed","message":"This device isn't allowed to rename or delete repositories. Turn it on in Settings → Devices."}"#,
+    )
+    .await;
+    let atelier = working_copies(&sb);
+
+    // The wrong name typed, nothing typed, the wrong --yes: nothing is deleted.
+    let wrong = sb
+        .atl_typing(&atelier, &["repo", "delete"], "atelier\n")
+        .await;
+    assert_eq!(wrong.code, 1);
+    assert!(wrong
+        .stdout
+        .contains("This deletes DemiInfinity/Atelier from your studio for good"));
+    assert!(wrong.stdout.contains("is kept exactly as it is."));
+    assert!(wrong.stdout.contains("Type Atelier to delete it: "));
+    assert_eq!(
+        wrong.stderr,
+        "Nothing was deleted. Type the name exactly, or pass --yes DemiInfinity/Atelier.\n"
+    );
+    assert_eq!(
+        sb.atl_typing(&atelier, &["repo", "delete"], "").await.code,
+        1
+    );
+    let flag = sb
+        .atl_in(&atelier, &["repo", "delete", "--yes", "Atelier"])
+        .await;
+    assert_eq!(flag.code, 1);
+    assert_eq!(
+        flag.stderr,
+        "“Atelier” isn’t this repository’s full name. To delete it, pass --yes DemiInfinity/Atelier.\n"
+    );
+    let json = sb.atl_in(&atelier, &["repo", "delete", "--json"]).await;
+    assert_eq!(json.code, 1);
+    assert!(json.stderr.contains("needs_confirmation"));
+    assert_eq!(sb.count("DELETE", "/repos/DemiInfinity/Atelier").await, 0);
+
+    // A device that isn't allowed is told where to allow it.
+    let refused = sb
+        .atl(&[
+            "repo",
+            "delete",
+            "-R",
+            "DemiInfinity/Marbl",
+            "--yes",
+            "DemiInfinity/Marbl",
+        ])
+        .await;
+    assert_eq!(refused.code, 1);
+    assert!(refused.stderr.starts_with(
+        "This device isn't allowed to rename or delete repositories. Turn it on in Settings → Devices. Allow it for this device at "
+    ));
+    assert!(refused.stderr.contains("/settings/devices"));
+
+    // Typed right: gone from the studio, everything here as it was.
+    let done = sb
+        .atl_typing(&atelier, &["repo", "delete"], "Atelier\n")
+        .await;
+    assert_eq!(done.code, 0, "{}", done.stderr);
+    assert!(done.stdout.ends_with(
+        "Deleted DemiInfinity/Atelier from your studio.\nAny folder with it on this machine is still there.\n"
+    ));
+    assert_eq!(
+        sb.bodies("DELETE", "/repos/DemiInfinity/Atelier").await,
+        [json!({"confirm": "DemiInfinity/Atelier"})]
+    );
+    assert!(atelier.join("tray.go").is_file());
+    assert_eq!(
+        sb.git(&atelier, &["remote", "get-url", "origin"]),
+        "ssh://git@studio.example:2223/DemiInfinity/Atelier.git"
+    );
+    // For scripts.
+    assert_eq!(
+        sb.atl(&[
+            "repo",
+            "delete",
+            "-R",
+            "DemiInfinity/Atelier",
+            "--yes",
+            "DemiInfinity/Atelier",
+            "--json"
+        ])
+        .await
+        .json(),
+        json!({"deleted": true, "full_name": "DemiInfinity/Atelier"})
+    );
+}
+
+// ------------------------------------------------------------------- issue
+
+const ISSUES: &str = r##"{"issues":[
+  {"repo":"DemiInfinity/Atelier","number":21,"title":"Tray icon flickers","state":"open","author":"owner:DemiInfinity","via":null,
+   "labels":[{"name":"bug","color":"#d73a4a"},{"name":"tray","color":"#f2b85c"}],"comments":2,"created_at":"…","updated_at":"…",
+   "web_path":"/DemiInfinity/Atelier/issues/21"},
+  {"repo":"DemiInfinity/Atelier","number":20,"title":"Docs: pairing","state":"open","author":"person:maralind","via":"tether",
+   "labels":[],"comments":0,"created_at":"…","updated_at":"…"}],"has_more":false}"##;
+
+const ISSUE: &str = r##"{"repo":"DemiInfinity/Atelier","number":21,"title":"Tray icon flickers","state":"open","author":"owner:DemiInfinity","via":null,
+  "labels":[{"name":"bug","color":"#d73a4a"}],"body":"The icon flickers.\n\nOn battery only.",
+  "comments":[{"id":88,"author":"CodeRabbit[bot]","via":"tether","kind":"bot","body":"Possibly the redraw.","created_at":"…"}],
+  "created_at":"…","updated_at":"…"}"##;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue_list_view_new_and_close() {
+    let sb = Sandbox::new().await;
+    sb.get("/repos", REPOS).await;
+    sb.get("/issues", ISSUES).await;
+    sb.get("/repos/DemiInfinity/Atelier/issues/21", ISSUE).await;
+    sb.respond(
+        "POST",
+        "/repos/DemiInfinity/Atelier/issues",
+        201,
+        r#"{"number":22,"title":"New thing","state":"open","comments":[]}"#,
+    )
+    .await;
+    sb.respond("PATCH", "/repos/DemiInfinity/Atelier/issues/21", 200, "{}")
+        .await;
+    let atelier = working_copies(&sb);
+
+    let list = "\
+#21  Tray icon flickers   bug, tray · 2 comments · …
+#20  Docs: pairing        … · via Tether
+";
+    assert_eq!(sb.atl_in(&atelier, &["issue"]).await.ok(), list);
+    assert_eq!(sb.atl_in(&atelier, &["issue", "list"]).await.ok(), list);
+    let asked = sb.server.received_requests().await.unwrap();
+    let query = asked
+        .iter()
+        .find(|r| r.url.path().ends_with("/issues"))
+        .and_then(|r| r.url.query().map(str::to_string))
+        .unwrap();
+    assert!(
+        query.contains("repo=DemiInfinity%2FAtelier") && query.contains("state=open"),
+        "{query}"
+    );
+
+    assert_eq!(
+        sb.atl(&["issue", "view", "21", "-R", "DemiInfinity/Atelier"])
+            .await
+            .ok(),
+        "\
+#21  Tray icon flickers   open · by DemiInfinity
+     bug
+
+     The icon flickers.
+
+     On battery only.
+
+     CodeRabbit[bot] · via Tether · …
+     Possibly the redraw.
+"
+    );
+    assert_eq!(
+        sb.atl_in(
+            &atelier,
+            &["issue", "new", "New thing", "--body", "Please."]
+        )
+        .await
+        .ok(),
+        "Opened issue #22 in Atelier.\n"
+    );
+    assert_eq!(
+        sb.bodies("POST", "/repos/DemiInfinity/Atelier/issues")
+            .await,
+        [json!({"title": "New thing", "body": "Please."})]
+    );
+    assert_eq!(
+        sb.atl_in(&atelier, &["issue", "close", "21"]).await.ok(),
+        "Closed issue #21 in Atelier.\n"
+    );
+    assert_eq!(
+        sb.bodies("PATCH", "/repos/DemiInfinity/Atelier/issues/21")
+            .await,
+        [json!({"state": "closed"})]
+    );
+    let json = sb
+        .atl_in(&atelier, &["issue", "list", "--json"])
+        .await
+        .json();
+    assert_eq!(json["repo"], "DemiInfinity/Atelier");
+    assert_eq!(json["issues"][0]["number"], 21);
+    // Outside a repository it needs to be told which.
+    assert_eq!(sb.atl(&["issue"]).await.code, 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pr_list_shows_each_pull_requests_checks() {
+    let sb = Sandbox::new().await;
+    sb.get("/repos", REPOS).await;
+    sb.get(
+        "/pulls",
+        r#"{"pulls":[
+          {"repo":"DemiInfinity/Atelier","number":14,"title":"Tunnel","head":"a","base":"main","state":"open",
+           "checks":{"total":4,"passed":3,"failed":0,"pending":1,"waiting":0,"state":"pending"}},
+          {"repo":"DemiInfinity/Atelier","number":15,"title":"SSH","head":"b","base":"main","state":"open",
+           "checks":{"total":2,"passed":1,"failed":1,"pending":0,"waiting":0,"state":"failing"}},
+          {"repo":"DemiInfinity/Marbl","number":3,"title":"Docs","head":"c","base":"main","state":"open",
+           "checks":{"total":0,"passed":0,"failed":0,"pending":0,"waiting":0,"state":"none"}},
+          {"repo":"DemiInfinity/Marbl","number":4,"title":"Old studio","head":"d","base":"main","state":"open"}]}"#,
+    )
+    .await;
+    assert_eq!(
+        sb.atl(&["pr"]).await.ok(),
+        "\
+#14  Tunnel   a → main   Atelier
+     3 of 4 passed   ✓ 3 passed   ◐ 1 running
+
+#15  SSH   b → main   Atelier
+     1 failing   ✗ 1 failed   ✓ 1 passed
+
+#3   Docs   c → main   Marbl
+     no checks
+
+#4   Old studio   d → main   Marbl
+     no checks
+"
+    );
 }

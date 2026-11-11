@@ -124,6 +124,20 @@ impl Sandbox {
         self.run(true, cwd, args).await
     }
 
+    /// `atl <args>` in `cwd` with `typed` on standard input.
+    pub async fn atl_typing(&self, cwd: &Path, args: &[&str], typed: &str) -> Ran {
+        let mut command = self.command(true, cwd, args);
+        command.write_stdin(typed.to_owned());
+        let output: Output = tokio::task::spawn_blocking(move || command.output().unwrap())
+            .await
+            .unwrap();
+        Ran {
+            code: output.status.code().unwrap_or(-1),
+            stdout: String::from_utf8(output.stdout).unwrap(),
+            stderr: String::from_utf8(output.stderr).unwrap(),
+        }
+    }
+
     /// `atl <args>` with only what is on disk in the sandbox.
     pub async fn atl_bare(&self, args: &[&str]) -> Ran {
         self.run(false, &self.work(), args).await

@@ -519,6 +519,16 @@ pub fn run() {
             commands::selftest_log,
             commands::selftest_plan,
             commands::selftest_popover,
+            commands::repo_rename,
+            commands::repo_delete,
+            commands::repo_set_pinned,
+            commands::set_group_collapsed,
+            commands::repo_runs,
+            commands::issues_list,
+            commands::issue_detail,
+            commands::issue_create,
+            commands::issue_comment,
+            commands::issue_set_open,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

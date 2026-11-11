@@ -60,6 +60,13 @@ impl World {
         world
     }
 
+    /// Signed in, with a `/me` of the test's own.
+    pub async fn build_with_me(me: Value) -> World {
+        let world = Self::build(true).await;
+        world.mock_get("/me", me).await;
+        world
+    }
+
     async fn build(signed_in: bool) -> World {
         let dir = tempfile::tempdir().unwrap();
         let base = dir.path().canonicalize().unwrap();

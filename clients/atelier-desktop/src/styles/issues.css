@@ -1,0 +1,37 @@
+/* The Issues and Actions tabs of a repository (they borrow the pull
+   requests layout), and the small pieces they share. */
+
+/* Open / Closed */
+.issues-states { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; border: 1px solid var(--line); background: var(--ground); }
+.issues-state { height: 26px; padding: 0 12px; border: none; border-radius: 7px; background: transparent; color: var(--ink3); font: 500 12px var(--font-text); cursor: pointer; }
+.issues-state:hover { color: var(--ink); }
+.issues-state[aria-selected="true"] { background: var(--sel); color: var(--ink); }
+.issues-more { align-self: center; margin: 4px 0; }
+
+.issue-number { color: var(--ink3); font-weight: 500; font-size: 12px; }
+.issue-card.from-github { border-color: var(--blue-line); }
+.issue-card.from-github .issue-number { color: var(--blue2); }
+
+.issue-label { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line2); color: var(--ink2); font-size: 11px; }
+
+.issue-meta { gap: 8px; align-items: center; }
+.issue-body { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+.issue-body.from-github { border-color: var(--blue-line); background: var(--blue-bg); }
+/* The Markdown source as written: line breaks kept, nothing interpreted. */
+.issue-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.issue-reply { gap: 8px; }
+.issue-box { min-height: 76px; resize: vertical; }
+.issue-actions { gap: 8px; align-items: center; }
+.compose-body { min-height: 160px; resize: vertical; }
+
+/* Actions */
+.runs { display: flex; flex-direction: column; min-height: 0; }
+.runs-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 16px 22px 8px; }
+.runs-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 22px 22px; display: flex; flex-direction: column; gap: 18px; }
+.runs-group { display: flex; flex-direction: column; gap: 4px; }
+.runs-group-head { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.runs-group.for-pull .runs-group-head .h-section { color: var(--ink); }
+.runs-row { display: flex; align-items: center; gap: 12px; min-height: 38px; padding: 4px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.runs-row:hover { border-color: var(--line2); }
+.runs-name { font-weight: 600; }
+.runs-when { flex: none; min-width: 84px; text-align: right; }

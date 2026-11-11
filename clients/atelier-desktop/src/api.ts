@@ -76,6 +76,12 @@ export interface Prefs {
   picked: string[];
   /** "Find your folders" has been shown once. */
   folders_done: boolean;
+  /** Working copies pinned to the top of the sidebar, by folder. */
+  pinned: string[];
+  /** Owner groups folded shut in the sidebar, by account name (lower case). */
+  collapsed: string[];
+  /** Who a new repository belonged to last time. */
+  default_owner: string | null;
 }
 
 export interface AppState {
@@ -89,6 +95,8 @@ export interface AppState {
   person_name: string | null;
   person_login: string | null;
   accounts: Account[];
+  /** The owner lets this device rename and delete repositories (Settings → Devices in the studio). */
+  can_admin: boolean;
   tether: boolean;
   connect: boolean;
   /** `~/Atelier` */
@@ -204,7 +212,13 @@ export interface NeedRow {
 export interface WorkingCopy {
   path: string;
   name: string;
+  /** The owner as shown (`Elyndra Studios LTD`), or where the remote is. */
   owner: string;
+  /** The owning account's name in the studio; empty when it isn't there. */
+  owner_name: string;
+  /** `user` (personal), `company`, or empty. */
+  owner_kind: string;
+  pinned: boolean;
   full_name: string | null;
   branch: string;
   changes: number;
@@ -418,6 +432,16 @@ export interface Branch {
 
 // ---------------------------------------------------------- pull requests
 
+/** A pull request's checks in a few words. */
+export interface ChecksBrief {
+  state: "none" | "pending" | "failing" | "passing";
+  /** `3 of 4 passed`, `1 failing`, `running`, `no checks` */
+  text: string;
+  tone: Tone;
+  /** The same as a sentence, for a tooltip. */
+  title: string;
+}
+
 export interface PullRow {
   repo: string;
   repo_short: string;
@@ -426,6 +450,94 @@ export interface PullRow {
   by: string;
   status: Badge;
   via: Badge | null;
+  checks: ChecksBrief;
+  head: string;
+}
+
+// ------------------------------------------------ looking after a repository
+
+export interface Renamed {
+  full_name: string;
+  name: string;
+  /** The remotes of the working copy that now point at the new address. */
+  remotes: string[];
+  remote_error: string | null;
+}
+
+export interface RepoRunRow {
+  run_id: number;
+  status: Badge;
+  failed: boolean;
+  name: string;
+  /** `push on feature/tunnel-ui` */
+  detail: string;
+  duration: string;
+  started_at: string;
+  web_path: string | null;
+}
+
+export interface RunGroup {
+  /** The pull request these runs are for; null for the rest. */
+  pull: number | null;
+  label: string;
+  runs: RepoRunRow[];
+}
+
+export interface RunsView {
+  repo: string;
+  groups: RunGroup[];
+  web_path: string;
+}
+
+// ----------------------------------------------------------------- issues
+
+export interface LabelView {
+  name: string;
+  /** `#rrggbb`, checked on the Rust side; null when there is none. */
+  color: string | null;
+}
+
+export interface IssueRow {
+  number: number;
+  title: string;
+  open: boolean;
+  by: string;
+  /** `via Tether` (blue) when it came from GitHub. */
+  via: Badge | null;
+  labels: LabelView[];
+  comments: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IssuesView {
+  rows: IssueRow[];
+  has_more: boolean;
+  page: number;
+}
+
+export interface IssueCommentRow {
+  who: string;
+  /** `bot · via Tether` */
+  tag: string;
+  tone: "yours" | "github" | "agents" | "connect";
+  at: string;
+  body: string;
+}
+
+export interface IssueView {
+  repo: string;
+  number: number;
+  title: string;
+  open: boolean;
+  by: string;
+  via: Badge | null;
+  labels: LabelView[];
+  /** Plain text as written (Markdown source); only ever shown as text. */
+  body: string;
+  comments: IssueCommentRow[];
+  created_at: string;
+  web_path: string;
 }
 
 export interface CheckRow {
@@ -616,7 +728,8 @@ export interface MessagesView {
 const call = <T>(name: string, args?: Record<string, unknown>): Promise<T> => invoke<T>(name, args);
 
 export const api = {
-  appState: () => call<AppState>("app_state"),
+  /** `fresh`: ask the studio again now instead of using what was read in the last minute. */
+  appState: (fresh = false) => call<AppState>("app_state", { fresh }),
 
   // First run
   connectStart: (address: string) => call<ConnectStarted>("connect_start", { address }),
@@ -678,7 +791,8 @@ export const api = {
   openGithub: (fullName: string) => call<void>("open_github", { fullName }),
 
   // Pull requests
-  pullsList: () => call<PullRow[]>("pulls_list"),
+  /** Open pull requests: across the studio, or of one repository (`owner/name`). */
+  pullsList: (repo?: string) => call<PullRow[]>("pulls_list", { repo: repo ?? null }),
   pullDetail: (repo: string, number: number) => call<PullView>("pull_detail", { repo, number }),
   pullMerge: (repo: string, number: number, method: string, whenGreen: boolean) =>
     call<MergeResult>("pull_merge", { repo, number, method, whenGreen }),
@@ -686,6 +800,24 @@ export const api = {
   pullCheckout: (repo: string, number: number) =>
     call<{ path: string; branch: string }>("pull_checkout", { repo, number }),
   agentApprove: (jobId: number) => call<boolean>("agent_approve", { jobId }),
+
+  // Looking after a repository (path = WorkingCopy.path)
+  /** Renames it in the studio and points the folder's remotes at the new address. */
+  repoRename: (path: string, name: string) => call<Renamed>("repo_rename", { path, name }),
+  /** Deletes it from the studio only. `typed` is the name the person typed. Ask first. */
+  repoDelete: (path: string, typed: string) => call<string>("repo_delete", { path, typed }),
+  repoSetPinned: (path: string, on: boolean) => call<void>("repo_set_pinned", { path, on }),
+  /** Folds an owner's group in the sidebar shut (or opens it); remembered. */
+  setGroupCollapsed: (owner: string, collapsed: boolean) => call<void>("set_group_collapsed", { owner, collapsed }),
+  repoRuns: (repo: string) => call<RunsView>("repo_runs", { repo }),
+
+  // Issues (repo = `owner/name`)
+  issuesList: (repo: string, state: "open" | "closed", page = 1) => call<IssuesView>("issues_list", { repo, state, page }),
+  issueDetail: (repo: string, number: number) => call<IssueView>("issue_detail", { repo, number }),
+  /** Resolves to the new issue's number when the studio says it. */
+  issueCreate: (repo: string, title: string, body: string) => call<number | null>("issue_create", { repo, title, body }),
+  issueComment: (repo: string, number: number, body: string) => call<void>("issue_comment", { repo, number, body }),
+  issueSetOpen: (repo: string, number: number, open: boolean) => call<void>("issue_set_open", { repo, number, open }),
 
   // This device
   deviceView: () => call<DeviceView>("device_view"),

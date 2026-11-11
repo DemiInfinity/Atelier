@@ -38,7 +38,7 @@ enum Command {
     Whoami,
     /// What needs you, across your studio
     Status,
-    /// List, clone and publish repositories
+    /// List, clone, publish, rename and delete repositories
     Repo {
         #[command(subcommand)]
         command: RepoCommand,
@@ -46,6 +46,11 @@ enum Command {
     /// Pull requests for this repository
     #[command(args_conflicts_with_subcommands = true)]
     Pr(PrArgs),
+    /// Issues of this repository
+    Issue {
+        #[command(subcommand)]
+        command: Option<IssueCommand>,
+    },
     /// Jobs and agents, live
     #[command(args_conflicts_with_subcommands = true)]
     Run {
@@ -103,6 +108,61 @@ enum RepoCommand {
     Clone(CloneArgs),
     /// Turn this folder into a repository in your studio
     Publish(PublishArgs),
+    /// Give this repository a new name in your studio
+    Rename {
+        /// The new name
+        new: String,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
+    /// Delete this repository from your studio (the folder here stays)
+    Delete {
+        /// Don't ask: the repository's full name, to be sure
+        #[arg(long, short = 'y', value_name = "OWNER/NAME")]
+        yes: Option<String>,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum IssueStateArg {
+    Open,
+    Closed,
+    All,
+}
+
+#[derive(Subcommand)]
+enum IssueCommand {
+    /// This repository's issues
+    List {
+        #[arg(long, value_enum, default_value = "open")]
+        state: IssueStateArg,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
+    /// One issue with its conversation
+    View {
+        number: u64,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
+    /// Open a new issue
+    New {
+        /// The title, in one line
+        title: String,
+        /// What it is about
+        #[arg(long, short = 'b', default_value = "")]
+        body: String,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
+    /// Close an issue
+    Close {
+        number: u64,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
 }
 
 #[derive(Args)]
@@ -344,6 +404,21 @@ async fn run(cli: Cli, local_offset: Option<time::UtcOffset>) -> CliResult<()> {
             RepoCommand::List => cmd::repo::list(&ctx).await,
             RepoCommand::Clone(args) => cmd::repo::clone(&ctx, args).await,
             RepoCommand::Publish(args) => cmd::repo::publish(&ctx, args).await,
+            RepoCommand::Rename { new, scope } => cmd::repo::rename(&ctx, &new, scope).await,
+            RepoCommand::Delete { yes, scope } => cmd::repo::delete(&ctx, yes, scope).await,
+        },
+        Some(Command::Issue { command }) => match command {
+            None => cmd::issue::list(&ctx, IssueStateArg::Open, RepoScope { repo: None }).await,
+            Some(IssueCommand::List { state, scope }) => cmd::issue::list(&ctx, state, scope).await,
+            Some(IssueCommand::View { number, scope }) => {
+                cmd::issue::view(&ctx, number, scope).await
+            }
+            Some(IssueCommand::New { title, body, scope }) => {
+                cmd::issue::new(&ctx, &title, &body, scope).await
+            }
+            Some(IssueCommand::Close { number, scope }) => {
+                cmd::issue::close(&ctx, number, scope).await
+            }
         },
         Some(Command::Pr(args)) => match args.command {
             Some(PrCommand::Merge {

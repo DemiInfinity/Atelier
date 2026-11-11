@@ -107,6 +107,7 @@ if [ "${1:-}" = "selftest" ]; then
   app_pid=$!
   trap 'kill $mock_pid $app_pid 2>/dev/null || true; rm -rf "$sockdir"' EXIT INT TERM
   notified=0
+  admin=0
   shots=0
   i=0
   while [ $i -lt 600 ]; do
@@ -126,6 +127,11 @@ if [ "${1:-}" = "selftest" ]; then
     if [ $notified -eq 0 ] && grep -q "ready-for-notify" "$log" 2>/dev/null; then
       curl -s -X POST "$studio/_mock/notify" > /dev/null && notified=1
     fi
+    # The walk-through asks for the "may rename and delete" switch of
+    # Settings → Devices to be turned on, after it has seen the refusal.
+    if [ $admin -eq 0 ] && grep -q "ready-for-admin" "$log" 2>/dev/null; then
+      curl -s -X POST "$studio/_mock/admin/on" > /dev/null && admin=1
+    fi
     if grep -q "\[selftest\] done\|\[selftest\] FAIL [^st]" "$log" 2>/dev/null; then break; fi
     kill -0 $app_pid 2>/dev/null || break
     sleep 0.2; i=$((i + 1))
@@ -134,6 +140,14 @@ if [ "${1:-}" = "selftest" ]; then
   kill $app_pid 2>/dev/null || true
   echo "--- app log ($log)"; cat "$log"
   echo "--- mock log"; cat "$world/mock.log"
+  # After the walk: the folders are all still there, and the one that was
+  # renamed in the studio points at its new address.
+  echo "--- folders afterwards"
+  for copy in "$world"/home/Atelier/*/* "$world"/home/Projects/*; do
+    [ -d "$copy/.git" ] || continue
+    echo "$copy: origin=$(g -C "$copy" remote get-url origin 2>/dev/null || echo none) files=$(ls "$copy" | wc -l | tr -d ' ')"
+  done
+  echo "--- [desktop] in config.toml"; sed -n '/^\[desktop\]/,$p' "$world/config/config.toml"
   grep -q "\[selftest\] done" "$log" && ! grep -q "\[selftest\] FAIL" "$log"
 else
   "$app"

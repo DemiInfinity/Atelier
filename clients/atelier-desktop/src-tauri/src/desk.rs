@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use atelier_core::api::{
-    Account, DeviceKind, DevicePoll, DeviceStart, DeviceStartRequest, Me, Messages, Repo,
+    Account, Device, DeviceKind, DevicePoll, DeviceStart, DeviceStartRequest, Me, Messages, Repo,
 };
 use atelier_core::config::{normalize_studio, Config, Env, Settings};
 use atelier_core::runner::RunnerStatus;
@@ -82,6 +82,8 @@ pub struct AppState {
     pub person_name: Option<String>,
     pub person_login: Option<String>,
     pub accounts: Vec<Account>,
+    /// The owner lets this device rename and delete repositories.
+    pub can_admin: bool,
     pub tether: bool,
     pub connect: bool,
     pub clone_root: String,
@@ -377,7 +379,7 @@ impl Desk {
     pub(crate) fn account_label(&self, owner: &str) -> String {
         self.me_cached()
             .and_then(|me| {
-                me.accounts
+                me.all_owners()
                     .into_iter()
                     .find(|a| a.name.eq_ignore_ascii_case(owner))
                     .map(|a| {
@@ -470,6 +472,16 @@ impl Desk {
     // ---------------------------------------------------------- app state
 
     pub async fn app_state(&self) -> AppState {
+        self.app_state_within(Duration::from_secs(60)).await
+    }
+
+    /// The app's state with `/me` asked again now (what this device may do
+    /// can change at any time in the studio's settings).
+    pub async fn app_state_fresh(&self) -> AppState {
+        self.app_state_within(Duration::ZERO).await
+    }
+
+    async fn app_state_within(&self, max_age: Duration) -> AppState {
         let settings = self.settings();
         let studio = settings.studio();
         let mut signed_in = self.signed_in();
@@ -477,7 +489,7 @@ impl Desk {
         let mut note = lock(&self.note).clone();
         let mut me = None;
         if signed_in {
-            match self.me(Duration::from_secs(60)).await {
+            match self.me(max_age).await {
                 Ok(found) => {
                     me = Some(found);
                     note = None;
@@ -524,7 +536,11 @@ impl Desk {
                 .unwrap_or_else(|| self.device_name()),
             person_name: me.as_ref().map(|m| m.person.name.clone()),
             person_login: me.as_ref().map(|m| m.person.login.clone()),
-            accounts: me.as_ref().map(|m| m.accounts.clone()).unwrap_or_default(),
+            accounts: me.as_ref().map(Me::all_owners).unwrap_or_default(),
+            can_admin: me
+                .as_ref()
+                .and_then(|m| m.device.as_ref())
+                .is_some_and(Device::may_admin),
             tether: me.as_ref().is_some_and(|m| m.studio.tether),
             connect: me.as_ref().is_some_and(|m| m.studio.connect),
             clone_root: paths::display(&settings.clone_root(), &settings.home),

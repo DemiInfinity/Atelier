@@ -85,7 +85,7 @@ export function todayScreen(ctx: Ctx, _route: Extract<Route, { screen: "today" }
   }
 
   function copyRow(copy: WorkingCopy): HTMLElement {
-    const open = () => ctx.go({ screen: "repo", path: copy.path, tab: "changes" });
+    const open = () => ctx.go({ screen: "repo", path: copy.path });
     const label = copy.action === "pull" ? "Pull" : copy.action === "push" ? "Push" : "Open";
     const button: HTMLButtonElement = h("button", {
       type: "button",

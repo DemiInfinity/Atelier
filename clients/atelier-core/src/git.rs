@@ -316,6 +316,40 @@ impl Git {
         Ok(previous)
     }
 
+    /// After a studio repository was renamed: points every remote of the
+    /// working copy that still names `old` at `new` instead, keeping the
+    /// rest of each address (scheme, user, port) as it was. Returns the
+    /// names of the remotes that changed.
+    pub async fn retarget_remotes(
+        &self,
+        repo: &Path,
+        old: &Repo,
+        new: &Repo,
+    ) -> Result<Vec<String>> {
+        let local = self.inspect(repo).await?;
+        let old_refs: Vec<RemoteRef> = [&old.clone_https, &old.clone_ssh]
+            .into_iter()
+            .filter_map(|url| RemoteRef::parse(url))
+            .collect();
+        let mut changed = Vec::new();
+        for info in &local.remotes {
+            let points_at_old = info
+                .remote
+                .as_ref()
+                .is_some_and(|remote| old_refs.contains(remote));
+            if !points_at_old {
+                continue;
+            }
+            let Some(url) = renamed_url(&info.url, &old.name, &new.name) else {
+                continue;
+            };
+            self.run(Some(repo), ["remote", "set-url", &info.name, &url])
+                .await?;
+            changed.push(info.name.clone());
+        }
+        Ok(changed)
+    }
+
     /// What publishing `path` would involve, without changing anything.
     pub async fn publish_plan(&self, path: &Path) -> Result<PublishPlan> {
         let toplevel = self
@@ -472,6 +506,26 @@ fn command_word(args: &[OsString]) -> String {
         }
     }
     String::new()
+}
+
+/// `url` with its last path segment (`Old` or `Old.git`, compared without
+/// regard to case) replaced by `new`. `None` when it doesn't end that way.
+pub fn renamed_url(url: &str, old: &str, new: &str) -> Option<String> {
+    let trimmed = url.trim_end_matches('/');
+    let (stem, suffix) = match trimmed.len().checked_sub(4) {
+        Some(at) if trimmed.is_char_boundary(at) && trimmed[at..].eq_ignore_ascii_case(".git") => {
+            (&trimmed[..at], &trimmed[at..])
+        }
+        _ => (trimmed, ""),
+    };
+    let at = stem.len().checked_sub(old.len())?;
+    if old.is_empty() || !stem.is_char_boundary(at) || !stem[at..].eq_ignore_ascii_case(old) {
+        return None;
+    }
+    if !stem[..at].ends_with(['/', ':']) {
+        return None;
+    }
+    Some(format!("{}{new}{suffix}", &stem[..at]))
 }
 
 fn is_ssh_url(url: &str) -> bool {

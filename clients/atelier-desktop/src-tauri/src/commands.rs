@@ -10,6 +10,8 @@ use crate::add::{Added, FolderPlan, Folders, OpenedFolder, SearchView, Suggestio
 use crate::desk::{AppState, ConnectPoll, ConnectStarted, Desk};
 use crate::device::{DeviceView, LogView, RunnerProbe};
 use crate::error::{CmdError, CmdResult};
+use crate::issues::{IssueView, IssuesView};
+use crate::manage::{Renamed, RunsView};
 use crate::notify::Target;
 use crate::pulls::{CheckedOut, MergeResult, PullRow, PullView};
 use crate::repo::{
@@ -24,8 +26,12 @@ type D<'a> = State<'a, Arc<Desk>>;
 // ------------------------------------------------------------ app, sign-in
 
 #[tauri::command]
-pub async fn app_state(desk: D<'_>) -> CmdResult<AppState> {
-    Ok(desk.app_state().await)
+pub async fn app_state(desk: D<'_>, fresh: Option<bool>) -> CmdResult<AppState> {
+    Ok(if fresh == Some(true) {
+        desk.app_state_fresh().await
+    } else {
+        desk.app_state().await
+    })
 }
 
 #[tauri::command]
@@ -246,8 +252,8 @@ pub async fn open_github(desk: D<'_>, full_name: String) -> CmdResult<()> {
 // ---------------------------------------------------------- pull requests
 
 #[tauri::command]
-pub async fn pulls_list(desk: D<'_>) -> CmdResult<Vec<PullRow>> {
-    desk.pulls_list().await
+pub async fn pulls_list(desk: D<'_>, repo: Option<String>) -> CmdResult<Vec<PullRow>> {
+    desk.pulls_list(repo.as_deref()).await
 }
 
 #[tauri::command]
@@ -495,4 +501,70 @@ pub async fn selftest_popover(app: AppHandle, desk: D<'_>) -> CmdResult<()> {
         shell::show_popover_at(&app, 120.0, 80.0);
     }
     Ok(())
+}
+
+// ------------------------------------------- looking after a repository
+
+#[tauri::command]
+pub async fn repo_rename(desk: D<'_>, path: String, name: String) -> CmdResult<Renamed> {
+    desk.repo_rename(&path, &name).await
+}
+
+/// Deletes the repository from the studio only; `typed` is its name, typed
+/// by the person. The folder stays.
+#[tauri::command]
+pub async fn repo_delete(desk: D<'_>, path: String, typed: String) -> CmdResult<String> {
+    desk.repo_delete(&path, &typed).await
+}
+
+#[tauri::command]
+pub async fn repo_set_pinned(desk: D<'_>, path: String, on: bool) -> CmdResult<()> {
+    desk.set_pinned(&path, on).await
+}
+
+#[tauri::command]
+pub async fn set_group_collapsed(desk: D<'_>, owner: String, collapsed: bool) -> CmdResult<()> {
+    desk.set_group_collapsed(&owner, collapsed)
+}
+
+#[tauri::command]
+pub async fn repo_runs(desk: D<'_>, repo: String) -> CmdResult<RunsView> {
+    desk.repo_runs(&repo).await
+}
+
+// ------------------------------------------------------------------ issues
+
+#[tauri::command]
+pub async fn issues_list(
+    desk: D<'_>,
+    repo: String,
+    state: String,
+    page: u32,
+) -> CmdResult<IssuesView> {
+    desk.issues_list(&repo, &state, page).await
+}
+
+#[tauri::command]
+pub async fn issue_detail(desk: D<'_>, repo: String, number: u64) -> CmdResult<IssueView> {
+    desk.issue_detail(&repo, number).await
+}
+
+#[tauri::command]
+pub async fn issue_create(
+    desk: D<'_>,
+    repo: String,
+    title: String,
+    body: String,
+) -> CmdResult<Option<u64>> {
+    desk.issue_create(&repo, &title, &body).await
+}
+
+#[tauri::command]
+pub async fn issue_comment(desk: D<'_>, repo: String, number: u64, body: String) -> CmdResult<()> {
+    desk.issue_comment(&repo, number, &body).await
+}
+
+#[tauri::command]
+pub async fn issue_set_open(desk: D<'_>, repo: String, number: u64, open: bool) -> CmdResult<()> {
+    desk.issue_set_open(&repo, number, open).await
 }
