@@ -10,8 +10,7 @@
 // # Providers
 //
 // A Provider turns the owner's settings into a command line and reads the
-// helper's output. Cloudflare Tunnel (cloudflared) is the only provider today,
-// in two modes:
+// helper's output. Cloudflare Tunnel (cloudflared) has two modes:
 //
 //   - quick: `cloudflared tunnel --url http://127.0.0.1:3001`, no account. The
 //     random https://<words>.trycloudflare.com address is read from the log
@@ -21,16 +20,13 @@
 //     command line). The public hostname is whatever the owner configured
 //     there, so it is part of the settings rather than parsed.
 //
-// Tailscale Funnel would fit the same interface as a second provider: Command
-// runs `tailscaled --tun=userspace-networking --statedir=<data>/tailscale`
-// plus `tailscale up --authkey=$TS_AUTHKEY` and `tailscale funnel --bg
-// http://127.0.0.1:3001` (two processes, so the provider would return a small
-// wrapper script or the supervisor would gain a "sidecar" list), Address
-// parses the https://<machine>.<tailnet>.ts.net URL that `tailscale funnel
-// status` prints, and Ready waits for "Available on the internet". The auth
-// key would be sealed exactly like the Cloudflare token. Funnel connections
-// arrive with the real client address in Tailscale-Ingress headers rather
-// than CF-Connecting-IP, so the provider would also name its client-IP header.
+// Tailscale (tailscale.go) is the second provider. It needs two programs
+// (tailscaled, then tailscale serve or funnel) and a sign-in step between
+// them, so it is a small controller around two Supervisors rather than a
+// Provider: private mode serves https://<machine>.<tailnet>.ts.net to the
+// owner's own devices, funnel mode to the internet. The visitor's address
+// arrives in X-Forwarded-For (set by tailscaled, not the visitor) instead of
+// CF-Connecting-IP.
 package tunnel
 
 import (

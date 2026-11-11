@@ -2,6 +2,18 @@
 // page is open (the address appears a few seconds after turning it on).
 (function () {
   "use strict";
+  // Show only the chosen provider's fields.
+  var providers = document.querySelectorAll("[data-tn-provider]");
+  function showProvider() {
+    var chosen = "cloudflare";
+    providers.forEach(function (el) { if (el.checked) chosen = el.value; });
+    document.querySelectorAll("[data-tn-fields]").forEach(function (el) {
+      el.hidden = el.getAttribute("data-tn-fields") !== chosen;
+    });
+  }
+  providers.forEach(function (el) { el.addEventListener("change", showProvider); });
+  if (providers.length) showProvider();
+
   var card = document.querySelector("[data-tn-status]");
   if (!card || !window.fetch) return;
   var on = card.getAttribute("data-tn-on") === "1";

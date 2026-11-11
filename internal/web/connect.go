@@ -169,6 +169,9 @@ func (a *App) connectBaseFor(c store.ConnectSettings) (string, string) {
 	}
 	m := a.tunnel()
 	if host := m.remoteHost(); host != "" && m.on.Load() {
+		if tc := m.cfg.Load(); tc != nil && tc.TailnetOnly() {
+			return "", "Remote access is on in Tailscale's private mode, which only your own devices can reach. Connect needs an address other studios can reach: switch Tailscale to Public (Funnel) under Settings → Remote access."
+		}
 		if c.ExposeTunnel {
 			return tunnelURL(host), ""
 		}

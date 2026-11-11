@@ -57,6 +57,30 @@ RUN set -eu; \
     echo "$sum  /tmp/cloudflared" | sha256sum -c -; \
     install -m 0755 /tmp/cloudflared /usr/local/bin/cloudflared
 
+# ---- tailscale and tailscaled, the second remote access provider ----
+# A pinned stable release from Tailscale's own static tarballs, checked
+# against the SHA-256 published beside each tarball
+# (https://pkgs.tailscale.com/stable/tailscale_<version>_<arch>.tgz.sha256).
+# To upgrade: change the version and both sums together.
+FROM alpine:3.22 AS tailscale
+ARG TARGETARCH
+ARG TAILSCALE_VERSION=1.104.6
+ARG TAILSCALE_SHA256_AMD64=82a85429f733e52fd1a95dedb2c8dd8cd46d6603504e566a56b1779c9a7a4809
+ARG TAILSCALE_SHA256_ARM64=d0e4f297da3c428d02162c6235b9948e4ddc245c64502b7b05647da9b96a0971
+RUN set -eu; \
+    arch="${TARGETARCH:-amd64}"; \
+    case "$arch" in \
+      amd64) sum="$TAILSCALE_SHA256_AMD64" ;; \
+      arm64) sum="$TAILSCALE_SHA256_ARM64" ;; \
+      *) echo "tailscale: no pinned build for $arch" >&2; exit 1 ;; \
+    esac; \
+    name="tailscale_${TAILSCALE_VERSION}_${arch}"; \
+    wget -q -O /tmp/tailscale.tgz "https://pkgs.tailscale.com/stable/${name}.tgz"; \
+    echo "$sum  /tmp/tailscale.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/tailscale.tgz -C /tmp "${name}/tailscale" "${name}/tailscaled"; \
+    install -m 0755 "/tmp/${name}/tailscale" /usr/local/bin/tailscale; \
+    install -m 0755 "/tmp/${name}/tailscaled" /usr/local/bin/tailscaled
+
 # ---- runtime ----
 FROM alpine:3.22
 
@@ -76,6 +100,10 @@ COPY --from=build /out/atelier /usr/local/bin/atelier
 # Remote access is off until turned on in Settings; Atelier runs cloudflared
 # itself and it connects back to 127.0.0.1:3001 inside the container only.
 COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+# The Tailscale provider: tailscaled runs with --tun=userspace-networking as
+# the atelier user (no TUN device, no NET_ADMIN, no root), its state in
+# /data/tailscale, and only while remote access is on with Tailscale chosen.
+COPY --from=tailscale /usr/local/bin/tailscale /usr/local/bin/tailscaled /usr/local/bin/
 
 ENV ATELIER_LISTEN=:3000 \
     ATELIER_SSH_LISTEN=:2222 \

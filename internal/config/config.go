@@ -47,6 +47,10 @@ type Config struct {
 	// in the database (off by default); these only say where things are.
 	TunnelListen string // loopback listener only the tunnel helper connects to; ATELIER_TUNNEL_LISTEN, default 127.0.0.1:3001
 	TunnelBin    string // the cloudflared binary; ATELIER_CLOUDFLARED, default "cloudflared" on PATH
+	// The Tailscale provider's two binaries; ATELIER_TAILSCALE and
+	// ATELIER_TAILSCALED, default "tailscale" and "tailscaled" on PATH.
+	TailscaleBin  string
+	TailscaledBin string
 }
 
 func FromEnv() Config {
@@ -78,6 +82,8 @@ func FromEnv() Config {
 		SSHListen:          ":2222",
 		TunnelListen:       env("ATELIER_TUNNEL_LISTEN", "127.0.0.1:3001"),
 		TunnelBin:          env("ATELIER_CLOUDFLARED", "cloudflared"),
+		TailscaleBin:       env("ATELIER_TAILSCALE", "tailscale"),
+		TailscaledBin:      env("ATELIER_TAILSCALED", "tailscaled"),
 	}
 	// ATELIER_SSH_LISTEN set to an empty string turns the SSH server off.
 	if v, ok := os.LookupEnv("ATELIER_SSH_LISTEN"); ok {

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -61,8 +62,8 @@ func TestPersonOwnership(t *testing.T) {
 	if id, ok := s.SessionPerson(ctx, sess); !ok || id != me.ID {
 		t.Errorf("after reopen, session person = %d", id)
 	}
-	if v, _ := s.Setting(ctx, settingSchemaVersion); v != "1" {
-		t.Errorf("schema version = %q, want 1", v)
+	if v, _ := s.Setting(ctx, settingSchemaVersion); v != strconv.Itoa(len(migrations)) {
+		t.Errorf("schema version = %q, want %d", v, len(migrations))
 	}
 }
 

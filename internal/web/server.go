@@ -217,7 +217,7 @@ func (a *App) isHTTPS(r *http.Request) bool {
 
 func (a *App) clientIP(r *http.Request) string {
 	if rm, ok := remoteOf(r); ok {
-		return rm.IP // CF-Connecting-IP, trusted only on the remote listener
+		return rm.IP // the tunnel provider's client address, trusted only on the remote listener
 	}
 	if a.cfg.TrustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {

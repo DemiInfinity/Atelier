@@ -93,7 +93,7 @@ func (a *App) pagesPersonCanRead(ctx context.Context, personID int64, rp store.R
 // else ATELIER_PUBLIC_URL.
 func (a *App) pagesAppBase(r *http.Request) string {
 	if isRemote(r) {
-		if c := a.tunnel().cfg.Load(); c != nil && c.Mode == "named" && c.ExposeWeb && c.Hostname != "" {
+		if c := a.tunnel().cfg.Load(); c != nil && c.Named() && c.ExposeWeb && c.Hostname != "" {
 			return tunnelURL(c.Hostname)
 		}
 		return ""

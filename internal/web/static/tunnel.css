@@ -24,6 +24,9 @@
 .tn-named legend { padding: 0 6px; }
 .tn-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 fieldset.stack-sm { border: 0; padding: 0; margin: 0; }
+.tn-provider { border: 0; padding: 0; margin: 0; }
+.tn-provider[hidden] { display: none; }
+.tn-provider > legend { padding: 0; margin-bottom: 4px; }
 .tn-never { opacity: 0.6; }
 
 .tn-table { width: 100%; border-collapse: collapse; }

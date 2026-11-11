@@ -34,10 +34,7 @@ func (a *App) appRemoteState(ctx context.Context) appRemote {
 	if err != nil {
 		return s
 	}
-	s.On, s.Mode = c.Enabled, c.Mode
-	if s.Mode == "" {
-		s.Mode = tunnel.ModeQuick
-	}
+	s.On, s.Mode = c.Enabled, c.APIMode()
 	for _, e := range []struct {
 		on    bool
 		class string
@@ -48,7 +45,7 @@ func (a *App) appRemoteState(ctx context.Context) appRemote {
 		}
 	}
 	if s.On {
-		s.Address = a.tunnel().sup.Status().Address
+		s.Address = a.tunnel().status().Address
 		s.Connected, _ = a.db.TunnelVisitors(ctx, time.Now().Add(-5*time.Minute))
 	}
 	return s

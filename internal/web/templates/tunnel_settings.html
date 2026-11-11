@@ -7,10 +7,12 @@
     <div class="col-main stack-lg">
       <div>
         <h1 class="display">Remote access</h1>
-        <p class="muted">Reach this Atelier from outside your home network through a Cloudflare Tunnel: an outbound connection, no port forwarding. It's off until you turn it on, and turning it off cuts every remote connection at once.</p>
+        <p class="muted">Reach this Atelier from outside your home network through Cloudflare Tunnel or Tailscale: an outbound connection, no port forwarding. It's off until you turn it on, and turning it off cuts every remote connection at once.</p>
       </div>
       {{template "flash" .}}
       {{if $d.Saved}}<div class="flash flash-ok" role="status">Saved.</div>{{end}}
+      {{if eq $d.Forgot "1"}}<div class="flash flash-ok" role="status">This server is signed out of your tailnet and its node identity is deleted. Paste a new auth key to use Tailscale again.</div>{{end}}
+      {{if eq $d.Forgot "offline"}}<div class="flash flash-error" role="alert">The node identity is deleted here, but Tailscale couldn't be told. Remove the machine yourself in the Tailscale admin console (Machines).</div>{{end}}
 
       <section class="card stack tn-status {{if $d.On}}tn-on{{end}}" aria-labelledby="tn-status-h" data-tn-status data-tn-on="{{if $d.On}}1{{end}}" data-tn-address="{{$d.Address}}">
         <div class="row-between wrap-gap">
@@ -25,7 +27,10 @@
             <input class="clone-url" id="tn-address" value="{{$d.Address}}" readonly aria-label="Remote address">
             <button type="button" class="clone-copy" data-copy="#tn-address" aria-label="Copy address"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8 V6 a2 2 0 0 0-2-2 H6 a2 2 0 0 0-2 2 v8 a2 2 0 0 0 2 2 h2"/></svg></button>
           </div>
-          {{if eq $c.Mode "quick"}}<p class="hint">Quick tunnels get a new address every time they start.</p>{{end}}
+          {{if $c.Tailscale}}
+          <p class="hint">{{if $c.TailnetOnly}}Private: only devices signed in to your tailnet can open this address.{{else}}Public (Funnel): anyone on the internet can open this address. They still need a passkey or a token to get in.{{end}} The address stays the same across restarts.</p>
+          {{else if eq $c.Mode "quick"}}<p class="hint">Quick tunnels get a new address every time they start.</p>{{end}}
+          {{else if $c.Tailscale}}<p class="muted">Waiting for Tailscale to bring this server onto your tailnet…</p>
           {{else}}<p class="muted">Waiting for Cloudflare to hand out an address…</p>{{end}}
         </div>
         <dl class="tn-facts">
@@ -42,7 +47,11 @@
         </form>
         {{else if $d.Remote}}
         {{else}}
+        {{if $c.Tailscale}}
+        {{if not $d.HaveTailscale}}<p class="hint">Tailscale isn't installed here (<code>{{$d.TSBinary}}</code> and <code>{{$d.TSDaemonBinary}}</code>). The Docker image includes both; elsewhere, install them or set <code>ATELIER_TAILSCALE</code> and <code>ATELIER_TAILSCALED</code>.</p>{{end}}
+        {{else}}
         {{if not $d.HaveBinary}}<p class="hint">cloudflared isn't installed here (<code>{{$d.Binary}}</code>). The Docker image includes it; elsewhere, install it or set <code>ATELIER_CLOUDFLARED</code>.</p>{{end}}
+        {{end}}
         <form method="post" action="/settings/remote/on" class="row-end">
           <button class="btn btn-primary btn-lg" type="submit">Turn on remote access</button>
         </form>
@@ -72,7 +81,12 @@
       <section class="card stack-sm"><p class="small muted">You're viewing this through remote access. Settings can only be changed from your home network; from here you can turn it off.</p></section>
       {{else}}
       <form method="post" action="/settings/remote" class="card stack" aria-labelledby="tn-setup-h">
-        <h2 class="h-sm" id="tn-setup-h">Tunnel</h2>
+        <h2 class="h-sm" id="tn-setup-h">Provider</h2>
+        <label class="choice"><input type="radio" name="provider" value="cloudflare" data-tn-provider {{if not $c.Tailscale}}checked{{end}}><span><strong>Cloudflare Tunnel</strong><span class="small muted">A public address through Cloudflare. No account for a quick try; your own domain with a named tunnel.</span></span></label>
+        <label class="choice"><input type="radio" name="provider" value="tailscale" data-tn-provider {{if $c.Tailscale}}checked{{end}}><span><strong>Tailscale</strong><span class="small muted">A stable <span class="mono">https://{{$c.TSHostname}}.&lt;your-tailnet&gt;.ts.net</span> address: private to your own devices, or public with Funnel.</span></span></label>
+
+        <fieldset class="stack tn-provider" data-tn-fields="cloudflare">
+        <legend class="h-sm">Cloudflare Tunnel</legend>
         <label class="choice"><input type="radio" name="mode" value="quick" {{if eq $c.Mode "quick"}}checked{{end}}><span><strong>Quick tunnel</strong><span class="small muted">No account. A random <span class="mono">https://….trycloudflare.com</span> address that changes every start. Good for trying it out.</span></span></label>
         <label class="choice"><input type="radio" name="mode" value="named" {{if eq $c.Mode "named"}}checked{{end}}><span><strong>Named tunnel</strong><span class="small muted">A stable address on your own domain, set up in the Cloudflare dashboard.</span></span></label>
 
@@ -99,27 +113,66 @@
             <p class="hint">Pages need their own hostname, routed to the same service.</p>
           </div>
         </fieldset>
+        </fieldset>
+
+        <fieldset class="stack tn-provider" data-tn-fields="tailscale">
+          <legend class="h-sm">Tailscale</legend>
+          <label class="choice"><input type="radio" name="ts_mode" value="private" {{if ne $c.TSMode "funnel"}}checked{{end}}><span><strong>Private (your tailnet only)</strong><span class="small muted">Only devices signed in to your own tailnet can reach the address: your laptop, your phone. Nobody else can even connect. Use this for yourself.</span></span></label>
+          <label class="choice"><input type="radio" name="ts_mode" value="funnel" {{if eq $c.TSMode "funnel"}}checked{{end}}><span><strong>Public (Funnel)</strong><span class="small muted">The same address, open to the internet through Tailscale Funnel. Needed for Atelier Connect, inbound webhooks and anyone who isn't on your tailnet. Funnel has to be allowed in your tailnet's policy.</span></span></label>
+          <p class="hint">Either way, signing in to Atelier still takes a passkey (or a token for git and APIs). Being on your tailnet never signs you in.</p>
+
+          {{if $c.TSNode}}
+          <p class="small" data-tn-node>Connected to your tailnet as <strong class="mono">{{$c.TSNode}}</strong>. The auth key was used once and isn't stored any more.</p>
+          {{else}}
+          <ol class="small muted tn-steps">
+            <li>In the Tailscale admin console, open DNS: turn on MagicDNS and press <strong>Enable HTTPS</strong>.</li>
+            <li>For Public: open Access controls and give this machine the <code>funnel</code> node attribute.</li>
+            <li>Open Settings → Keys, generate an auth key (one-off, not ephemeral) and paste it below.</li>
+          </ol>
+          {{end}}
+          <div class="field">
+            <label for="tn-ts-host">Hostname on your tailnet</label>
+            <input id="tn-ts-host" name="ts_hostname" value="{{$c.TSHostname}}" placeholder="atelier" maxlength="63" autocomplete="off" spellcheck="false">
+            <p class="hint">The address becomes <span class="mono">https://{{$c.TSHostname}}.&lt;your-tailnet&gt;.ts.net</span>. Passkeys belong to that address, so changing the name means adding a passkey again.</p>
+          </div>
+          <div class="field">
+            <label for="tn-ts-key">Auth key</label>
+            <input id="tn-ts-key" name="ts_authkey" type="password" autocomplete="off" spellcheck="false" placeholder="{{if $c.HasTSKey}}Saved (encrypted) until this server has signed in. Paste a new one to replace it{{else if $c.TSNode}}Not needed: already signed in. Paste one only to sign in again{{else}}tskey-auth-…{{end}}">
+            {{if $c.HasTSKey}}<label class="row gap-sm small"><input type="checkbox" name="remove_ts_authkey" value="1"> Remove the saved key</label>{{end}}
+            <p class="hint">Stored encrypted with your secrets key, never shown again, and deleted as soon as this server has joined your tailnet.</p>
+          </div>
+          <p class="hint">The node's identity lives in <code>tailscale/</code> in the data directory and is left out of backups. After restoring onto a new machine, paste a new auth key.</p>
+        </fieldset>
 
         <fieldset class="stack-sm">
           <legend class="h-sm">What's reachable remotely</legend>
           <label class="choice"><input type="checkbox" name="expose_web" value="1" {{if $c.ExposeWeb}}checked{{end}}><span><strong>Web UI</strong><span class="small muted">Sign in with a passkey only.</span></span></label>
           <label class="choice"><input type="checkbox" name="expose_git" value="1" {{if $c.ExposeGit}}checked{{end}}><span><strong>Git over HTTPS</strong><span class="small muted">Clone and push with an access token. Always needs one, even for public repositories.</span></span></label>
           <label class="choice"><input type="checkbox" name="expose_mcp" value="1" {{if $c.ExposeMCP}}checked{{end}}><span><strong>MCP</strong><span class="small muted">The <span class="mono">/mcp</span> endpoint, with MCP tokens.</span></span></label>
-          <label class="choice"><input type="checkbox" name="expose_pages" value="1" {{if $c.ExposePages}}checked{{end}}><span><strong>Pages</strong><span class="small muted">Named tunnels with a Pages hostname only.</span></span></label>
+          <label class="choice"><input type="checkbox" name="expose_pages" value="1" {{if $c.ExposePages}}checked{{end}}><span><strong>Pages</strong><span class="small muted">Cloudflare named tunnels with a Pages hostname only: Pages need a hostname of their own, and Tailscale gives this server only one.</span></span></label>
           <label class="choice"><input type="checkbox" name="expose_api" value="1" {{if $c.ExposeAPI}}checked{{end}}><span><strong>API and inbound webhooks</strong><span class="small muted"><span class="mono">/api/…</span> with tokens, including runners.</span></span></label>
-          <label class="choice"><input type="checkbox" name="expose_connect" value="1" {{if $d.ConnectExposed}}checked{{end}}><span><strong>Connect</strong><span class="small muted">Atelier Connect: your studio's identity, inbox and public clone URLs for other studios. Also needs Connect turned on under <a href="/settings/connect">Settings → Connect</a>.</span></span></label>
+          <label class="choice"><input type="checkbox" name="expose_connect" value="1" {{if $d.ConnectExposed}}checked{{end}}><span><strong>Connect</strong><span class="small muted">Atelier Connect: your studio's identity, inbox and public clone URLs for other studios. Also needs Connect turned on under <a href="/settings/connect">Settings → Connect</a>, and a public address (not Tailscale's Private mode).</span></span></label>
           <label class="choice tn-never"><input type="checkbox" disabled><span><strong>Container and package registries</strong><span class="small muted">Never exposed.</span></span></label>
           <p class="hint">Everything else answers 404 through the tunnel.</p>
         </fieldset>
         <div class="row-end"><button class="btn btn-primary" type="submit">Save</button></div>
       </form>
+      {{if or $c.TSNode $c.HasTSKey}}
+      <section class="card stack-sm" aria-labelledby="tn-forget-h">
+        <h2 class="h-sm" id="tn-forget-h">Forget this Tailscale node</h2>
+        <p class="small muted">Signs this server out of your tailnet and deletes its node identity{{if $c.TSNode}} (<span class="mono">{{$c.TSNode}}</span>){{end}} and any saved auth key.{{if and $d.On $c.Tailscale}} Remote access is turned off first.{{end}} Using Tailscale again needs a new auth key.</p>
+        <form method="post" action="/settings/remote/forget-node" class="row-end">
+          <button class="btn btn-danger" type="submit">Forget this node</button>
+        </form>
+      </section>
+      {{end}}
       {{end}}
 
       <section class="list-card" aria-labelledby="tn-log-h">
         <div class="list-head" id="tn-log-h">Who's connected <span class="muted small">· remote requests, last 7 days</span></div>
         <div class="table-scroll">
           <table class="tn-table">
-            <thead><tr><th scope="col">Time</th><th scope="col">IP</th><th scope="col">Country</th><th scope="col">What</th><th scope="col">Result</th><th scope="col">Signed in</th></tr></thead>
+            <thead><tr><th scope="col">Time</th><th scope="col">IP</th><th scope="col">Country</th><th scope="col">What</th><th scope="col">Result</th><th scope="col">Signed in</th><th scope="col">Tailnet device of</th></tr></thead>
             <tbody>
             {{range $d.Log}}
             <tr>
@@ -129,9 +182,10 @@
               <td><span class="pill">{{.Class}}</span> <span class="small muted">{{.Method}}</span></td>
               <td class="mono small">{{.Status}}</td>
               <td>{{if .SignedIn}}{{if .Who}}{{.Who}}{{else}}yes{{end}}{{else}}<span class="muted">no</span>{{end}}</td>
+              <td class="small">{{if .Tailnet}}{{.Tailnet}}{{else}}<span class="muted">—</span>{{end}}</td>
             </tr>
             {{else}}
-            <tr><td colspan="6" class="muted">No remote requests yet.</td></tr>
+            <tr><td colspan="7" class="muted">No remote requests yet.</td></tr>
             {{end}}
             </tbody>
           </table>
@@ -140,7 +194,7 @@
 
       {{if $d.Status.Log}}
       <details class="card tn-helper">
-        <summary class="small">cloudflared output</summary>
+        <summary class="small">{{$d.Helper}} output</summary>
         <pre class="small">{{range $d.Status.Log}}{{.}}
 {{end}}</pre>
       </details>

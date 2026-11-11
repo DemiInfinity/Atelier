@@ -16,11 +16,19 @@ package web
 //     accepted, and turning the tunnel off deletes them;
 //   - links, clone URLs, redirects and passkeys use the tunnel address, and
 //     cookies are Secure;
-//   - the client IP for rate limits comes from CF-Connecting-IP, which is
-//     trusted here and nowhere else.
+//   - the client IP for rate limits comes from the provider's header, which
+//     is trusted here and nowhere else: CF-Connecting-IP from cloudflared,
+//     X-Forwarded-For from tailscaled (which sets it itself and drops
+//     whatever the visitor sent). Only the running provider's header counts.
+//
+// With Tailscale, tailscaled also says who is calling: Tailscale-User-Login
+// for a device on the owner's tailnet, Tailscale-Funnel-Request for a visitor
+// from the internet. The login goes in the who's-connected log and nowhere
+// else: it never signs anyone in to Atelier.
 
 import (
 	"context"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,8 +42,9 @@ import (
 // remoteReq marks a request that came through the tunnel.
 type remoteReq struct {
 	Host    string // the tunnel address's host, e.g. quiet-fox.trycloudflare.com
-	IP      string // the visitor, from CF-Connecting-IP
+	IP      string // the visitor, from CF-Connecting-IP or tailscaled's X-Forwarded-For
 	Country string // CF-IPCountry, when Cloudflare sends it
+	Tailnet string // the Tailscale login of the visitor's device, when tailscaled names one
 }
 
 type remoteKey struct{}
@@ -116,11 +125,60 @@ func remoteClientIP(r *http.Request) string {
 	if ip := net.ParseIP(strings.TrimSpace(r.Header.Get("CF-Connecting-IP"))); ip != nil {
 		return ip.String()
 	}
+	return remotePeer(r)
+}
+
+func remotePeer(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// tailscaleClientIP is the visitor's address when tailscaled is the proxy.
+// Its reverse proxy drops any X-Forwarded-For the visitor sent and sets one
+// value: the tailnet address of the calling device, or for Funnel the public
+// address Tailscale's ingress saw (ipn/ipnlocal/serve.go,
+// addProxyForwardedHeaders). Anything that isn't exactly one IP is ignored.
+func tailscaleClientIP(r *http.Request) string {
+	if vs := r.Header.Values("X-Forwarded-For"); len(vs) == 1 {
+		if ip := net.ParseIP(strings.TrimSpace(vs[0])); ip != nil {
+			return ip.String()
+		}
+	}
+	return remotePeer(r)
+}
+
+// tailscaleHeaders are what tailscaled's serve proxy adds about the caller.
+// It deletes the visitor's own copies first, so on the remote listener (and
+// only there, and only while Tailscale is the provider) they can be believed.
+var tailscaleHeaders = []string{"Tailscale-User-Login", "Tailscale-User-Name", "Tailscale-User-Profile-Pic",
+	"Tailscale-Headers-Info", "Tailscale-Funnel-Request", "Tailscale-App-Capabilities"}
+
+// tailscaleLogin is the tailnet login tailscaled attached, e.g.
+// zoe@example.com. Empty for Funnel visitors and for tagged devices, which
+// get no identity headers. Non-ASCII logins arrive RFC 2047 encoded.
+func tailscaleLogin(r *http.Request) string {
+	if r.Header.Get("Tailscale-Funnel-Request") != "" {
+		return ""
+	}
+	v := strings.TrimSpace(r.Header.Get("Tailscale-User-Login"))
+	if v == "" {
+		return ""
+	}
+	if dec, err := new(mime.WordDecoder).DecodeHeader(v); err == nil {
+		v = dec
+	}
+	if len(v) > 200 {
+		v = v[:200]
+	}
+	return strings.Map(func(c rune) rune {
+		if c < 0x20 || c == 0x7f {
+			return -1
+		}
+		return c
+	}, v)
 }
 
 func remoteCountry(r *http.Request) string {
@@ -180,22 +238,44 @@ func (m *tunnelManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.inflight.Add(1)
 	defer m.inflight.Add(-1)
 
+	// Only the running provider's headers say who is calling: a Funnel
+	// visitor can send CF-Connecting-IP, and Cloudflare forwards a visitor's
+	// own X-Forwarded-For.
+	rm := &remoteReq{Host: host}
+	funnelled := false
+	if cfg.Tailscale() {
+		rm.IP, rm.Tailnet = tailscaleClientIP(r), tailscaleLogin(r)
+		funnelled = r.Header.Get("Tailscale-Funnel-Request") != ""
+	} else {
+		rm.IP, rm.Country = remoteClientIP(r), remoteCountry(r)
+	}
 	for _, h := range proxyHeaders {
 		r.Header.Del(h)
 	}
-	rm := &remoteReq{Host: host, IP: remoteClientIP(r), Country: remoteCountry(r)}
+	// Nothing past this point may take a tailnet identity for a sign-in.
+	for _, h := range tailscaleHeaders {
+		r.Header.Del(h)
+	}
 	r = r.WithContext(context.WithValue(r.Context(), remoteKey{}, rm))
+	if funnelled && cfg.TailnetOnly() {
+		// Private mode never asks for Funnel; a request from the internet
+		// means a stale funnel config in tailscaled. Refuse it.
+		logErr(r, errString("a Funnel request arrived while Tailscale is in private mode; refused"))
+		m.record(store.TunnelLogEntry{At: time.Now(), IP: rm.IP, Class: classOther, Method: r.Method, Status: http.StatusForbidden})
+		http.Error(w, "this address is private", http.StatusForbidden)
+		return
+	}
 
 	class := tunnelClass(r)
 	reqHost := strings.ToLower(r.Host)
 	if h, _, err := net.SplitHostPort(reqHost); err == nil {
 		reqHost = h
 	}
-	if cfg.Mode == "named" && cfg.PagesHostname != "" && reqHost == cfg.PagesHostname {
+	if cfg.Named() && cfg.PagesHostname != "" && reqHost == cfg.PagesHostname {
 		class = classPages
 	}
 	// A verified Pages custom domain added as a public hostname on the named tunnel.
-	customPages := cfg.Mode == "named" && reqHost != cfg.Hostname && reqHost != cfg.PagesHostname && m.a.pagesIsDomain(r.Context(), reqHost)
+	customPages := cfg.Named() && reqHost != cfg.Hostname && reqHost != cfg.PagesHostname && m.a.pagesIsDomain(r.Context(), reqHost)
 	if customPages {
 		class = classPages
 	}
@@ -223,7 +303,7 @@ func (m *tunnelManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			signedIn, who = true, "token"
 		}
 		m.record(store.TunnelLogEntry{At: time.Now(), IP: rm.IP, Country: rm.Country, Class: class,
-			Method: r.Method, Status: st, SignedIn: signedIn, Who: who})
+			Method: r.Method, Status: st, SignedIn: signedIn, Who: who, Tailnet: rm.Tailnet})
 	}()
 
 	if !tunnelExposes(cfg, class) && !(class == classConnect && a.connectTunnelExposed(r.Context())) {
@@ -338,13 +418,19 @@ func (a *App) markRemoteSession(r *http.Request, tok string, personID int64) err
 	return a.db.MarkRemoteSession(r.Context(), tok, personID, rm.Host, false)
 }
 
-// tunnelMisrouted refuses requests that reached the main listener with
-// Cloudflare's edge headers from a loopback peer: a named tunnel whose
-// dashboard service points at port 3000 instead of the remote listener.
+// tunnelMisrouted refuses requests that reached the main listener with a
+// tunnel provider's headers from a loopback peer: a named Cloudflare tunnel
+// whose dashboard service points at port 3000 instead of the remote
+// listener, or a `tailscale serve`/`funnel` set up by hand against it.
 // Serving them would skip every remote-access rule.
 func (a *App) tunnelMisrouted(w http.ResponseWriter, r *http.Request) bool {
-	if r.Header.Get("Cf-Ray") == "" && r.Header.Get("CF-Connecting-IP") == "" {
+	cloudflare := r.Header.Get("Cf-Ray") != "" || r.Header.Get("CF-Connecting-IP") != ""
+	tailscale := tailscaleProxied(r)
+	if !cloudflare && !tailscale {
 		return false
+	}
+	if tailscale {
+		return a.tailscaleMisrouted(w, r)
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -357,6 +443,42 @@ func (a *App) tunnelMisrouted(w http.ResponseWriter, r *http.Request) bool {
 	logErr(r, errString("tunnelled request reached the main listener; point the tunnel's service at "+a.cfg.TunnelListen))
 	http.Error(w, "This request came through a tunnel to the wrong port. In the Cloudflare dashboard, set the service to http://"+
 		a.cfg.TunnelListen+".", http.StatusMisdirectedRequest)
+	return true
+}
+
+// tailscaleProxied reports whether a request looks like it came through
+// tailscaled's serve proxy: it carries one of the headers tailscaled adds,
+// or is addressed to a ts.net name (tailscaled keeps the Host header and
+// repeats it in X-Forwarded-Host).
+func tailscaleProxied(r *http.Request) bool {
+	for _, h := range tailscaleHeaders {
+		if r.Header.Get(h) != "" {
+			return true
+		}
+	}
+	for _, h := range []string{r.Host, r.Header.Get("X-Forwarded-Host")} {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if hh, _, err := net.SplitHostPort(h); err == nil {
+			h = hh
+		}
+		if strings.HasSuffix(strings.TrimSuffix(h, "."), ".ts.net") {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) tailscaleMisrouted(w http.ResponseWriter, r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		return false
+	}
+	logErr(r, errString("a request from tailscale serve/funnel reached the main listener; only Settings → Remote access may forward to Atelier, at "+a.cfg.TunnelListen))
+	http.Error(w, "This request came through Tailscale to the wrong port. Use Settings → Remote access instead of running tailscale serve or funnel against Atelier yourself.",
+		http.StatusMisdirectedRequest)
 	return true
 }
 

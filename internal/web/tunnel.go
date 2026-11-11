@@ -35,6 +35,7 @@ func init() {
 			m.HandleFunc("POST /settings/remote/on", a.authed(a.tunnelOwner(a.tunnelOn)))
 			m.HandleFunc("POST /settings/remote/off", a.authed(a.tunnelOwner(a.tunnelOff)))
 			m.HandleFunc("POST /settings/remote/enroll-link", a.authed(a.tunnelOwner(a.tunnelEnrollLink)))
+			m.HandleFunc("POST /settings/remote/forget-node", a.authed(a.tunnelOwner(a.tunnelForgetNode)))
 			// The one-time passkey link is opened through the tunnel, signed out.
 			m.HandleFunc("GET /settings/remote/enroll", a.tunnelEnrollPage)
 			m.HandleFunc("POST /settings/remote/enroll", a.tunnelEnrollAccept)
@@ -51,19 +52,22 @@ const (
 	tunnelEnrollSession = 15 * time.Minute
 	tunnelLogShown      = 100
 	tunnelPIDFile       = "tunnel.pid"
+	tailscaleStateDir   = "tailscale" // under the data directory; the node's identity, never backed up
 )
 
 // ---------- the manager ----------
 
 type tunnelManager struct {
 	a   *App
-	sup *tunnel.Supervisor
+	sup *tunnel.Supervisor // cloudflared
+	ts  *tunnel.Tailscale  // tailscaled and tailscale serve/funnel; one provider runs at a time
 
 	mu      sync.Mutex // serialises apply and kill
 	srv     *http.Server
 	addr    string // the remote listener's bound address
 	applied int64  // config generation applied
 	procKey string // what the running helper was started with
+	tsKey   string // hash of the Tailscale auth key it was started with ("" = none)
 	killed  bool   // turned off here; stays off until turned on again
 	lastErr string
 
@@ -90,6 +94,18 @@ func (a *App) tunnel() *tunnelManager {
 	m.sup.Allow = func() bool {
 		_, enabled, err := a.db.TunnelGeneration(context.Background())
 		return err == nil && enabled
+	}
+	m.ts = &tunnel.Tailscale{
+		Bin: a.cfg.TailscaleBin, DaemonBin: a.cfg.TailscaledBin,
+		StateDir: filepath.Join(a.cfg.DataDir, tailscaleStateDir), PIDDir: a.cfg.DataDir,
+		Logf: log.Printf, Allow: m.sup.Allow,
+		// Signed in: remember the node's name and drop the auth key, which
+		// isn't needed again (the node's own key is in the state directory).
+		OnNode: func(dns string) {
+			if err := a.db.TailscaleSignedIn(context.Background(), dns); err != nil {
+				log.Printf("tunnel: remember tailscale node: %v", err)
+			}
+		},
 	}
 	actual, _ := tunnelManagers.LoadOrStore(a, m)
 	return actual.(*tunnelManager)
@@ -143,6 +159,11 @@ func (m *tunnelManager) apply(ctx context.Context) {
 		return
 	}
 	m.cfg.Store(&c)
+	if c.Tailscale() {
+		m.applyTailscaleLocked(ctx, c)
+		return
+	}
+	m.ts.Stop()
 	token := ""
 	if c.Mode == tunnel.ModeNamed {
 		if token, err = m.a.db.TunnelToken(ctx, m.a.secretSealer()); err != nil {
@@ -170,6 +191,56 @@ func (m *tunnelManager) apply(ctx context.Context) {
 	m.procKey, m.lastErr = key, ""
 	m.on.Store(true)
 	log.Printf("tunnel: remote access on (%s), remote listener %s", c.Mode, m.addr)
+}
+
+// applyTailscaleLocked is apply for the Tailscale provider.
+func (m *tunnelManager) applyTailscaleLocked(ctx context.Context, c store.TunnelConfig) {
+	authKey := ""
+	if c.HasTSKey {
+		var err error
+		if authKey, err = m.a.db.TailscaleAuthKey(ctx, m.a.secretSealer()); err != nil {
+			m.lastErr = "The Tailscale auth key couldn't be read: " + err.Error()
+			m.stopLocked()
+			return
+		}
+	}
+	if err := m.listenLocked(); err != nil {
+		m.lastErr = err.Error()
+		m.stopLocked()
+		return
+	}
+	mode := tunnel.ModeTailscalePrivate
+	if c.TSMode == store.TailscaleFunnel {
+		mode = tunnel.ModeTailscaleFunnel
+	}
+	key := "tailscale\x00" + mode + "\x00" + c.TSHostname + "\x00" + m.addr
+	keyHash := ""
+	if authKey != "" {
+		keyHash = store.Hash(authKey)
+	}
+	// A key that went away was used up by signing in: nothing to restart.
+	if m.ts.Running() && key == m.procKey && (keyHash == "" || keyHash == m.tsKey) {
+		m.on.Store(true)
+		return
+	}
+	m.sup.Stop()
+	set := tunnel.Settings{Mode: mode, Origin: "http://" + m.addr, Token: authKey, Hostname: c.TSHostname}
+	if err := m.ts.Start(set); err != nil {
+		m.lastErr = err.Error()
+		m.stopLocked()
+		return
+	}
+	m.procKey, m.tsKey, m.lastErr = key, keyHash, ""
+	m.on.Store(true)
+	log.Printf("tunnel: remote access on (%s), remote listener %s", mode, m.addr)
+}
+
+// status is the running helper's state, whichever provider it is.
+func (m *tunnelManager) status() tunnel.Status {
+	if m.ts.Running() {
+		return m.ts.Status()
+	}
+	return m.sup.Status()
 }
 
 // listenLocked opens the remote listener if it isn't open. It must be a
@@ -217,11 +288,12 @@ func (m *tunnelManager) listenLocked() error {
 func (m *tunnelManager) stopLocked() {
 	wasOn := m.on.Swap(false)
 	m.sup.Stop()
+	m.ts.Stop()
 	if m.srv != nil {
 		_ = m.srv.Close()
 		m.srv = nil
 	}
-	m.procKey = ""
+	m.procKey, m.tsKey = "", ""
 	if wasOn {
 		log.Print("tunnel: remote access off")
 	}
@@ -241,9 +313,15 @@ func (m *tunnelManager) shutdown() {
 	m.stopLocked()
 }
 
+// StopRemoteAccess kills the tunnel helpers and closes the remote listener
+// as the server exits, without touching the setting: it comes back as it
+// was on the next start. The watch loop does the same when its context
+// ends, but the process may be gone before it gets there.
+func (a *App) StopRemoteAccess() { a.tunnel().shutdown() }
+
 // remoteHost is the tunnel address's host, once known.
 func (m *tunnelManager) remoteHost() string {
-	addr := m.sup.Status().Address
+	addr := m.status().Address
 	return strings.TrimPrefix(addr, "https://")
 }
 
@@ -292,12 +370,17 @@ type tunnelView struct {
 	Listen     string
 	Binary     string
 	HaveBinary bool
-	InFlight   int64
-	Conns      int64
-	Visitors   int
-	Sessions   int
-	Log        []store.TunnelLogEntry
-	EnrollLink string
+	// The Tailscale provider's binaries.
+	TSBinary, TSDaemonBinary string
+	HaveTailscale            bool
+	Helper                   string // whose output the log at the bottom is
+	Forgot                   string // "1" after forgetting the node, "offline" if Tailscale couldn't be told
+	InFlight                 int64
+	Conns                    int64
+	Visitors                 int
+	Sessions                 int
+	Log                      []store.TunnelLogEntry
+	EnrollLink               string
 	// ConnectExposed: the Connect class (connect.go) is stored with Connect's settings.
 	ConnectExposed bool
 	Saved          bool
@@ -311,10 +394,15 @@ func (a *App) tunnelData(r *http.Request) (tunnelView, error) {
 	if err != nil {
 		return tunnelView{}, err
 	}
-	st := m.sup.Status()
+	st := m.status()
 	v := tunnelView{Config: c, Status: st, On: c.Enabled, Address: st.Address, Phase: st.Phase,
 		Remote: isRemote(r), Listen: a.cfg.TunnelListen, Binary: a.cfg.TunnelBin,
+		TSBinary: a.cfg.TailscaleBin, TSDaemonBinary: a.cfg.TailscaledBin, Helper: "cloudflared",
 		InFlight: m.inflight.Load(), Conns: m.conns.Load()}
+	if c.Tailscale() {
+		v.Helper = "tailscaled and tailscale"
+	}
+	v.HaveTailscale = a.haveTailscale()
 	m.mu.Lock()
 	v.LastError = m.lastErr
 	if v.LastError == "" {
@@ -350,6 +438,7 @@ func (a *App) tunnelPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v.Saved = r.URL.Query().Get("saved") != ""
+	v.Forgot = r.URL.Query().Get("forgot")
 	a.tunnelRender(w, r, http.StatusOK, v)
 }
 
@@ -394,10 +483,47 @@ func (a *App) tunnelSave(w http.ResponseWriter, r *http.Request) {
 		v.Error = msg
 		a.tunnelRender(w, r, http.StatusBadRequest, v)
 	}
-	c.Mode = r.FormValue("mode")
+	// Forms from before the provider choice (and scripts) send no provider:
+	// that keeps the one in use.
+	if p := r.FormValue("provider"); p != "" {
+		if p != store.TunnelCloudflare && p != store.TunnelTailscale {
+			fail("Choose Cloudflare or Tailscale.")
+			return
+		}
+		c.Provider = p
+	}
+	if v := r.FormValue("mode"); v != "" || !c.Tailscale() {
+		c.Mode = v
+	}
 	if c.Mode != tunnel.ModeQuick && c.Mode != tunnel.ModeNamed {
 		fail("Choose a quick tunnel or a named tunnel.")
 		return
+	}
+	if v := r.FormValue("ts_mode"); v != "" {
+		if v != store.TailscalePrivate && v != store.TailscaleFunnel {
+			fail("Choose Private or Public for Tailscale.")
+			return
+		}
+		c.TSMode = v
+	}
+	if _, sent := r.Form["ts_hostname"]; sent {
+		h, ok := tunnel.NormalizeTailscaleHostname(r.FormValue("ts_hostname"))
+		if !ok {
+			fail("The Tailscale hostname should be one word of letters, digits and hyphens, like atelier.")
+			return
+		}
+		c.TSHostname = h
+	}
+	var tsKey *string
+	if k := strings.TrimSpace(r.FormValue("ts_authkey")); k != "" {
+		if len(k) > 512 || strings.ContainsAny(k, " \t\r\n") || !strings.HasPrefix(k, "tskey-") {
+			fail("That doesn't look like a Tailscale auth key. It starts with tskey-auth- and comes from Settings → Keys in the Tailscale admin console.")
+			return
+		}
+		tsKey = &k
+	} else if r.FormValue("remove_ts_authkey") != "" {
+		empty := ""
+		tsKey = &empty
 	}
 	c.Hostname, c.PagesHostname = "", ""
 	if h := strings.TrimSpace(r.FormValue("hostname")); h != "" {
@@ -433,6 +559,12 @@ func (a *App) tunnelSave(w http.ResponseWriter, r *http.Request) {
 	if err := a.db.SaveTunnelConfig(ctx, a.secretSealer(), c, token, a.actor(r).Name); err != nil {
 		a.fail(w, r, err)
 		return
+	}
+	if tsKey != nil {
+		if err := a.db.SetTailscaleAuthKey(ctx, a.secretSealer(), *tsKey, a.actor(r).Name); err != nil {
+			a.fail(w, r, err)
+			return
+		}
 	}
 	if cs, err := a.db.ConnectSettings(ctx); err == nil && cs.ExposeTunnel != on("expose_connect") {
 		cs.ExposeTunnel = on("expose_connect")
@@ -470,11 +602,21 @@ func (a *App) tunnelTurnOn(ctx context.Context, by string) (problem string, err 
 	if err != nil {
 		return "", err
 	}
-	if _, err := exec.LookPath(a.cfg.TunnelBin); err != nil {
-		return "cloudflared isn't installed here (" + a.cfg.TunnelBin + "). The Docker image includes it; set ATELIER_CLOUDFLARED when running elsewhere.", nil
-	}
-	if c.Mode == tunnel.ModeNamed && (!c.HasToken || c.Hostname == "") {
-		return "A named tunnel needs its token and public hostname. Save them first.", nil
+	switch {
+	case c.Tailscale():
+		if !a.haveTailscale() {
+			return "Tailscale isn't installed here (" + a.cfg.TailscaleBin + " and " + a.cfg.TailscaledBin + "). The Docker image includes both; set ATELIER_TAILSCALE and ATELIER_TAILSCALED when running elsewhere.", nil
+		}
+		if !c.HasTSKey && c.TSNode == "" {
+			return "Tailscale needs an auth key the first time. Paste one below and save.", nil
+		}
+	default:
+		if _, err := exec.LookPath(a.cfg.TunnelBin); err != nil {
+			return "cloudflared isn't installed here (" + a.cfg.TunnelBin + "). The Docker image includes it; set ATELIER_CLOUDFLARED when running elsewhere.", nil
+		}
+		if c.Mode == tunnel.ModeNamed && (!c.HasToken || c.Hostname == "") {
+			return "A named tunnel needs its token and public hostname. Save them first.", nil
+		}
 	}
 	if !c.ExposeWeb && !c.ExposeGit && !c.ExposeMCP && !c.ExposePages && !c.ExposeAPI && !a.connectTunnelExposed(ctx) {
 		return "Choose at least one thing to expose.", nil
@@ -488,6 +630,56 @@ func (a *App) tunnelTurnOn(ctx context.Context, by string) (problem string, err 
 	}
 	m.apply(ctx)
 	return "", nil
+}
+
+// haveTailscale reports whether both Tailscale binaries can be found.
+func (a *App) haveTailscale() bool {
+	_, err1 := exec.LookPath(a.cfg.TailscaleBin)
+	_, err2 := exec.LookPath(a.cfg.TailscaledBin)
+	return err1 == nil && err2 == nil
+}
+
+// tunnelForgetNode signs this server out of the tailnet and deletes the
+// node's identity. If Tailscale is what remote access is running on, that
+// turns it off first. The next start needs a new auth key.
+func (a *App) tunnelForgetNode(w http.ResponseWriter, r *http.Request) {
+	if !a.tunnelLANOnly(w, r) {
+		return
+	}
+	ctx := context.WithoutCancel(r.Context())
+	m := a.tunnel()
+	by := a.actor(r).Name
+	c, err := a.db.TunnelConfig(ctx)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if c.Tailscale() && c.Enabled {
+		m.kill()
+		n, err := a.db.SetTunnelEnabled(ctx, false, by)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		log.Printf("tunnel: turned off by %s (forgetting the Tailscale node); %d remote session(s) revoked", by, n)
+	}
+	m.mu.Lock()
+	loggedOut, ferr := m.ts.Forget(ctx)
+	m.mu.Unlock()
+	if ferr != nil {
+		a.fail(w, r, ferr)
+		return
+	}
+	if err := a.db.TailscaleForget(ctx, by); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	log.Printf("tunnel: Tailscale node forgotten by %s (signed out at Tailscale: %t)", by, loggedOut)
+	q := "1"
+	if !loggedOut {
+		q = "offline"
+	}
+	http.Redirect(w, r, "/settings/remote?forgot="+q, http.StatusSeeOther)
 }
 
 // tunnelOff is the kill switch. It works from anywhere, including through
@@ -629,7 +821,7 @@ func (a *App) tunnelBanner(me store.Owner, accounts []store.Owner) *tunnelBanner
 	if !a.isOwnerPerson(ctx, me.ID) {
 		return nil
 	}
-	st := m.sup.Status()
+	st := m.status()
 	d := &tunnelBannerData{Address: st.Address, Phase: st.Phase}
 	if d.Phase == tunnel.PhaseOff {
 		d.Phase = tunnel.PhaseStarting

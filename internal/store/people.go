@@ -30,6 +30,7 @@ type migration struct {
 
 var migrations = []migration{
 	{"person ownership for sessions, tokens, ssh keys and passkeys", migratePersonOwnership},
+	{"Tailscale as a remote access provider", migrateTunnelTailscale},
 }
 
 const settingSchemaVersion = "schema.version"

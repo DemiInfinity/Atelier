@@ -105,6 +105,8 @@ func run() error {
 	case <-ctx.Done():
 	}
 	stop() // a second signal kills the process immediately
+	// No tunnel helper (cloudflared, tailscaled) outlives the server.
+	app.StopRemoteAccess()
 
 	log.Print("shutting down, waiting up to 30s for requests to finish")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
