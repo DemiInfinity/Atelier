@@ -1,11 +1,12 @@
 //! Pull requests across the studio: the list, one in detail, merging now or
-//! when the checks pass, and checking the branch out here.
+//! when the checks pass, bringing the branch up to date with its base, and
+//! checking the branch out here.
 
 use std::time::Duration;
 
 use atelier_core::api::{
     Check, CheckCounts, CheckStatus, ChecksState, MergeMethod, MergeOutcome, MergeRequest, Pull,
-    PullComment, PullState, PullSummary, Via,
+    PullComment, PullState, PullSummary, UpdateOutcome, Via,
 };
 use serde::Serialize;
 
@@ -110,6 +111,12 @@ pub struct PullRow {
     pub checks: ChecksBrief,
     /// The branch it comes from.
     pub head: String,
+    /// The branch it goes into.
+    pub base: String,
+    /// Commits of the base it doesn't have yet (0 when the studio doesn't say).
+    pub behind: u64,
+    /// It can't be merged with its base as it is.
+    pub conflicts: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -131,6 +138,8 @@ pub struct CommentRow {
     pub tone: &'static str,
     pub at: String,
     pub body: String,
+    /// The body as Markdown, parsed (see [`crate::markdown`]).
+    pub body_md: Vec<crate::markdown::Block>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -168,6 +177,39 @@ pub struct PullView {
     pub web_path: String,
     /// The working copy of this repository on this machine, if there is one.
     pub local_path: Option<String>,
+    /// The branch that working copy is on.
+    pub local_branch: Option<String>,
+    /// Commits of the base the branch doesn't have yet.
+    pub behind: u64,
+    /// The branch conflicts with its base: merging and updating can't work
+    /// until someone resolves it.
+    pub conflicts: bool,
+    pub conflict_files: Vec<String>,
+    /// "Update from <base>" is worth offering: the studio says it would
+    /// merge something (or, an older one: open, behind, no conflicts).
+    pub can_update: bool,
+    /// Behind, but the repository's home is GitHub, so the branch is updated
+    /// there: the GitHub repository (`owner/name`) to open instead.
+    pub update_on_github: Option<String>,
+}
+
+/// What "Update from <base>" did.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct BranchUpdate {
+    /// `updated`, `up_to_date` or `conflicts`.
+    pub outcome: &'static str,
+    pub head: String,
+    pub base: String,
+    /// The branch's tip in the studio afterwards.
+    pub head_sha: String,
+    /// The studio's sentence about the conflicts.
+    pub message: String,
+    /// The files that conflict.
+    pub files: Vec<String>,
+    pub local_path: Option<String>,
+    /// The working copy here is on the pull request's branch, so after an
+    /// update it is behind the studio. Nothing is pulled without asking.
+    pub local_on_branch: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -277,6 +319,7 @@ pub fn comment_row(comment: &PullComment, login: Option<&str>) -> CommentRow {
         tone,
         at: comment.at.clone(),
         body: comment.body.clone(),
+        body_md: crate::markdown::render(&comment.body),
     }
 }
 
@@ -309,14 +352,47 @@ fn parse_method(method: &str) -> CmdResult<MergeMethod> {
     }
 }
 
-pub fn pull_view(pull: &Pull, login: Option<&str>, local_path: Option<String>) -> PullView {
+/// Anything not merged or closed: an unknown state reads as open.
+fn is_open(state: PullState) -> bool {
+    !matches!(state, PullState::Merged | PullState::Closed)
+}
+
+/// The local working copy of a pull request's repository: its path and the
+/// branch it is on.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LocalCopy {
+    pub path: String,
+    pub branch: String,
+}
+
+pub fn pull_view(
+    pull: &Pull,
+    login: Option<&str>,
+    local: Option<LocalCopy>,
+    github: Option<String>,
+) -> PullView {
+    let open = is_open(pull.state);
+    let conflicts = open && pull.has_conflicts();
+    let conflict_headline = format!("Conflicts with {}", pull.base);
     let (state, headline, tone) = match pull.state {
         PullState::Merged => ("merged", "Merged", "quiet"),
         PullState::Closed => ("closed", "Closed without merging", "quiet"),
+        _ if conflicts => ("open", conflict_headline.as_str(), "fail"),
         _ if pull.merge.auto_merge.is_some() => ("open", "Will merge when checks pass", "yours"),
         _ if pull.merge.can_merge => ("open", "Ready to merge", "pass"),
         _ => ("open", "Not ready to merge yet", "yours"),
     };
+    // With conflicts the studio's own reason stands when it refuses the
+    // merge itself; otherwise the app says why the button is off.
+    let reason = if conflicts && (pull.merge.can_merge || pull.merge.reason.trim().is_empty()) {
+        format!(
+            "{} and {} changed the same lines. Resolve the conflicts before merging.",
+            pull.head, pull.base
+        )
+    } else {
+        pull.merge.reason.clone()
+    };
+    let behind = if open { pull.behind() } else { 0 };
     PullView {
         repo: pull.repo.clone(),
         repo_short: short_repo(&pull.repo).to_string(),
@@ -329,9 +405,9 @@ pub fn pull_view(pull: &Pull, login: Option<&str>, local_path: Option<String>) -
         commits: pull.commits,
         files: pull.files,
         headline: headline.to_string(),
-        reason: pull.merge.reason.clone(),
+        reason,
         tone,
-        can_merge: state == "open" && pull.merge.can_merge,
+        can_merge: open && pull.merge.can_merge && !conflicts,
         on_github: pull.merge.on_github,
         methods: pull
             .merge
@@ -359,7 +435,18 @@ pub fn pull_view(pull: &Pull, login: Option<&str>, local_path: Option<String>) -
             .map(|c| comment_row(c, login))
             .collect(),
         web_path: pull.web_path.clone(),
-        local_path,
+        local_path: local.as_ref().map(|l| l.path.clone()),
+        local_branch: local.map(|l| l.branch),
+        behind,
+        conflicts,
+        conflict_files: if conflicts {
+            pull.conflict_files.clone()
+        } else {
+            Vec::new()
+        },
+        can_update: open && !conflicts && !pull.merge.on_github && pull.can_update(),
+        update_on_github: github
+            .filter(|_| open && !conflicts && behind > 0 && pull.merge.on_github),
     }
 }
 
@@ -393,12 +480,20 @@ impl Desk {
                 via: via_badge(p.via),
                 checks: checks_brief(&p.checks),
                 head: p.head.clone(),
+                base: p.base.clone(),
+                behind: if is_open(p.state) { p.behind() } else { 0 },
+                conflicts: is_open(p.state) && p.has_conflicts(),
             })
             .collect())
     }
 
     /// The working copy of `full_name` on this machine, if there is one.
     pub async fn local_copy_of(&self, full_name: &str) -> Option<String> {
+        self.local_copy(full_name).await.map(|c| c.path)
+    }
+
+    /// That working copy, with the branch it is on right now.
+    pub async fn local_copy(&self, full_name: &str) -> Option<LocalCopy> {
         let repos = match self.repos(Duration::from_secs(300)).await {
             Ok(repos) => repos,
             Err(_) => self.repos_cached()?,
@@ -407,15 +502,66 @@ impl Desk {
             .await
             .into_iter()
             .find(|c| c.full_name.as_deref() == Some(full_name))
-            .map(|c| c.path)
+            .map(|c| LocalCopy {
+                path: c.path,
+                branch: c.branch,
+            })
     }
 
     pub async fn pull_detail(&self, repo: &str, number: u64) -> CmdResult<PullView> {
         let (owner, name) = paths::split_full_name(repo)?;
         let pull = self.watch(self.client()?.pull(owner, name, number).await)?;
         let _ = self.me(Duration::from_secs(300)).await;
-        let local = self.local_copy_of(&pull.repo).await;
-        Ok(pull_view(&pull, self.login().as_deref(), local))
+        let local = self.local_copy(&pull.repo).await;
+        // Where a GitHub-homed repository lives there, for "Open on GitHub".
+        let github = self.repos_cached().and_then(|repos| {
+            repos
+                .iter()
+                .find(|r| r.full_name.eq_ignore_ascii_case(&pull.repo))
+                .and_then(|r| r.github.as_ref())
+                .map(|g| g.repo.clone())
+                .filter(|name| !name.is_empty())
+        });
+        Ok(pull_view(&pull, self.login().as_deref(), local, github))
+    }
+
+    /// "Update from <base>": the studio merges the base branch into the pull
+    /// request's branch. Conflicts are an answer (with the files), not an
+    /// error. The working copy here is never touched: when it is on that
+    /// branch the answer says so, and the window offers to pull.
+    pub async fn pull_update(&self, repo: &str, number: u64) -> CmdResult<BranchUpdate> {
+        let (owner, name) = paths::split_full_name(repo)?;
+        let client = self.client()?;
+        let pull = self.watch(client.pull(owner, name, number).await)?;
+        let outcome = self.watch(client.update_pull(owner, name, number).await)?;
+        let local = self.local_copy(&pull.repo).await;
+        let local_on_branch = local
+            .as_ref()
+            .is_some_and(|l| !pull.head.is_empty() && l.branch == pull.head);
+        let local_path = local.map(|l| l.path);
+        let mut update = BranchUpdate {
+            outcome: "up_to_date",
+            head: pull.head,
+            base: pull.base,
+            head_sha: String::new(),
+            message: String::new(),
+            files: Vec::new(),
+            local_path,
+            local_on_branch,
+        };
+        match outcome {
+            UpdateOutcome::Updated { head_sha } => {
+                update.outcome = "updated";
+                update.head_sha = head_sha;
+            }
+            UpdateOutcome::UpToDate { head_sha } => update.head_sha = head_sha,
+            UpdateOutcome::Conflicts { message, files } => {
+                update.outcome = "conflicts";
+                update.message = message;
+                update.files = files;
+            }
+        }
+        Ok(update)
     }
 
     /// Merges now, or asks the studio to merge once the checks pass.
@@ -620,6 +766,102 @@ mod tests {
             checks_brief(&c(0, 0, 0, 0)).title,
             "This pull request has no checks."
         );
+    }
+
+    fn detail(behind: Option<u64>, conflicts: Option<bool>, files: &[&str]) -> Pull {
+        Pull {
+            repo: "DemiInfinity/Atelier".into(),
+            number: 14,
+            head: "feature/tray".into(),
+            base: "master".into(),
+            behind,
+            conflicts,
+            conflict_files: files.iter().map(|f| f.to_string()).collect(),
+            merge: MergeInfo {
+                can_merge: true,
+                ..MergeInfo::default()
+            },
+            ..Pull::default()
+        }
+    }
+
+    #[test]
+    fn behind_its_base_offers_an_update() {
+        let view = pull_view(&detail(Some(3), None, &[]), None, None, None);
+        assert_eq!(
+            (view.behind, view.can_update, view.conflicts),
+            (3, true, false)
+        );
+        assert!(view.can_merge);
+        assert_eq!(view.headline, "Ready to merge");
+        // Up to date, or a studio that doesn't say: nothing to offer.
+        assert!(!pull_view(&detail(Some(0), None, &[]), None, None, None).can_update);
+        assert!(!pull_view(&detail(None, None, &[]), None, None, None).can_update);
+        // Waiting to merge by itself doesn't take the offer away.
+        let mut waiting = detail(Some(2), None, &[]);
+        waiting.merge.can_merge = false;
+        waiting.merge.auto_merge = Some(AutoMerge::default());
+        let view = pull_view(&waiting, None, None, None);
+        assert!(view.can_update && view.auto_merge.is_some());
+        // A merged one is never behind.
+        let mut merged = detail(Some(2), Some(true), &["a.go"]);
+        merged.state = PullState::Merged;
+        let view = pull_view(&merged, None, None, None);
+        assert_eq!(
+            (view.behind, view.can_update, view.conflicts),
+            (0, false, false)
+        );
+        assert!(view.conflict_files.is_empty());
+    }
+
+    #[test]
+    fn the_studios_word_on_updating_wins_and_github_homes_update_there() {
+        // Behind, but the head branch is protected: the studio says no.
+        let mut protected = detail(Some(3), Some(false), &[]);
+        protected.can_update = Some(false);
+        let view = pull_view(&protected, None, None, None);
+        assert_eq!((view.behind, view.can_update), (3, false));
+        assert_eq!(view.update_on_github, None);
+        // At home on GitHub: no button, the GitHub repository instead.
+        let mut github = detail(Some(2), None, &[]);
+        github.merge.on_github = true;
+        let view = pull_view(&github, None, None, Some("maralind/loopkit".into()));
+        assert!(!view.can_update);
+        assert_eq!(view.update_on_github.as_deref(), Some("maralind/loopkit"));
+        // Not behind: nothing to open either.
+        github.behind = Some(0);
+        let view = pull_view(&github, None, None, Some("maralind/loopkit".into()));
+        assert_eq!(view.update_on_github, None);
+    }
+
+    #[test]
+    fn conflicts_turn_merging_and_updating_off() {
+        let view = pull_view(
+            &detail(Some(3), Some(true), &["cmd/app/main.go", "README.md"]),
+            None,
+            Some(LocalCopy {
+                path: "/home/Atelier".into(),
+                branch: "feature/tray".into(),
+            }),
+            None,
+        );
+        assert!(view.conflicts && !view.can_merge && !view.can_update);
+        assert_eq!(view.headline, "Conflicts with master");
+        assert_eq!(view.tone, "fail");
+        assert_eq!(
+            view.reason,
+            "feature/tray and master changed the same lines. Resolve the conflicts before merging."
+        );
+        assert_eq!(view.conflict_files, ["cmd/app/main.go", "README.md"]);
+        assert_eq!(view.local_path.as_deref(), Some("/home/Atelier"));
+        assert_eq!(view.local_branch.as_deref(), Some("feature/tray"));
+        // The files alone say it, and the studio's own reason is kept.
+        let mut named = detail(None, None, &["a.go"]);
+        named.merge.can_merge = false;
+        named.merge.reason = "This branch has conflicts with master.".into();
+        let view = pull_view(&named, None, None, None);
+        assert!(view.conflicts);
+        assert_eq!(view.reason, "This branch has conflicts with master.");
     }
 
     #[test]

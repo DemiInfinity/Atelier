@@ -13,7 +13,7 @@ use crate::error::{CmdError, CmdResult};
 use crate::issues::{IssueView, IssuesView};
 use crate::manage::{Renamed, RunsView};
 use crate::notify::Target;
-use crate::pulls::{CheckedOut, MergeResult, PullRow, PullView};
+use crate::pulls::{BranchUpdate, CheckedOut, MergeResult, PullRow, PullView};
 use crate::repo::{
     ChangesView, CommitResult, CommitView, DiffView, HistoryView, PushResult, RepoView,
 };
@@ -244,6 +244,21 @@ pub async fn open_studio(desk: D<'_>) -> CmdResult<()> {
     desk.open_web("/")
 }
 
+/// A link from Markdown someone wrote; see [`Desk::open_link`].
+#[tauri::command]
+pub async fn open_link(desk: D<'_>, url: String, sure: bool) -> CmdResult<()> {
+    desk.open_link(&url, sure)
+}
+
+/// Markdown as the tree the window draws, for "Preview".
+#[tauri::command]
+pub async fn markdown_preview(text: String) -> CmdResult<Vec<crate::markdown::Block>> {
+    if text.len() > 65_536 {
+        return Err(CmdError::invalid("That text is too long to preview."));
+    }
+    Ok(crate::markdown::render(&text))
+}
+
 #[tauri::command]
 pub async fn open_github(desk: D<'_>, full_name: String) -> CmdResult<()> {
     desk.open_github(&full_name)
@@ -270,6 +285,11 @@ pub async fn pull_merge(
     when_green: bool,
 ) -> CmdResult<MergeResult> {
     desk.pull_merge(&repo, number, &method, when_green).await
+}
+
+#[tauri::command]
+pub async fn pull_update(desk: D<'_>, repo: String, number: u64) -> CmdResult<BranchUpdate> {
+    desk.pull_update(&repo, number).await
 }
 
 #[tauri::command]

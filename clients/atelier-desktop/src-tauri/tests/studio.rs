@@ -868,6 +868,67 @@ async fn only_the_studio_and_github_are_ever_opened() {
 }
 
 #[tokio::test]
+async fn a_link_someone_wrote_opens_only_when_it_is_a_web_or_mail_address() {
+    let world = World::signed_in().await;
+    let studio = world.server.uri();
+    // The studio and GitHub open straight away.
+    world
+        .desk
+        .open_link(&format!("{studio}/DemiInfinity/Atelier/issues/7"), false)
+        .unwrap();
+    world
+        .desk
+        .open_link("https://github.com/maralind/loopkit/pull/3", false)
+        .unwrap();
+    // Anywhere else: not until the person has seen the address and said yes.
+    for outside in ["https://example.com/docs", "mailto:mara@example.com"] {
+        assert_eq!(
+            world.desk.open_link(outside, false).unwrap_err().kind,
+            "link_outside",
+            "{outside}"
+        );
+    }
+    assert_eq!(world.effects.opened.lock().unwrap().len(), 2);
+    world
+        .desk
+        .open_link("https://example.com/docs", true)
+        .unwrap();
+    world
+        .desk
+        .open_link("mailto:mara@example.com", true)
+        .unwrap();
+    // Never, sure or not.
+    for refused in [
+        "javascript:alert(1)",
+        "JAVASCRIPT:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "file:///etc/passwd",
+        "tauri://localhost/index.html",
+        "https://user:pw@example.com/",
+        "/relative",
+        "",
+        "https://exa mple.com",
+    ] {
+        for sure in [false, true] {
+            assert_eq!(
+                world.desk.open_link(refused, sure).unwrap_err().kind,
+                "link_refused",
+                "{refused}"
+            );
+        }
+    }
+    assert_eq!(
+        *world.effects.opened.lock().unwrap(),
+        [
+            format!("{studio}/DemiInfinity/Atelier/issues/7"),
+            "https://github.com/maralind/loopkit/pull/3".to_string(),
+            "https://example.com/docs".to_string(),
+            "mailto:mara@example.com".to_string(),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn editors_are_presets_launched_without_a_shell() {
     let world = World::signed_in().await;
     let (repo, _) = world.copy("DemiInfinity/Atelier").await;

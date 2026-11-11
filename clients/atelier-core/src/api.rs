@@ -699,6 +699,37 @@ pub struct PullSummary {
     pub web_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    /// How many commits of the base branch the head doesn't have yet.
+    /// `None` from a studio that doesn't say.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u64>,
+    /// How many commits the head has that the base doesn't.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ahead: Option<u64>,
+    /// The head can't be merged with the base as it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflicts: Option<bool>,
+    /// `POST …/update` would merge something right now: behind, no
+    /// conflicts, the head branch not protected, not at home on GitHub.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_update: Option<bool>,
+}
+
+impl PullSummary {
+    /// Commits of the base this pull request doesn't have (0 when unknown).
+    pub fn behind(&self) -> u64 {
+        self.behind.unwrap_or(0)
+    }
+
+    pub fn has_conflicts(&self) -> bool {
+        self.conflicts.unwrap_or(false)
+    }
+
+    /// What the studio says, or (an older one) behind and no conflicts.
+    pub fn can_update(&self) -> bool {
+        self.can_update
+            .unwrap_or(self.behind() > 0 && !self.has_conflicts())
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -738,6 +769,74 @@ pub struct Pull {
     pub web_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    /// How many commits of the base branch the head doesn't have yet.
+    /// `None` from a studio that doesn't say.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u64>,
+    /// How many commits the head has that the base doesn't.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ahead: Option<u64>,
+    /// The head can't be merged with the base as it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflicts: Option<bool>,
+    /// `POST …/update` would merge something right now: behind, no
+    /// conflicts, the head branch not protected, not at home on GitHub.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_update: Option<bool>,
+    /// The files that conflict with the base, when the studio names them.
+    #[serde(deserialize_with = "nd", skip_serializing_if = "Vec::is_empty")]
+    pub conflict_files: Vec<String>,
+}
+
+impl Pull {
+    /// Commits of the base this pull request doesn't have (0 when unknown).
+    pub fn behind(&self) -> u64 {
+        self.behind.unwrap_or(0)
+    }
+
+    /// The studio said so, or named the files.
+    pub fn has_conflicts(&self) -> bool {
+        self.conflicts.unwrap_or(false) || !self.conflict_files.is_empty()
+    }
+
+    /// What the studio says, or (an older one) behind and no conflicts.
+    pub fn can_update(&self) -> bool {
+        self.can_update
+            .unwrap_or(self.behind() > 0 && !self.has_conflicts())
+    }
+}
+
+/// What `POST …/pulls/{n}/update` did: the base branch merged into the pull
+/// request's branch, in the studio.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum UpdateOutcome {
+    /// The base was merged in; `head_sha` is the branch's new tip.
+    Updated { head_sha: String },
+    /// The branch already had everything the base has.
+    UpToDate { head_sha: String },
+    /// `409 conflicts`: nothing changed; these files need a person.
+    Conflicts { message: String, files: Vec<String> },
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub(crate) struct UpdateResponse {
+    /// Missing reads as "it did": a `200` without the flag is a success.
+    pub updated: Option<bool>,
+    #[serde(deserialize_with = "nd", alias = "sha")]
+    pub head_sha: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub(crate) struct ConflictsBody {
+    #[serde(deserialize_with = "nd")]
+    pub error: String,
+    #[serde(deserialize_with = "nd")]
+    pub message: String,
+    #[serde(deserialize_with = "nd")]
+    pub files: Vec<String>,
 }
 
 /// Body of `POST …/pulls/{n}/merge`.

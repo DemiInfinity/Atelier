@@ -181,6 +181,24 @@ impl Client {
         body: Option<&B>,
         auth: bool,
     ) -> Result<(StatusCode, Vec<u8>)> {
+        let (status, bytes) = self.send(method, segments, query, body, auth).await?;
+        if status.is_success() {
+            Ok((status, bytes))
+        } else {
+            Err(api_error(status, &bytes))
+        }
+    }
+
+    /// The answer whatever its status, for the calls whose refusals carry
+    /// more than a code and a sentence.
+    async fn send<B: Serialize + ?Sized>(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, String)],
+        body: Option<&B>,
+        auth: bool,
+    ) -> Result<(StatusCode, Vec<u8>)> {
         let mut request = self.http.request(method, self.api_url(segments));
         if !query.is_empty() {
             request = request.query(query);
@@ -199,11 +217,7 @@ impl Client {
             .map_err(network_error)?;
         let status = response.status();
         let bytes = response.bytes().await.map_err(network_error)?.to_vec();
-        if status.is_success() {
-            Ok((status, bytes))
-        } else {
-            Err(api_error(status, &bytes))
-        }
+        Ok((status, bytes))
     }
 
     async fn get<T: DeserializeOwned>(
@@ -442,6 +456,49 @@ impl Client {
                 sha: response.sha,
             },
         })
+    }
+
+    /// `POST …/pulls/{n}/update`: merge the base branch into the pull
+    /// request's branch, in the studio. Conflicts (`409 conflicts`, with the
+    /// files) are an outcome, not an error. Everything else is [`Error::Api`]
+    /// with the studio's code: `409 branch_moved` (a push landed meanwhile;
+    /// try again), `422 not_open`, `on_github`, `branch_missing`,
+    /// `unrelated`, `403 branch_protected`, `forbidden`, `404 not_found`.
+    pub async fn update_pull(&self, owner: &str, repo: &str, number: u64) -> Result<UpdateOutcome> {
+        let n = number.to_string();
+        let (status, bytes) = self
+            .send::<()>(
+                Method::POST,
+                &["repos", owner, repo, "pulls", &n, "update"],
+                &[],
+                None,
+                true,
+            )
+            .await?;
+        if status.is_success() {
+            let response: UpdateResponse = decode(&bytes)?;
+            let head_sha = response.head_sha;
+            return Ok(if response.updated.unwrap_or(true) {
+                UpdateOutcome::Updated { head_sha }
+            } else {
+                UpdateOutcome::UpToDate { head_sha }
+            });
+        }
+        if status == StatusCode::CONFLICT {
+            let body: ConflictsBody = serde_json::from_slice(&bytes).unwrap_or_default();
+            if matches!(body.error.as_str(), "conflicts" | "conflict") || !body.files.is_empty() {
+                let message = if body.message.trim().is_empty() {
+                    default_message(status, "conflicts")
+                } else {
+                    body.message
+                };
+                return Ok(UpdateOutcome::Conflicts {
+                    message,
+                    files: body.files,
+                });
+            }
+        }
+        Err(api_error(status, &bytes))
     }
 
     /// `DELETE …/pulls/{n}/merge`: cancel a merge that waits for green
@@ -685,6 +742,15 @@ fn default_message(status: StatusCode, code: &str) -> String {
         (_, "invalid_title") => "An issue needs a title of one line.".into(),
         (_, "body_too_long") => "That text is too long.".into(),
         (_, "empty_body") => "Write something first.".into(),
+        (_, "conflicts") => "This branch conflicts with its base.".into(),
+        (_, "not_open") => "That pull request isn’t open any more.".into(),
+        (_, "branch_moved") => "The branch changed just now. Try again.".into(),
+        (_, "on_github") => "This repository’s home is GitHub. Update the branch there.".into(),
+        (_, "branch_missing") => "The pull request’s branch isn’t in your studio any more.".into(),
+        (_, "unrelated") => "The two branches don’t share any history.".into(),
+        (_, "branch_protected") => {
+            "A rule on that branch doesn’t allow updating it this way.".into()
+        }
         (_, "no_auto_merge") => "That pull request wasn’t waiting to merge.".into(),
         (_, "not_waiting") => "That agent isn’t waiting for approval any more.".into(),
         (_, "finished") => "That job has already finished.".into(),

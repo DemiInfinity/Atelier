@@ -2,7 +2,10 @@
 //! new one, commenting, closing and reopening.
 //!
 //! Everything the studio sends (titles, bodies, comments, label names) is
-//! passed on as plain text; the window only ever shows it as text.
+//! untrusted. Titles and label names are passed on as plain text. Bodies and
+//! comments are Markdown: they go along as written and as the typed tree of
+//! [`crate::markdown`], which the window draws without ever making markup
+//! out of content.
 
 use std::time::Duration;
 
@@ -11,6 +14,7 @@ use serde::Serialize;
 
 use crate::desk::Desk;
 use crate::error::{CmdError, CmdResult};
+use crate::markdown::{self, Block};
 use crate::paths;
 use crate::pulls::{author_label, comment_row, via_badge, Badge};
 
@@ -56,6 +60,8 @@ pub struct IssueCommentRow {
     pub tone: &'static str,
     pub at: String,
     pub body: String,
+    /// The body as Markdown, parsed.
+    pub body_md: Vec<Block>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -68,6 +74,8 @@ pub struct IssueView {
     pub via: Option<Badge>,
     pub labels: Vec<LabelView>,
     pub body: String,
+    /// The body as Markdown, parsed.
+    pub body_md: Vec<Block>,
     pub comments: Vec<IssueCommentRow>,
     pub created_at: String,
     pub web_path: String,
@@ -116,6 +124,7 @@ pub fn issue_view(repo: &str, number: u64, issue: &Issue, login: Option<&str>) -
         via: via_badge(issue.via),
         labels: labels(&issue.labels),
         body: issue.body.clone(),
+        body_md: markdown::render(&issue.body),
         comments: issue
             .comments
             .iter()
@@ -137,6 +146,7 @@ pub fn issue_view(repo: &str, number: u64, issue: &Issue, login: Option<&str>) -
                     tone: row.tone,
                     at: c.created_at.clone(),
                     body: c.body.clone(),
+                    body_md: markdown::render(&c.body),
                 }
             })
             .collect(),

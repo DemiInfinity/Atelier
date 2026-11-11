@@ -452,6 +452,11 @@ export interface PullRow {
   via: Badge | null;
   checks: ChecksBrief;
   head: string;
+  base: string;
+  /** Commits of the base it doesn't have yet; 0 when up to date or unknown. */
+  behind: number;
+  /** It can't be merged with its base as it is. */
+  conflicts: boolean;
 }
 
 // ------------------------------------------------ looking after a repository
@@ -516,6 +521,31 @@ export interface IssuesView {
   page: number;
 }
 
+/**
+ * Markdown as the tree Rust parses it into (src-tauri/src/markdown.rs).
+ * There is no node for raw HTML: markup in the source is text. A link's
+ * `url` is always an http, https or mailto address.
+ */
+export type MdInline =
+  | { t: "text"; text: string }
+  | { t: "code"; text: string }
+  | { t: "em"; inlines: MdInline[] }
+  | { t: "strong"; inlines: MdInline[] }
+  | { t: "strike"; inlines: MdInline[] }
+  | { t: "link"; url: string; image: boolean; inlines: MdInline[] }
+  | { t: "ref"; number: number }
+  | { t: "mention"; name: string }
+  | { t: "break" };
+
+export type MdBlock =
+  | { t: "heading"; level: number; inlines: MdInline[] }
+  | { t: "paragraph"; inlines: MdInline[] }
+  | { t: "code"; lang: string; text: string }
+  | { t: "quote"; blocks: MdBlock[] }
+  | { t: "list"; ordered: boolean; start: number; items: { task: boolean | null; blocks: MdBlock[] }[] }
+  | { t: "table"; aligns: string[]; head: MdInline[][]; rows: MdInline[][][] }
+  | { t: "rule" };
+
 export interface IssueCommentRow {
   who: string;
   /** `bot · via Tether` */
@@ -523,6 +553,7 @@ export interface IssueCommentRow {
   tone: "yours" | "github" | "agents" | "connect";
   at: string;
   body: string;
+  body_md: MdBlock[];
 }
 
 export interface IssueView {
@@ -533,8 +564,10 @@ export interface IssueView {
   by: string;
   via: Badge | null;
   labels: LabelView[];
-  /** Plain text as written (Markdown source); only ever shown as text. */
+  /** As written (Markdown source). */
   body: string;
+  /** The same, parsed; drawn by `markdown()`. */
+  body_md: MdBlock[];
   comments: IssueCommentRow[];
   created_at: string;
   web_path: string;
@@ -555,6 +588,7 @@ export interface CommentRow {
   tone: "yours" | "github" | "agents" | "connect";
   at: string;
   body: string;
+  body_md: MdBlock[];
 }
 
 export interface PullView {
@@ -581,6 +615,30 @@ export interface PullView {
   comments: CommentRow[];
   web_path: string;
   local_path: string | null;
+  /** The branch the working copy here is on. */
+  local_branch: string | null;
+  behind: number;
+  /** Conflicts with the base: merging and updating are off until resolved. */
+  conflicts: boolean;
+  conflict_files: string[];
+  /** "Update from <base>" is worth offering. */
+  can_update: boolean;
+  /** Behind, but at home on GitHub: the repository there (`owner/name`) to open instead. */
+  update_on_github: string | null;
+}
+
+/** What "Update from <base>" did, in the studio. */
+export interface BranchUpdate {
+  outcome: "updated" | "up_to_date" | "conflicts";
+  head: string;
+  base: string;
+  head_sha: string;
+  /** The studio's sentence about the conflicts. */
+  message: string;
+  files: string[];
+  local_path: string | null;
+  /** The working copy here is on the pull request's branch (so it is behind now). */
+  local_on_branch: boolean;
 }
 
 export interface MergeResult {
@@ -788,6 +846,14 @@ export const api = {
   // Links (only the studio and github.com are ever opened)
   openWeb: (webPath: string) => call<void>("open_web", { webPath }),
   openStudio: () => call<void>("open_studio"),
+  /**
+   * Opens a link someone wrote. Rejects with `link_outside` when it leads
+   * outside the studio and GitHub and `sure` is false; with `link_refused`
+   * for anything that isn't a web or mail address.
+   */
+  openLink: (url: string, sure: boolean) => call<void>("open_link", { url, sure }),
+  /** Markdown as the tree `markdown()` draws, for "Preview". */
+  markdownPreview: (text: string) => call<MdBlock[]>("markdown_preview", { text }),
   openGithub: (fullName: string) => call<void>("open_github", { fullName }),
 
   // Pull requests
@@ -796,6 +862,8 @@ export const api = {
   pullDetail: (repo: string, number: number) => call<PullView>("pull_detail", { repo, number }),
   pullMerge: (repo: string, number: number, method: string, whenGreen: boolean) =>
     call<MergeResult>("pull_merge", { repo, number, method, whenGreen }),
+  /** Merges the base branch into the pull request's branch, in the studio. */
+  pullUpdate: (repo: string, number: number) => call<BranchUpdate>("pull_update", { repo, number }),
   pullCancelMerge: (repo: string, number: number) => call<void>("pull_cancel_merge", { repo, number }),
   pullCheckout: (repo: string, number: number) =>
     call<{ path: string; branch: string }>("pull_checkout", { repo, number }),

@@ -48,7 +48,8 @@ scripts/try-with-mock.sh selftest atl  # the same, starting as someone who signe
 `try-with-mock.sh` starts `examples/mock_studio.rs` (the contract's example
 answers, a device flow that approves itself, live events, a fake runner
 socket, repositories that can be renamed and deleted, issues that can be
-opened, commented on and closed) and the app in a throwaway home with its own config, token file, SSH
+opened, commented on and closed, a pull request that is behind its base and
+one that conflicts with it) and the app in a throwaway home with its own config, token file, SSH
 folder and two working copies. `curl -X POST http://127.0.0.1:4780/_mock/notify`
 makes a pop-up appear. The mock studio starts, like a real one, with this
 device not allowed to rename or delete repositories;
@@ -85,6 +86,7 @@ src-tauri/src/
                 by pull request
   pulls.rs      pull requests       device.rs   the runner and its jobs
   issues.rs     a repository's issues
+  markdown.rs   Markdown → a typed tree (never HTML) for the window to draw
   add.rs        publish / clone / start new
   studio.rs     remote access, messages, the app's own settings
   notify.rs     a notify event → the words, colour and target of a pop-up
@@ -98,6 +100,7 @@ src/
   shell.ts      main window: sidebar, router, toasts, dialogs  → ctx.ts
   sideview.ts   the sidebar's repositories: Pinned, a group per owner
   manage.ts     pin, rename, delete: shared by the sidebar and the bar
+  markdown.ts   draws that tree; Write / Preview over a text box
   screens/*.ts  one module per screen       tray.ts  the popover
                 (repo.ts and its tabs: repo-history, repo-changes,
                 pulls.ts scoped to the repository, repo-issues,
@@ -147,10 +150,32 @@ src/
   folders". A studio lets a device do either only once its owner switched
   that on in Settings → Devices (`device.can_admin` in `/me`, read again when
   the window comes back); until then the app says so and offers that page.
-- **Issue text** (titles, bodies, comments, label names) is shown as plain
-  text, the Markdown source with its line breaks; nothing from the studio is
-  ever turned into markup. A label's colour is checked to be a hex colour in
-  Rust before it tints a dot.
+- **Markdown** in issue bodies and in issue and pull request comments is
+  drawn, not shown as source. Rust parses it (`pulldown-cmark`: CommonMark,
+  tables, strikethrough, task lists) into a small typed tree
+  (`markdown.rs`); the window builds a fixed set of elements from that tree
+  with `createElement` and `textContent` (`src/markdown.ts`). There is no
+  node for raw HTML, so markup in the source is only ever text; nothing
+  assigns `innerHTML` and the CSP is unchanged. Links are kept only for
+  `http`, `https` and `mailto` addresses without credentials (anything else
+  is its words), have no `href`, and go through `open_link`: the studio and
+  GitHub open straight away, any other address is shown and asked about
+  first. Images are never loaded: an image is its alt text, linking to the
+  picture. `#12` goes to that issue or pull request, `@name` is styled text.
+  The comment box and the new issue box have Write / Preview, through the
+  same renderer. Titles and label names stay plain text; a label's colour is
+  checked to be a hex colour in Rust before it tints a dot.
+- **Update from the base.** A pull request that is behind its base says so
+  on its row (`3 behind master`) and, when the studio says it can be
+  updated, has "Update from master": the studio merges the base into the
+  branch (`POST …/pulls/{n}/update`). Afterwards the pull request and its
+  checks are read again; if the folder here is on that branch the app says
+  it is now behind and offers Pull (never pulled unasked). Conflicts come
+  back as a dialog with the files, the steps to resolve them by hand and
+  "Open in <editor>"; a pull request the studio already knows to conflict
+  shows a red "Conflicts", that same guidance in place of the button, and
+  can't be merged. A push that landed meanwhile offers "Try again"; a
+  repository at home on GitHub gets "Open on GitHub" instead.
 - **State** lives where `atl` keeps it: `config.toml` (the app's own
   preferences under `[desktop]`: `pinned`, `collapsed` owner groups,
   `default_owner` for "This belongs to", …) and the keychain.
@@ -162,10 +187,10 @@ src/
 | App, first run | `app_state` `connect_start` `connect_poll` `connect_reopen` `connect_cancel` `find_folders` `suggest_folders` `add_suggested_folders` `folders_done` `runner_probe` `disconnect` |
 | Today | `overview` `run_log` |
 | Repository | `repo_view` `repo_changes` `repo_diff` `repo_commit` `repo_discard` `repo_undo_commit` `repo_history` `repo_commit_detail` `repo_branches` `repo_switch` `repo_new_branch` `repo_fetch` `repo_pull` `repo_push` `repo_open` `repo_hand_over` |
-| Links | `open_web` `open_studio` `open_github` |
+| Links | `open_web` `open_studio` `open_github` `open_link` `markdown_preview` |
 | Looking after a repository | `repo_rename` `repo_delete` `repo_set_pinned` `set_group_collapsed` `repo_runs` |
 | Issues | `issues_list` `issue_detail` `issue_create` `issue_comment` `issue_set_open` |
-| Pull requests | `pulls_list` `pull_detail` `pull_merge` `pull_cancel_merge` `pull_checkout` `agent_approve` |
+| Pull requests | `pulls_list` `pull_detail` `pull_merge` `pull_update` `pull_cancel_merge` `pull_checkout` `agent_approve` |
 | This device | `device_view` `runner_set_taking` `runner_set_rule` `runner_tail` `job_stop` |
 | Folders | `add_watch_folder` `remove_watch_folder` `choose_clone_root` `open_folder` |
 | Add a repository | `choose_folder` `folder_plan` `folder_init` `publish` `search_repos` `clone_repo` `mirror_and_clone` `create_new` |

@@ -237,6 +237,19 @@ enum StateArg {
 
 #[derive(Subcommand)]
 enum PrCommand {
+    /// One pull request with its checks and bot comments (as `atl pr N`)
+    View {
+        number: u64,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
+    /// Bring a pull request up to date: merge its base branch into it, in your studio
+    Update {
+        /// The pull request (default: the open one for the branch you are on)
+        number: Option<u64>,
+        #[command(flatten)]
+        scope: RepoScope,
+    },
     /// Merge a pull request, now or when its checks pass
     Merge {
         number: u64,
@@ -440,6 +453,8 @@ async fn run(cli: Cli, local_offset: Option<time::UtcOffset>) -> CliResult<()> {
                 )
                 .await
             }
+            Some(PrCommand::View { number, scope }) => cmd::pr::show(&ctx, number, scope).await,
+            Some(PrCommand::Update { number, scope }) => cmd::pr::update(&ctx, number, scope).await,
             None => match args.number {
                 Some(number) => cmd::pr::show(&ctx, number, args.scope).await,
                 None => cmd::pr::list(&ctx, args.scope, args.all, args.state).await,

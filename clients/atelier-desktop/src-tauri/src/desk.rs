@@ -429,6 +429,28 @@ impl Desk {
             .map_err(|e| CmdError::new("open_failed", format!("Couldn’t open the browser: {e}")))
     }
 
+    /// Opens a link someone wrote in an issue or a comment. Only web and
+    /// mail addresses are ever opened (see [`crate::markdown::safe_url`]).
+    /// One that leads outside the studio and GitHub is refused with
+    /// `link_outside` until the person has seen it and said yes (`sure`).
+    pub fn open_link(&self, url: &str, sure: bool) -> CmdResult<()> {
+        let Some(url) = crate::markdown::safe_url(url) else {
+            return Err(CmdError::new(
+                "link_refused",
+                "That isn’t a web or mail address, so it wasn’t opened.",
+            ));
+        };
+        if !sure && !self.url_allowed(&url) {
+            return Err(CmdError::new(
+                "link_outside",
+                "That link leads outside your studio.",
+            ));
+        }
+        self.effects
+            .open_url(&url)
+            .map_err(|e| CmdError::new("open_failed", format!("Couldn’t open the browser: {e}")))
+    }
+
     /// Opens a page of the studio (`/owner/name/pulls/3`) in the browser.
     pub fn open_web(&self, web_path: &str) -> CmdResult<()> {
         let studio = self

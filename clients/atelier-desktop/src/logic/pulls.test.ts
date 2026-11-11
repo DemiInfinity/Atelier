@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PullRow } from "../api";
-import { pickMethod, pickPull, shortRepo, visiblePulls } from "./pulls";
+import { behindLabel, pickMethod, pickPull, resolveSteps, shortRepo, updateLabel, visiblePulls } from "./pulls";
 
 const row = (repo: string, number: number): PullRow => ({
   repo,
@@ -12,6 +12,32 @@ const row = (repo: string, number: number): PullRow => ({
   via: null,
   checks: { state: "passing", text: "passed", tone: "pass", title: "1 check · 1 passed" },
   head: "feature",
+  base: "main",
+  behind: 0,
+  conflicts: false,
+});
+
+describe("behind the base", () => {
+  it("says how far, and nothing when it isn't", () => {
+    expect(behindLabel(3, "master")).toBe("3 behind master");
+    expect(behindLabel(1, "")).toBe("1 behind");
+    expect(behindLabel(0, "master")).toBeNull();
+  });
+
+  it("names the base on the button", () => {
+    expect(updateLabel("master")).toBe("Update from master");
+    expect(updateLabel("")).toBe("Update branch");
+  });
+
+  it("resolves by hand in plain steps: fetch, merge the base, fix, push", () => {
+    expect(resolveSteps("feature/tray", "master").map((s) => s.command)).toEqual([
+      "git fetch origin",
+      "git switch feature/tray",
+      "git merge origin/master",
+      "git add -A && git commit",
+      "git push",
+    ]);
+  });
 });
 
 describe("pull request list", () => {

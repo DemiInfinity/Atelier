@@ -10,6 +10,7 @@ pub mod device;
 pub mod error;
 pub mod issues;
 pub mod manage;
+pub mod markdown;
 pub mod notify;
 pub mod paths;
 pub mod prefs;

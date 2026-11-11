@@ -42,6 +42,10 @@ struct Mock {
     repos: Mutex<Vec<(String, String, Value, u64)>>,
     /// Full issues (with `body` and a `comments` list), newest first.
     issues: Mutex<Vec<Value>>,
+    /// Pull requests whose base was merged in through `…/update`.
+    updated_pulls: Mutex<Vec<u64>>,
+    /// Pull requests an update found conflicts in; they say so from then on.
+    conflicting_pulls: Mutex<Vec<u64>>,
     events: broadcast::Sender<(String, Value)>,
 }
 
@@ -310,20 +314,47 @@ async fn repo_delete(
     StatusCode::NO_CONTENT.into_response()
 }
 
-fn pull(repo: &str, full: bool) -> Value {
+/// The files pull request 15 conflicts in.
+const CONFLICT_FILES: [&str; 2] = [
+    "internal/ssh/handshake.go",
+    "internal/ssh/handshake_test.go",
+];
+
+/// Pull request 14 is 3 commits behind `main` until it is updated; then its
+/// checks start over. 15 is 2 behind and can't be updated: the update
+/// answers with conflicts, and from then on the pull request says so itself.
+fn pull(mock: &Mock, repo: &str, full: bool) -> Value {
+    let updated = mock.updated_pulls.lock().unwrap().contains(&14);
     let mut pull = json!({"repo": repo, "number": 14, "title": "Remote access switch in the tray menu", "state": "open",
         "head": "feature/tunnel-ui", "base": "main", "author": "owner:DemiInfinity", "commits": 2, "files": 3, "via": null,
         "merge": {"can_merge": false, "reason": "1 check is still running and 1 agent is waiting for you.", "methods": ["squash", "merge"],
                   "on_github": false, "auto_merge": null},
         "checks": {"total": 4, "passed": 2, "failed": 0, "pending": 1, "waiting": 1, "state": "pending"},
+        "behind": if updated { 0 } else { 3 }, "ahead": if updated { 3 } else { 2 }, "conflicts": false, "can_update": !updated,
         "web_path": format!("/{repo}/pulls/14"), "updated_at": now()});
+    if updated {
+        pull["commits"] = json!(3);
+        pull["merge"]["reason"] =
+            json!("3 checks are still running and 1 agent is waiting for you.");
+        pull["checks"] = json!({"total": 4, "passed": 0, "failed": 0, "pending": 3, "waiting": 1, "state": "pending"});
+    }
     if full {
-        pull["checks"] = json!([
-            {"name": "ci · test", "status": "success", "detail": "MacBook · 1m 48s", "run_id": 207, "job_id": 410},
-            {"name": "ci · lint", "status": "success", "detail": "MacBook · 22s", "run_id": 207, "job_id": 411},
-            {"name": "image · build", "status": "pending", "detail": "Portainer host · step 3 of 5", "run_id": 209, "job_id": 413},
-            {"name": "review-helper", "status": "waiting", "detail": "agent · needs your approval to run", "run_id": 210, "job_id": 414, "action": "approve_agent"}
-        ]);
+        pull["conflict_files"] = json!([]);
+        pull["checks"] = if updated {
+            json!([
+                {"name": "ci · test", "status": "pending", "detail": "MacBook · queued", "run_id": 211, "job_id": 420},
+                {"name": "ci · lint", "status": "pending", "detail": "MacBook · queued", "run_id": 211, "job_id": 421},
+                {"name": "image · build", "status": "pending", "detail": "Portainer host · queued", "run_id": 212, "job_id": 423},
+                {"name": "review-helper", "status": "waiting", "detail": "agent · needs your approval to run", "run_id": 213, "job_id": 414, "action": "approve_agent"}
+            ])
+        } else {
+            json!([
+                {"name": "ci · test", "status": "success", "detail": "MacBook · 1m 48s", "run_id": 207, "job_id": 410},
+                {"name": "ci · lint", "status": "success", "detail": "MacBook · 22s", "run_id": 207, "job_id": 411},
+                {"name": "image · build", "status": "pending", "detail": "Portainer host · step 3 of 5", "run_id": 209, "job_id": 413},
+                {"name": "review-helper", "status": "waiting", "detail": "agent · needs your approval to run", "run_id": 210, "job_id": 414, "action": "approve_agent"}
+            ])
+        };
         pull["comments"] = json!([
             {"author": "owner:DemiInfinity", "via": null, "kind": "person", "at": now(),
              "body": "Adds the switch under Open studio. Turning it off from the menu cuts every remote session, same as the banner in the browser."},
@@ -350,11 +381,13 @@ async fn pulls(
         .iter()
         .map(|r| r.0.clone())
         .collect();
+    let conflicting = mock.conflicting_pulls.lock().unwrap().contains(&15);
     let mut list = vec![
-        pull(&main, false),
+        pull(&mock, &main, false),
         json!({"repo": main, "number": 15, "title": "SSH handshake retries", "state": "open", "head": "feature/ssh", "base": "main",
          "author": "owner:DemiInfinity", "via": null, "merge": {"can_merge": false, "methods": ["squash"]},
          "checks": {"total": 2, "passed": 1, "failed": 1, "pending": 0, "waiting": 0, "state": "failing"},
+         "behind": 2, "ahead": 4, "conflicts": conflicting, "can_update": !conflicting,
          "web_path": format!("/{main}/pulls/15")}),
         json!({"repo": "DemiInfinity/Tray", "number": 9, "title": "Update okhttp to 5.1", "state": "open", "head": "atelier-updates/okhttp", "base": "main",
          "author": "atelier-updates", "via": "bot", "merge": {"can_merge": true, "methods": ["squash"]},
@@ -376,12 +409,25 @@ async fn pulls(
 }
 
 async fn pull_detail(
+    State(mock): App,
     headers: HeaderMap,
     Path((owner, name, number)): Path<(String, String, u64)>,
 ) -> Response {
     guard!(headers);
     if number == 14 {
-        return Json(pull(&format!("{owner}/{name}"), true)).into_response();
+        return Json(pull(&mock, &format!("{owner}/{name}"), true)).into_response();
+    }
+    if number == 15 {
+        let conflicting = mock.conflicting_pulls.lock().unwrap().contains(&15);
+        let files: &[&str] = if conflicting { &CONFLICT_FILES } else { &[] };
+        return Json(json!({"repo": format!("{owner}/{name}"), "number": 15, "title": "SSH handshake retries", "state": "open",
+            "head": "feature/ssh", "base": "main", "author": "owner:DemiInfinity", "commits": 4, "files": 2, "via": null,
+            "merge": {"can_merge": false, "reason": "1 check failed.", "methods": ["squash"], "on_github": false, "auto_merge": null},
+            "checks": [{"name": "ci · test", "status": "failure", "detail": "Portainer host · 2m 10s", "run_id": 208, "job_id": 415},
+                       {"name": "ci · lint", "status": "success", "detail": "MacBook · 20s", "run_id": 208, "job_id": 416}],
+            "behind": 2, "ahead": 4, "conflicts": conflicting, "conflict_files": files, "can_update": !conflicting,
+            "comments": [], "web_path": format!("/{owner}/{name}/pulls/15")}))
+        .into_response();
     }
     Json(json!({"repo": format!("{owner}/{name}"), "number": number, "title": format!("Pull request {number}"), "state": "open",
         "head": "feature", "base": "main", "author": "atelier-updates", "commits": 1, "files": 1,
@@ -402,6 +448,42 @@ async fn merge(headers: HeaderMap, Json(body): Json<Value>) -> Response {
             .into_response();
     }
     Json(json!({"merged": true, "sha": "7f82d31aa"})).into_response()
+}
+
+/// `POST …/pulls/{n}/update`: 14 takes its base in (once; after that it is
+/// current), 15 conflicts, anything else is already up to date.
+async fn update_pull(
+    State(mock): App,
+    headers: HeaderMap,
+    Path((owner, name, number)): Path<(String, String, u64)>,
+) -> Response {
+    guard!(headers);
+    println!("update asked: {owner}/{name} pull request {number}");
+    match number {
+        14 => {
+            let mut updated = mock.updated_pulls.lock().unwrap();
+            if updated.contains(&14) {
+                return Json(json!({"updated": false, "head_sha": "4f2a9c1e77aa01bc"}))
+                    .into_response();
+            }
+            updated.push(14);
+            Json(json!({"updated": true, "head_sha": "4f2a9c1e77aa01bc"})).into_response()
+        }
+        15 => {
+            let mut conflicting = mock.conflicting_pulls.lock().unwrap();
+            if !conflicting.contains(&15) {
+                conflicting.push(15);
+            }
+            (
+                StatusCode::CONFLICT,
+                Json(json!({"error": "conflicts",
+                    "message": "main and feature/ssh both changed 2 files. Nothing was changed.",
+                    "files": CONFLICT_FILES})),
+            )
+                .into_response()
+        }
+        _ => Json(json!({"updated": false, "head_sha": "7f82d31aa"})).into_response(),
+    }
 }
 
 async fn cancel_merge(headers: HeaderMap) -> Response {
@@ -457,8 +539,20 @@ fn default_issues(origin: &str) -> Vec<Value> {
     vec![
         issue(21, "Tray icon flickers", "open", "owner:DemiInfinity", Value::Null,
             json!([{"name": "bug", "color": "#d73a4a"}, {"name": "tray", "color": "#f2b85c"}]),
-            "The icon flickers when a job starts.\n\n- happens on **battery**\n- `<script>alert(1)</script>` stays text",
-            json!([{"id": 88, "author": "CodeRabbit[bot]", "via": "tether", "kind": "bot", "body": "Possibly the redraw in tray.go.", "created_at": now()}])),
+            concat!(
+                "## What happens\n\n",
+                "The icon flickers when a job starts. See #20 and https://example.com/tray-notes, or ask @maralind.\n\n",
+                "- happens on **battery**\n- `<script>alert(1)</script>` stays text\n\n",
+                "<script>alert(1)</script>\n\n",
+                "Inline too: <img src=x onerror=alert(1)> and [a trap](javascript:alert(1)).\n\n",
+                "- [x] reproduce it\n- [ ] find the redraw\n\n",
+                "```go\nfunc redraw() { tray.SetIcon(icon) }\n```\n\n",
+                "| power | flickers |\n|:--|--:|\n| battery | yes |\n| mains | *no* |\n\n",
+                "> It was fine in ~~0.3~~ 0.2.\n\n---\n\n",
+                "![a screenshot](https://example.com/shot.png) · [the docs](https://example.com/docs)"
+            ),
+            json!([{"id": 88, "author": "CodeRabbit[bot]", "via": "tether", "kind": "bot",
+                "body": "Possibly the redraw in `tray.go`.\n\n1. set the icon **once**\n2. debounce the rest", "created_at": now()}])),
         issue(20, "Docs: say how to pair a runner", "open", "person:maralind", json!("tether"),
             json!([{"name": "docs", "color": "#7cc0ff"}]), "From GitHub: the README skips the pairing step.", json!([])),
         issue(18, "Clone over SSH fails on port 22", "closed", "owner:DemiInfinity", Value::Null, json!([]),
@@ -881,6 +975,8 @@ async fn main() {
         can_admin: Mutex::new(args.iter().any(|a| a == "--can-admin")),
         repos: Mutex::new(default_repos()),
         issues: Mutex::new(default_issues(&origin)),
+        updated_pulls: Mutex::new(Vec::new()),
+        conflicting_pulls: Mutex::new(Vec::new()),
         events: events_tx,
     });
 
@@ -915,6 +1011,10 @@ async fn main() {
         .route(
             "/repos/{owner}/{name}/pulls/{number}/merge",
             post(merge).delete(cancel_merge),
+        )
+        .route(
+            "/repos/{owner}/{name}/pulls/{number}/update",
+            post(update_pull),
         )
         .route("/runs", get(runs))
         .route("/jobs/{id}/log", get(job_log))

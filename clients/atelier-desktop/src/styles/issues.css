@@ -17,7 +17,7 @@
 .issue-meta { gap: 8px; align-items: center; }
 .issue-body { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
 .issue-body.from-github { border-color: var(--blue-line); background: var(--blue-bg); }
-/* The Markdown source as written: line breaks kept, nothing interpreted. */
+/* Plain text as written (where Markdown isn't drawn). */
 .issue-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .issue-reply { gap: 8px; }
 .issue-box { min-height: 76px; resize: vertical; }

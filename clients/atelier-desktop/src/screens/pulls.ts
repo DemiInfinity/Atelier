@@ -1,10 +1,12 @@
 // Pull requests: the open ones across the studio on the left, the picked
 // one on the right with its merge status, checks and conversation.
 
-import { api, asError, type CheckRow, type ChecksBrief, type CommentRow, type Events, type PullRow, type PullView } from "../api";
+import { api, asError, type BranchUpdate, type CheckRow, type ChecksBrief, type CommentRow, type Events, type PullRow, type PullView } from "../api";
 import type { Ctx, MenuItem, Screen } from "../ctx";
+import { conflictGuide } from "../dialogs";
 import { ago, h, icon, mount, pill, plural } from "../dom";
-import { pickMethod, pickPull, shortRepo, visiblePulls, type PullKey } from "../logic/pulls";
+import { markdown, type MarkdownHandlers } from "../markdown";
+import { behindLabel, pickMethod, pickPull, shortRepo, updateLabel, visiblePulls, type PullKey } from "../logic/pulls";
 import type { Route } from "../routes";
 import "../styles/pulls.css";
 
@@ -39,6 +41,7 @@ export function checksChip(checks: ChecksBrief): HTMLElement {
 
 /** One pull request in a list. `showRepo` is false inside a repository, where it would only repeat. */
 export function pullCard(row: PullRow, current: boolean, showRepo: boolean, pick: () => void): HTMLElement {
+  const behind = behindLabel(row.behind, row.base);
   return h(
     "button",
     { type: "button", class: "pulls-card", "aria-current": current ? "true" : "false", onclick: pick },
@@ -49,7 +52,9 @@ export function pullCard(row: PullRow, current: boolean, showRepo: boolean, pick
       { class: "row wrap pulls-card-pills" },
       pill(row.status.text, row.status.tone),
       row.via ? pill(row.via.text, row.via.tone) : null,
+      row.conflicts ? pill("Conflicts", "fail", "pulls-conflicts") : null,
       checksChip(row.checks),
+      behind ? h("span", { class: "pulls-behind", title: `${row.head} doesn’t have the latest ${row.base} yet.`, text: behind }) : null,
     ),
   );
 }
@@ -211,7 +216,60 @@ export function pullsView(
     await ctx.refresh();
   }
 
+  /** "Update from <base>": the studio merges the base into the branch. */
+  async function updateBranch(view: PullView): Promise<void> {
+    let done: BranchUpdate;
+    for (;;) {
+      try {
+        done = await api.pullUpdate(view.repo, view.number);
+        break;
+      } catch (e) {
+        // A push landed on the branch meanwhile: nothing was done; offer to try again.
+        const err = asError(e);
+        if (err.kind !== "branch_moved") throw e;
+        const again = await ctx.confirm({
+          title: "The branch changed just now",
+          body: `${err.message || `Someone pushed to ${view.head} meanwhile.`} Nothing was updated.`,
+          confirm: "Try again",
+        });
+        if (!again) {
+          await reloadAll();
+          return;
+        }
+      }
+    }
+    const base = done.base || view.base;
+    const head = done.head || view.head;
+    if (done.outcome === "conflicts") {
+      ctx.showConflicts({ head, base, message: done.message, files: done.files, localPath: done.local_path });
+      await reloadAll();
+      return;
+    }
+    if (done.outcome === "up_to_date") {
+      ctx.say(`Already up to date with ${base}.`);
+      await reloadAll();
+      return;
+    }
+    ctx.say(`Updated from ${base}.`, `${head} has the latest ${base} now. Its checks run again.`);
+    // The pull request and its checks, as they are after the update.
+    await reloadAll();
+    const local = done.local_path;
+    if (!done.local_on_branch || local === null) return;
+    // The folder here is on that branch and now behind the studio. Never
+    // pulled without asking.
+    const pull = await ctx.confirm({
+      title: "Your local branch is now behind",
+      body: `${head} in your studio has the new commits from ${base}; the folder on this ${machine} doesn’t yet. Pull them in?`,
+      confirm: "Pull",
+    });
+    if (!pull) return;
+    const n = await api.repoPull(local);
+    ctx.say(n > 0 ? `Pulled ${plural(n, "commit", "commits")}.` : "Already up to date.");
+    await ctx.refresh();
+  }
+
   function mergeCard(view: PullView): HTMLElement {
+    const behind = view.state === "open" ? behindLabel(view.behind, view.base) : null;
     const method = pickMethod(view.methods, rememberedMethod);
     const buttons: (HTMLElement | null)[] = [];
 
@@ -281,6 +339,60 @@ export function pullsView(
       }
     }
 
+    // Behind its base: one click merges the base in, in the studio. It
+    // works while a merge waits for green checks too.
+    if (view.can_update) {
+      const update: HTMLButtonElement = h("button", {
+        type: "button",
+        class: "btn lg pulls-update",
+        text: updateLabel(view.base),
+        title: `Merge ${view.base} into ${view.head} in your studio (${plural(view.behind, "commit", "commits")} behind).`,
+        onclick: () => void ctx.busy(update, () => updateBranch(view)),
+      });
+      buttons.push(update);
+    } else if (view.update_on_github !== null) {
+      // At home on GitHub: the branch is brought up to date there.
+      const name = view.update_on_github;
+      const github: HTMLButtonElement = h("button", {
+        type: "button",
+        class: "btn lg pulls-update",
+        text: "Open on GitHub ↗",
+        title: `This repository’s home is GitHub. Update ${view.head} from ${view.base} there.`,
+        onclick: () => void ctx.busy(github, () => api.openGithub(name)),
+      });
+      buttons.push(github);
+    }
+
+    let conflicts: HTMLElement | null = null;
+    if (view.conflicts) {
+      const local = view.local_path;
+      const options = { head: view.head, base: view.base, files: view.conflict_files, localPath: local };
+      const open: HTMLButtonElement | null =
+        local === null
+          ? null
+          : h("button", {
+              type: "button",
+              class: "btn pulls-conflicts-open",
+              text: `Open in ${ctx.app().editor.label}`,
+              onclick: () =>
+                void ctx.busy(open, async () => {
+                  const label = await api.repoOpen(local);
+                  ctx.say(`Opened in ${label}.`);
+                }),
+            });
+      conflicts = h(
+        "div",
+        { class: "col pulls-conflicts-box", role: "group", "aria-label": `Conflicts with ${view.base}` },
+        conflictGuide(options),
+        h(
+          "div",
+          { class: "row wrap pulls-conflicts-foot" },
+          open,
+          local === null ? h("span", { class: "muted small", text: `This repository isn’t on this ${machine} yet. Check out the branch first.` }) : null,
+        ),
+      );
+    }
+
     let waiting: HTMLElement | null = null;
     if (view.state === "open" && view.auto_merge !== null) {
       const cancel: HTMLButtonElement = h("button", {
@@ -301,7 +413,7 @@ export function pullsView(
       );
     }
 
-    const look = view.state !== "open" ? "is-done" : view.can_merge ? "is-ready" : "is-waiting";
+    const look = view.state !== "open" ? "is-done" : view.conflicts ? "is-conflicting" : view.can_merge ? "is-ready" : "is-waiting";
     return h(
       "section",
       { class: `pulls-merge tone-yours ${look}`, "aria-label": "Merge status" },
@@ -313,9 +425,11 @@ export function pullsView(
           { class: "col pulls-merge-words" },
           h("span", { class: "pulls-merge-headline", text: view.headline }),
           view.reason ? h("span", { class: "soft", text: view.reason }) : null,
+          behind ? h("span", { class: "pulls-behind", text: behind }) : null,
         ),
         buttons,
       ),
+      conflicts,
       waiting,
       view.checks.length ? h("div", { class: "col" }, view.checks.map(checkRow)) : null,
     );
@@ -372,9 +486,22 @@ export function pullsView(
         row.tag ? h("span", { class: "pulls-comment-tag", text: row.tag }) : null,
         h("span", { class: "muted push-right", text: ago(row.at) }),
       ),
-      h("span", { class: "pulls-comment-body selectable", text: row.body }),
+      markdown(row.body_md, links, "pulls-comment-body"),
     );
   }
+
+  /** `#12` in a comment: that pull request here; an issue opens in the browser. */
+  async function openRef(number: number): Promise<void> {
+    const repo = detail?.repo;
+    if (!repo) return;
+    try {
+      if (!rows?.some((r) => r.repo === repo && r.number === number)) await api.pullDetail(repo, number);
+      select({ repo, number });
+    } catch {
+      await ctx.busy(null, () => api.openWeb(`/${repo}/issues/${number}`));
+    }
+  }
+  const links: MarkdownHandlers = { openLink: (url) => ctx.openLink(url), openRef: (number) => void openRef(number) };
 
   function drawDetail(): void {
     const view = detail;

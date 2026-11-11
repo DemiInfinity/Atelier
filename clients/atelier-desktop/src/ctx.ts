@@ -39,6 +39,16 @@ export interface ComposeOptions {
   confirm: string;
 }
 
+export interface ConflictsOptions {
+  head: string;
+  base: string;
+  /** The studio's sentence, when it sent one. */
+  message?: string;
+  files: string[];
+  /** The working copy on this machine, when there is one. */
+  localPath: string | null;
+}
+
 export interface Ctx {
   /** The app's state as last read (studio, accounts, editors, preferences). */
   app(): AppState;
@@ -55,6 +65,12 @@ export interface Ctx {
   go(route: Route): void;
   /** Follows a click target: a screen, or a page of the studio in the browser. */
   follow(target: Target): void;
+
+  /**
+   * Opens a link someone wrote in an issue or a comment. One that leads
+   * outside the studio and GitHub is shown and asked about first.
+   */
+  openLink(url: string): void;
 
   /** Shows a pop-up. */
   toast(toast: Toast): void;
@@ -73,6 +89,8 @@ export interface Ctx {
   compose(options: ComposeOptions): Promise<{ title: string; body: string } | null>;
   /** Shows a failed run's log in a dialog. */
   showLog(repo: string, runId: number, webPath?: string | null): void;
+  /** Says which files conflict with the base and how to resolve them here. */
+  showConflicts(options: ConflictsOptions): void;
   /** Does what a "needs you" (or check) button says. */
   runNeed(action: NeedAction): Promise<void>;
 

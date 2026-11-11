@@ -1875,3 +1875,279 @@ async fn pr_list_shows_each_pull_requests_checks() {
 "
     );
 }
+
+// ------------------------------------------------- pr update, behind, conflicts
+
+fn behind_pull(number: u64, head: &str, extra: &str) -> String {
+    format!(
+        r#"{{"repo":"DemiInfinity/Atelier","number":{number},"title":"Pull {number}","state":"open","head":"{head}","base":"master",
+            "merge":{{"can_merge":true,"methods":["squash"]}}{extra}}}"#
+    )
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pr_update() {
+    let sb = Sandbox::new().await;
+    sb.get("/repos", REPOS).await;
+    let atelier = working_copies(&sb);
+    let marbl = sb.home().join("Atelier/DemiInfinity/Marbl");
+    let pulls = "/repos/DemiInfinity/Atelier/pulls";
+    sb.get(
+        pulls,
+        &format!(
+            r#"{{"pulls":[{},{}]}}"#,
+            behind_pull(13, "docs", r#","behind":1"#),
+            behind_pull(14, "feature/tunnel-ui", r#","behind":3"#)
+        ),
+    )
+    .await;
+    sb.get("/repos/DemiInfinity/Marbl/pulls", r#"{"pulls":[]}"#)
+        .await;
+    for (n, head) in [
+        (13, "docs"),
+        (14, "feature/tunnel-ui"),
+        (15, "x"),
+        (16, "y"),
+    ] {
+        sb.get(&format!("{pulls}/{n}"), &behind_pull(n, head, ""))
+            .await;
+    }
+    sb.respond(
+        "POST",
+        &format!("{pulls}/14/update"),
+        200,
+        r#"{"updated":true,"head_sha":"4f2a9c1e77aa01bc"}"#,
+    )
+    .await;
+    sb.respond(
+        "POST",
+        &format!("{pulls}/13/update"),
+        200,
+        r#"{"updated":false,"head_sha":"77aa01bc"}"#,
+    )
+    .await;
+    sb.respond(
+        "POST",
+        &format!("{pulls}/15/update"),
+        409,
+        r#"{"error":"conflicts","message":"master and x both changed 2 files.","files":["cmd/app/main.go","README.md"]}"#,
+    )
+    .await;
+    sb.respond(
+        "POST",
+        &format!("{pulls}/16/update"),
+        422,
+        r#"{"error":"not_open","message":"This pull request is already merged."}"#,
+    )
+    .await;
+
+    // No number: the open pull request of the branch this folder is on.
+    assert_eq!(
+        sb.atl_in(&atelier, &["pr", "update"]).await.ok(),
+        "✓ Updated #14 from master (4f2a9c1)\nYour local branch is behind now: git pull\n"
+    );
+    assert_eq!(sb.count("POST", &format!("{pulls}/14/update")).await, 1);
+    // The request has no body.
+    assert_eq!(
+        sb.bodies("POST", &format!("{pulls}/14/update")).await,
+        [json!(null)]
+    );
+    // By number from anywhere: nothing is said about a local branch.
+    let scope = ["-R", "DemiInfinity/Atelier"];
+    assert_eq!(
+        sb.atl(&[&["pr", "update", "14"], &scope[..]].concat())
+            .await
+            .ok(),
+        "✓ Updated #14 from master (4f2a9c1)\n"
+    );
+    assert_eq!(
+        sb.atl(&[&["pr", "update", "14", "--json"], &scope[..]].concat())
+            .await
+            .json(),
+        json!({"number": 14, "updated": true, "head_sha": "4f2a9c1e77aa01bc",
+               "head": "feature/tunnel-ui", "base": "master", "local_behind": false})
+    );
+    assert_eq!(
+        sb.atl_in(&atelier, &["pr", "update", "--json"])
+            .await
+            .json()["local_behind"],
+        json!(true)
+    );
+
+    // Already current.
+    assert_eq!(
+        sb.atl_in(&atelier, &["pr", "update", "13"]).await.ok(),
+        "#13 already has everything from master.\n"
+    );
+    assert_eq!(
+        sb.atl_in(&atelier, &["pr", "update", "13", "--json"])
+            .await
+            .json(),
+        json!({"number": 13, "updated": false, "head_sha": "77aa01bc", "head": "docs", "base": "master"})
+    );
+
+    // Conflicts: a non-zero exit and the files.
+    let conflicts = sb.atl_in(&atelier, &["pr", "update", "15"]).await;
+    assert_eq!(conflicts.code, 1);
+    assert_eq!(conflicts.stdout, "");
+    assert_eq!(
+        conflicts.stderr,
+        "#15 conflicts with master.\n  cmd/app/main.go\n  README.md\nResolve it here: git fetch, git merge origin/master, fix the files, git push.\n"
+    );
+    let conflicts = sb.atl_in(&atelier, &["pr", "update", "15", "--json"]).await;
+    assert_eq!(conflicts.code, 1);
+    assert_eq!(conflicts.stdout, "");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&conflicts.stderr).unwrap(),
+        json!({"error": "conflicts", "message": "master and x both changed 2 files.",
+               "files": ["cmd/app/main.go", "README.md"],
+               "hint": "Resolve it here: git fetch, git merge origin/master, fix the files, git push."})
+    );
+
+    // Closed or merged: the studio's refusal.
+    let closed = sb.atl_in(&atelier, &["pr", "update", "16"]).await;
+    assert_eq!(closed.code, 1);
+    assert_eq!(closed.stderr, "This pull request is already merged.\n");
+
+    // A push landed meanwhile; a rule on the branch; a home on GitHub.
+    for (n, status, body, said) in [
+        (
+            17,
+            409,
+            r#"{"error":"branch_moved","message":"x changed while the update was running."}"#,
+            "x changed while the update was running. Run it again.\n",
+        ),
+        (
+            18,
+            403,
+            r#"{"error":"branch_protected","message":"x only takes changes through pull requests."}"#,
+            "x only takes changes through pull requests.\n",
+        ),
+        (
+            19,
+            422,
+            r#"{"error":"on_github"}"#,
+            "This repository’s home is GitHub. Update the branch there.\n",
+        ),
+    ] {
+        sb.respond("POST", &format!("{pulls}/{n}/update"), status, body)
+            .await;
+        let refused = sb.atl_in(&atelier, &["pr", "update", &n.to_string()]).await;
+        assert_eq!(refused.code, 1, "{n}");
+        assert_eq!(refused.stderr, said);
+    }
+
+    // A branch without a pull request, and no folder to tell the branch from.
+    let none = sb.atl_in(&marbl, &["pr", "update"]).await;
+    assert_eq!(none.code, 1);
+    assert_eq!(
+        none.stderr,
+        "There is no open pull request for master. Name one: atl pr update N.\n"
+    );
+    let which = sb.atl(&[&["pr", "update"], &scope[..]].concat()).await;
+    assert_eq!(which.code, 1);
+    assert_eq!(
+        which.stderr,
+        "Say which pull request to update. Name it: atl pr update N.\n"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pr_shows_behind_and_conflicts() {
+    let sb = Sandbox::new().await;
+    sb.get("/repos", REPOS).await;
+    let list = format!(
+        r#"{{"pulls":[{},{},{}]}}"#,
+        behind_pull(14, "a", r#","behind":3,"ahead":2,"conflicts":false"#),
+        behind_pull(15, "b", r#","behind":1,"conflicts":true"#),
+        behind_pull(16, "c", r#","behind":0"#)
+    );
+    sb.get("/pulls", &list).await;
+    assert_eq!(
+        sb.atl(&["pr"]).await.ok(),
+        "\
+#14  Pull 14   a → master   Atelier
+     no checks   3 behind master
+
+#15  Pull 15   b → master   Atelier
+     no checks   ✗ conflicts   1 behind master
+
+#16  Pull 16   c → master   Atelier
+     no checks
+"
+    );
+
+    let pulls = "/repos/DemiInfinity/Atelier/pulls";
+    sb.get(
+        &format!("{pulls}/14"),
+        &behind_pull(14, "a", r#","behind":3"#),
+    )
+    .await;
+    sb.get(
+        &format!("{pulls}/15"),
+        &behind_pull(
+            15,
+            "b",
+            r#","behind":1,"conflicts":true,"conflict_files":["cmd/app/main.go","README.md"]"#,
+        ),
+    )
+    .await;
+    let scope = ["-R", "DemiInfinity/Atelier"];
+    assert_eq!(
+        sb.atl(&[&["pr", "view", "14"], &scope[..]].concat())
+            .await
+            .ok(),
+        "\
+#14  Pull 14   a → master
+
+     3 behind master: atl pr update 14
+
+     Ready to merge: atl pr merge 14
+"
+    );
+    // The studio says it can't be updated (a protected head): no command offered.
+    sb.get(
+        &format!("{pulls}/16"),
+        &behind_pull(16, "c", r#","behind":2,"can_update":false"#),
+    )
+    .await;
+    assert_eq!(
+        sb.atl(&[&["pr", "16"], &scope[..]].concat()).await.ok(),
+        "\
+#16  Pull 16   c → master
+
+     2 behind master.
+
+     Ready to merge: atl pr merge 16
+"
+    );
+    let conflicting = "\
+#15  Pull 15   b → master
+
+     Conflicts with master
+       cmd/app/main.go
+       README.md
+     Can’t merge or update until it is resolved: git fetch, git merge origin/master, fix the files, git push.
+";
+    assert_eq!(
+        sb.atl(&[&["pr", "view", "15"], &scope[..]].concat())
+            .await
+            .ok(),
+        conflicting
+    );
+    // `atl pr N` is the same screen.
+    assert_eq!(
+        sb.atl(&[&["pr", "15"], &scope[..]].concat()).await.ok(),
+        conflicting
+    );
+    let json = sb
+        .atl(&[&["pr", "view", "15", "--json"], &scope[..]].concat())
+        .await
+        .json();
+    assert_eq!(json["conflicts"], json!(true));
+    assert_eq!(
+        json["conflict_files"],
+        json!(["cmd/app/main.go", "README.md"])
+    );
+    assert_eq!(json["behind"], json!(1));
+}

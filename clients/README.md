@@ -44,6 +44,8 @@ atl repo rename NEW           a new name in your studio; this folder's remote fo
 atl repo delete               from your studio only, after you type its name (--yes owner/name for scripts)
 atl pr [N]                    pull requests here (-R owner/name, --all, --state)
 atl pr merge N                [--when-green] [--method squash|merge|rebase] [--delete-branch] [--cancel]
+atl pr update [N]             merge the base branch into the pull request, in your studio
+                              (default: the open one for this branch; conflicts exit 1 and list the files)
 atl issue [list]              this repository's issues (--state open|closed|all, -R owner/name)
 atl issue view N | new TITLE [-b BODY] | close N
 atl run [list]                recent runs (--limit, -R, --runner)

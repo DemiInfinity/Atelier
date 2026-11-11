@@ -3,7 +3,7 @@
 
 import { api, asError, on, type AppState, type Events, type NeedAction, type Overview, type Target, type Toast, type Tone } from "./api";
 import type { Ctx, MenuItem, Screen } from "./ctx";
-import { composeDialog, confirmDialog, logDialog, openMenu, promptDialog, typedConfirmDialog } from "./dialogs";
+import { composeDialog, confirmDialog, conflictsDialog, logDialog, openMenu, promptDialog, typedConfirmDialog } from "./dialogs";
 import { h, icon, mark, mount, settingsIcon } from "./dom";
 import { needStep, routeFor } from "./logic/needs";
 import { sidebarGroups, toggled } from "./logic/sidebar";
@@ -55,11 +55,19 @@ export class Shell {
     toast: (toast) => this.toasts.queue.push(toast),
     say: (text, sub, tone) => this.say(text, sub, tone),
     fail: (error) => this.fail(error),
+    openLink: (url) => this.openLink(url),
     confirm: confirmDialog,
     prompt: promptDialog,
     confirmTyped: typedConfirmDialog,
-    compose: composeDialog,
+    compose: (options) => composeDialog(options, { openLink: (url) => this.openLink(url) }),
     showLog: (repo, runId, webPath) => logDialog(repo, runId, webPath ?? null, (path) => void this.openWeb(path)),
+    showConflicts: (options) =>
+      conflictsDialog(options, this.state.editor.label, (path) =>
+        void this.busy(null, async () => {
+          const label = await api.repoOpen(path);
+          this.say(`Opened in ${label}.`);
+        }),
+      ),
     runNeed: (action) => this.runNeed(action),
     busy: (button, work) => this.busy(button, work),
     menu: (anchor: HTMLElement, items: MenuItem[]) => openMenu(anchor, items),
@@ -237,6 +245,24 @@ export class Shell {
   }
 
   // ------------------------------------------------------------- helpers
+
+  /** A link from Markdown: straight to the studio or GitHub, anywhere else only after a yes. */
+  private openLink(url: string): void {
+    void this.busy(null, async () => {
+      try {
+        await api.openLink(url, false);
+      } catch (e) {
+        if (asError(e).kind !== "link_outside") throw e;
+        const mail = url.startsWith("mailto:");
+        const sure = await confirmDialog({
+          title: mail ? "Write to this address?" : "Open this link in your browser?",
+          body: mail ? url.slice("mailto:".length) : url,
+          confirm: mail ? "Open mail" : "Open link",
+        });
+        if (sure) await api.openLink(url, true);
+      }
+    });
+  }
 
   private say(text: string, sub = "", tone: Tone = "yours"): void {
     this.sayCount += 1;

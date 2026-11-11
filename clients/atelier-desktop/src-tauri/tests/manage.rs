@@ -123,6 +123,225 @@ async fn the_list_across_the_studio_carries_the_checks_too() {
     assert!(!pulls[0].url.query().unwrap_or_default().contains("repo="));
 }
 
+// ------------------------------------------ update from the base, conflicts
+
+fn behind(repo: &str, number: u64, head: &str, extra: Value) -> Value {
+    let mut pull = summary(repo, number, head, Value::Null);
+    pull["base"] = json!("master");
+    for (k, v) in extra.as_object().unwrap() {
+        pull[k] = v.clone();
+    }
+    pull
+}
+
+#[tokio::test]
+async fn rows_say_how_far_behind_and_whether_they_conflict() {
+    let world = World::signed_in().await;
+    world
+        .mock_get(
+            "/pulls",
+            json!({"pulls": [
+                behind("DemiInfinity/Atelier", 14, "a", json!({"behind": 3, "ahead": 2})),
+                behind("DemiInfinity/Atelier", 15, "b", json!({"behind": 1, "conflicts": true})),
+                behind("DemiInfinity/Atelier", 16, "c", json!({"behind": 0, "conflicts": false})),
+                // An older studio says nothing.
+                behind("DemiInfinity/Atelier", 17, "d", json!({})),
+                behind("DemiInfinity/Atelier", 18, "e", json!({"behind": 4, "conflicts": true, "state": "merged"})),
+            ]}),
+        )
+        .await;
+    let rows = world.desk.pulls_list(None).await.unwrap();
+    let seen: Vec<(u64, &str, u64, bool)> = rows
+        .iter()
+        .map(|r| (r.number, r.base.as_str(), r.behind, r.conflicts))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            (14, "master", 3, false),
+            (15, "master", 1, true),
+            (16, "master", 0, false),
+            (17, "master", 0, false),
+            (18, "master", 0, false),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn update_from_the_base_and_the_local_branch_is_only_offered_a_pull() {
+    let world = World::signed_in().await;
+    let (repo, bare) = world.copy("DemiInfinity/Atelier").await;
+    world
+        .g(&repo, &["switch", "--quiet", "-c", "feature/tray"])
+        .await;
+    world.commit(&repo, "tray.txt", "tray\n").await;
+    world
+        .g(&repo, &["push", "--quiet", "-u", "local", "feature/tray"])
+        .await;
+    world
+        .mock_get(
+            "/repos",
+            json!({"repos": [repo_json("DemiInfinity/Atelier", json!({}))]}),
+        )
+        .await;
+    let pull = |n: u64, head: &str| {
+        behind(
+            "DemiInfinity/Atelier",
+            n,
+            head,
+            json!({"behind": 2, "ahead": 1, "checks": [], "comments": []}),
+        )
+    };
+    world
+        .mock_get(
+            "/repos/DemiInfinity/Atelier/pulls/14",
+            pull(14, "feature/tray"),
+        )
+        .await;
+    world
+        .mock_get("/repos/DemiInfinity/Atelier/pulls/15", pull(15, "other"))
+        .await;
+    world
+        .mock_get(
+            "/repos/DemiInfinity/Atelier/pulls/16",
+            pull(16, "feature/tray"),
+        )
+        .await;
+    world
+        .mock_get("/repos/DemiInfinity/Atelier/pulls/17", pull(17, "gone"))
+        .await;
+    world
+        .mock(
+            "POST",
+            "/repos/DemiInfinity/Atelier/pulls/14/update",
+            200,
+            json!({"updated": true, "head_sha": "4f2a9c1e"}),
+        )
+        .await;
+    world
+        .mock(
+            "POST",
+            "/repos/DemiInfinity/Atelier/pulls/15/update",
+            200,
+            json!({"updated": false, "head_sha": "aa11"}),
+        )
+        .await;
+    world
+        .mock(
+            "POST",
+            "/repos/DemiInfinity/Atelier/pulls/16/update",
+            409,
+            json!({"error": "conflicts", "message": "2 files conflict with master.", "files": ["cmd/app/main.go", "README.md"]}),
+        )
+        .await;
+    world
+        .mock(
+            "POST",
+            "/repos/DemiInfinity/Atelier/pulls/17/update",
+            422,
+            json!({"error": "not_open", "message": "This pull request is already merged."}),
+        )
+        .await;
+
+    // The detail offers it, and knows the branch the folder is on.
+    let view = world
+        .desk
+        .pull_detail("DemiInfinity/Atelier", 14)
+        .await
+        .unwrap();
+    assert_eq!(
+        (view.behind, view.can_update, view.base.as_str()),
+        (2, true, "master")
+    );
+    assert_eq!(view.local_branch.as_deref(), Some("feature/tray"));
+
+    let tip = world.g(&repo, &["rev-parse", "HEAD"]).await;
+    let done = world
+        .desk
+        .pull_update("DemiInfinity/Atelier", 14)
+        .await
+        .unwrap();
+    assert_eq!(done.outcome, "updated");
+    assert_eq!(done.head_sha, "4f2a9c1e");
+    assert_eq!(
+        (done.head.as_str(), done.base.as_str()),
+        ("feature/tray", "master")
+    );
+    assert!(done.local_on_branch);
+    assert_eq!(done.local_path.as_deref(), Some(repo.to_str().unwrap()));
+    // Nothing was pulled or fetched here: the folder is exactly as it was.
+    assert_eq!(world.g(&repo, &["rev-parse", "HEAD"]).await, tip);
+    assert_eq!(
+        world.g(&repo, &["rev-parse", "local/feature/tray"]).await,
+        tip
+    );
+    let _ = bare;
+
+    // Another pull request's branch: the folder isn't on it.
+    let current = world
+        .desk
+        .pull_update("DemiInfinity/Atelier", 15)
+        .await
+        .unwrap();
+    assert_eq!(
+        (current.outcome, current.local_on_branch),
+        ("up_to_date", false)
+    );
+    assert_eq!(current.head_sha, "aa11");
+
+    let conflicts = world
+        .desk
+        .pull_update("DemiInfinity/Atelier", 16)
+        .await
+        .unwrap();
+    assert_eq!(conflicts.outcome, "conflicts");
+    assert_eq!(conflicts.message, "2 files conflict with master.");
+    assert_eq!(conflicts.files, ["cmd/app/main.go", "README.md"]);
+    assert_eq!(
+        conflicts.local_path.as_deref(),
+        Some(repo.to_str().unwrap())
+    );
+
+    let closed = world
+        .desk
+        .pull_update("DemiInfinity/Atelier", 17)
+        .await
+        .unwrap_err();
+    assert_eq!(closed.kind, "not_open");
+    assert_eq!(closed.message, "This pull request is already merged.");
+
+    // The update carries no body, and went out once per click.
+    let sent = world
+        .received("POST", "/repos/DemiInfinity/Atelier/pulls/14/update")
+        .await;
+    assert_eq!(sent, [Value::Null]);
+}
+
+#[tokio::test]
+async fn a_conflicting_pull_request_lists_its_files_and_cant_merge_or_update() {
+    let world = World::signed_in().await;
+    world.mock_get("/repos", json!({"repos": []})).await;
+    let mut pull = behind(
+        "DemiInfinity/Atelier",
+        15,
+        "fix/flaky-runner-test",
+        json!({"behind": 3, "conflicts": true, "conflict_files": ["runner/job.go", "runner/job_test.go"], "checks": [], "comments": []}),
+    );
+    pull["merge"] = json!({"can_merge": true, "methods": ["squash"]});
+    world
+        .mock_get("/repos/DemiInfinity/Atelier/pulls/15", pull)
+        .await;
+    let view = world
+        .desk
+        .pull_detail("DemiInfinity/Atelier", 15)
+        .await
+        .unwrap();
+    assert!(view.conflicts && !view.can_merge && !view.can_update);
+    assert_eq!(view.headline, "Conflicts with master");
+    assert_eq!(view.conflict_files, ["runner/job.go", "runner/job_test.go"]);
+    assert_eq!(view.local_path, None);
+}
+
 #[tokio::test]
 async fn runs_are_gathered_by_pull_request() {
     let world = World::signed_in().await;
@@ -710,6 +929,19 @@ async fn issues_list_read_open_comment_close_and_reopen() {
     );
     // The page to open is worked out here, never taken from the answer.
     assert_eq!(issue.web_path, "/DemiInfinity/Atelier/issues/7");
+    // The same text parsed as Markdown: the markup in it is still only
+    // text, and nothing in the tree is anything but the known kinds.
+    let tree = serde_json::to_string(&(&issue.body_md, &issue.comments)).unwrap();
+    assert!(tree.contains("<img src=x"), "{tree}");
+    for kind in [
+        "\"t\":\"html\"",
+        "\"t\":\"image\"",
+        "\"t\":\"script\"",
+        "onerror\":",
+    ] {
+        assert!(!tree.contains(kind), "{kind} in {tree}");
+    }
+    assert!(!issue.comments[0].body_md.is_empty());
 
     assert!(world
         .desk

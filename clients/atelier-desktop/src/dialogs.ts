@@ -1,8 +1,10 @@
 // Confirmation, one-line prompt, log viewer, and the small anchored menu.
 
 import { api, asError } from "./api";
-import type { ComposeOptions, ConfirmOptions, MenuItem, PromptOptions, TypedConfirmOptions } from "./ctx";
-import { h, mount } from "./dom";
+import type { ComposeOptions, ConfirmOptions, ConflictsOptions, MenuItem, PromptOptions, TypedConfirmOptions } from "./ctx";
+import { h, mount, plural } from "./dom";
+import { resolveSteps } from "./logic/pulls";
+import { writePreview, type MarkdownHandlers } from "./markdown";
 
 function modal(build: (close: () => void) => HTMLElement, onDismiss: () => void): void {
   const previous = document.activeElement as HTMLElement | null;
@@ -181,7 +183,10 @@ export function typedConfirmDialog(options: TypedConfirmOptions): Promise<string
 }
 
 /** A title and a longer text (a new issue). */
-export function composeDialog(options: ComposeOptions): Promise<{ title: string; body: string } | null> {
+export function composeDialog(
+  options: ComposeOptions,
+  links: MarkdownHandlers = { openLink: () => {} },
+): Promise<{ title: string; body: string } | null> {
   return new Promise((resolve) => {
     modal(
       (close) => {
@@ -216,7 +221,7 @@ export function composeDialog(options: ComposeOptions): Promise<{ title: string;
             "div",
             { class: "dialog-body" },
             h("div", { class: "field" }, h("label", { for: "compose-title", text: options.titleLabel }), title),
-            h("div", { class: "field" }, h("label", { for: "compose-body", text: options.bodyLabel }), body),
+            h("div", { class: "field" }, h("label", { for: "compose-body", text: options.bodyLabel }), writePreview(body, links)),
           ),
           h(
             "div",
@@ -272,6 +277,82 @@ export function logDialog(repo: string, runId: number, webPath: string | null, o
         title,
         h("div", { class: "dialog-body" }, pre, note),
         h("div", { class: "dialog-foot" }, studio, h("button", { type: "button", class: "btn lg", text: "Close", onclick: close })),
+      );
+    },
+    () => {},
+  );
+}
+
+/**
+ * The files that conflict and the steps to resolve them, shared by the
+ * dialog and the pull request's own card. Paths and branch names are only
+ * ever put in as text.
+ */
+export function conflictGuide(options: ConflictsOptions): HTMLElement {
+  const { files } = options;
+  return h(
+    "div",
+    { class: "conflicts-guide" },
+    files.length
+      ? h(
+          "div",
+          { class: "col conflicts-block" },
+          h("span", { class: "conflicts-label", text: `${plural(files.length, "file conflicts", "files conflict")} with ${options.base}` }),
+          h("ul", { class: "conflicts-files selectable", "aria-label": "Conflicting files" }, files.map((file) => h("li", { class: "mono", text: file }))),
+        )
+      : null,
+    h(
+      "div",
+      { class: "col conflicts-block" },
+      h("span", { class: "conflicts-label", text: "To resolve it on this machine" }),
+      h(
+        "ol",
+        { class: "conflicts-steps" },
+        resolveSteps(options.head, options.base).map((step) =>
+          h("li", {}, h("span", { text: step.text }), step.command ? h("code", { class: "mono selectable", text: step.command }) : null),
+        ),
+      ),
+    ),
+  );
+}
+
+/** "Update from <base>" hit conflicts: nothing changed; here is what to do. */
+export function conflictsDialog(options: ConflictsOptions, editorLabel: string, openEditor: (path: string) => void): void {
+  modal(
+    (close) => {
+      const local = options.localPath;
+      const done = h("button", { type: "button", class: "btn lg", text: "Close", onclick: close });
+      queueMicrotask(() => done.focus());
+      return h(
+        "section",
+        { class: "dialog conflicts-dialog", role: "dialog", "aria-modal": "true", "aria-label": `Conflicts with ${options.base}` },
+        h("div", { class: "dialog-head", text: `${options.head} conflicts with ${options.base}` }),
+        h(
+          "div",
+          { class: "dialog-body" },
+          h("span", {
+            text: options.message || `Your studio couldn’t merge ${options.base} into ${options.head} by itself. Nothing was changed.`,
+          }),
+          conflictGuide(options),
+          local === null ? h("span", { class: "muted small", text: "This repository isn’t on this machine yet. Check out the branch first." }) : null,
+        ),
+        h(
+          "div",
+          { class: "dialog-foot" },
+          local !== null
+            ? h("button", {
+                type: "button",
+                class: "btn lg primary",
+                text: `Open in ${editorLabel}`,
+                dataset: { conflicts: "open" },
+                onclick: () => {
+                  close();
+                  openEditor(local);
+                },
+              })
+            : null,
+          done,
+        ),
       );
     },
     () => {},

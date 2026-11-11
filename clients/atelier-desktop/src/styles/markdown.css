@@ -1,0 +1,73 @@
+/* Markdown that people and bots wrote, drawn from the typed tree
+   (src/markdown.ts). Warm charcoal, the app's type scale, a readable
+   measure. */
+
+.md {
+  max-width: 76ch;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--code-ink);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.md > *, .md blockquote > *, .md li > *, .md .md-task-words > * { margin: 0; }
+/* Raw HTML and over-nested text come through as written, line breaks and all. */
+.md p { white-space: pre-wrap; }
+
+.md .md-h { font-family: var(--font-head); font-weight: 700; line-height: 1.25; color: var(--ink); margin-top: 6px; }
+.md > .md-h:first-child { margin-top: 0; }
+.md .md-h1 { font-size: 20px; }
+.md .md-h2 { font-size: 17px; }
+.md .md-h3 { font-size: 15px; }
+.md .md-h4, .md .md-h5, .md .md-h6 { font-size: 14px; }
+.md .md-h6 { color: var(--ink2); }
+
+.md strong { font-weight: 600; color: var(--ink); }
+.md s { color: var(--ink3); }
+
+.md .md-link { color: var(--amber); text-decoration: underline; text-decoration-color: var(--amber-line); text-underline-offset: 2px; cursor: pointer; }
+.md .md-link:hover { text-decoration-color: var(--amber); }
+.md .md-link:focus-visible { outline: 1px solid var(--amber); outline-offset: 2px; border-radius: 3px; }
+.md .md-image::before { content: "▣ "; font-size: 11px; opacity: 0.8; }
+.md .md-ref { font-variant-numeric: tabular-nums; }
+.md .md-mention { color: var(--ink); font-weight: 500; }
+
+.md .md-code-inline { padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line); background: var(--ground); font-size: 12.5px; }
+.md .md-code { border-radius: 10px; border: 1px solid var(--line); background: var(--ground); display: flex; flex-direction: column; min-width: 0; }
+.md .md-code-lang { align-self: flex-start; padding: 5px 12px 0; color: var(--ink3); font: 500 11px var(--font-text); letter-spacing: 0.02em; user-select: none; }
+.md .md-code pre { margin: 0; padding: 10px 12px; overflow-x: auto; font-size: 12.5px; line-height: 1.6; color: var(--ink2); white-space: pre; overflow-wrap: normal; }
+.md .md-code pre:focus-visible, .md .md-table:focus-visible { outline: 1px solid var(--amber); outline-offset: -1px; }
+
+.md blockquote { padding: 2px 0 2px 12px; border-left: 3px solid var(--line2); color: var(--ink2); display: flex; flex-direction: column; gap: 8px; }
+
+.md ul, .md ol { padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.md li > ul, .md li > ol, .md .md-task-words > ul, .md .md-task-words > ol { margin-top: 4px; }
+.md li > * + *, .md .md-task-words > * + * { margin-top: 6px; }
+.md .md-tasks { padding-left: 2px; }
+.md .md-tasks > li { list-style: none; }
+.md .md-tasks > li:not(.md-task) { margin-left: 24px; list-style: disc; }
+.md .md-task { display: flex; align-items: flex-start; gap: 8px; }
+.md .md-task-box { margin-top: 4px; opacity: 1; }
+.md .md-task-words { flex: 1; min-width: 0; }
+
+.md .md-table { overflow-x: auto; max-width: 100%; }
+.md table { border-collapse: collapse; font-size: 13px; }
+.md th, .md td { padding: 6px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.md th { background: var(--ground); color: var(--ink); font-weight: 600; }
+.md .md-align-center { text-align: center; }
+.md .md-align-right { text-align: right; }
+
+.md hr { width: 100%; height: 1px; border: none; background: var(--line2); margin: 4px 0; }
+
+/* Write / Preview over a text box */
+.md-write { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.md-tabs { align-self: flex-start; display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; border: 1px solid var(--line); background: var(--ground); }
+.md-tab { height: 24px; padding: 0 12px; border: none; border-radius: 7px; background: transparent; color: var(--ink3); font: 500 12px var(--font-text); cursor: pointer; }
+.md-tab:hover { color: var(--ink); }
+.md-tab[aria-selected="true"] { background: var(--sel); color: var(--ink); }
+.md-preview { min-height: 76px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line2); background: var(--panel); }
+.dialog .md-preview { min-height: 160px; }

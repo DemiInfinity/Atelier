@@ -16,6 +16,8 @@ pub struct CliError {
     pub message: String,
     /// What to do next.
     pub hint: Option<String>,
+    /// The files the error is about (the ones that conflict), if any.
+    pub files: Vec<String>,
     pub exit: i32,
 }
 
@@ -25,12 +27,18 @@ impl CliError {
             kind: "error".into(),
             message: message.into(),
             hint: None,
+            files: Vec::new(),
             exit: EXIT_ERROR,
         }
     }
 
     pub fn hint(mut self, hint: impl Into<String>) -> CliError {
         self.hint = Some(hint.into());
+        self
+    }
+
+    pub fn files(mut self, files: Vec<String>) -> CliError {
+        self.files = files;
         self
     }
 
@@ -50,6 +58,7 @@ impl CliError {
             Error::Api { code, .. } if code == "device_not_allowed" => Some(format!(
                 "Allow it for this device at {studio}/settings/devices, or do it in the browser."
             )),
+            Error::Api { code, .. } if code == "branch_moved" => Some("Run it again.".to_string()),
             Error::Api { code, .. } if code == "remote_only_off" => {
                 Some("Turn it on from home.".to_string())
             }
@@ -80,6 +89,7 @@ impl CliError {
             },
             message: sentence(&message),
             hint,
+            files: Vec::new(),
             exit: if e.needs_sign_in() || matches!(e, Error::NoStudio) {
                 EXIT_NOT_SIGNED_IN
             } else {
@@ -96,7 +106,19 @@ impl CliError {
             if let Some(hint) = &self.hint {
                 object["hint"] = hint.clone().into();
             }
+            if !self.files.is_empty() {
+                object["files"] = self.files.clone().into();
+            }
             eprintln!("{object}");
+        } else if !self.files.is_empty() {
+            // The sentence, the files one per line, then the next step.
+            eprintln!("{}", self.message);
+            for file in &self.files {
+                eprintln!("  {file}");
+            }
+            if let Some(hint) = &self.hint {
+                eprintln!("{hint}");
+            }
         } else {
             match &self.hint {
                 Some(hint) => eprintln!("{} {hint}", self.message),

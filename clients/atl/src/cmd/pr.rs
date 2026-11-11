@@ -1,15 +1,15 @@
-//! `atl pr`, `atl pr N`, `atl pr merge N`.
+//! `atl pr`, `atl pr N`, `atl pr merge N`, `atl pr update [N]`.
 
 use atelier_core::api::{
     Check, CheckCounts, CheckStatus, ChecksState, MergeMethod, MergeOutcome, MergeRequest, Pull,
-    PullState, PullSummary, Via,
+    PullState, PullSummary, UpdateOutcome, Via,
 };
 use atelier_core::messages::Vars;
 use atelier_core::Client;
 use serde_json::json;
 
 use crate::ctx::Ctx;
-use crate::error::CliResult;
+use crate::error::{CliError, CliResult};
 use crate::ui::{column, outln, pad, short_repo, Ui};
 use crate::{MethodArg, RepoScope, StateArg};
 
@@ -133,6 +133,10 @@ fn merge_line(ui: &Ui, pull: &Pull) -> Option<String> {
             method_words(auto.method)
         ));
     }
+    if pull.has_conflicts() {
+        // Said above, with the files.
+        return None;
+    }
     if pull.merge.can_merge {
         let command = format!("atl pr merge {}", pull.number);
         return Some(format!(
@@ -170,10 +174,73 @@ fn print_pull(ui: &Ui, pull: &Pull) {
             outln!("{}", ui.muted(&format!("{INDENT}…")));
         }
     }
+    if pull.state == PullState::Open && pull.has_conflicts() {
+        outln!();
+        outln!(
+            "{INDENT}{}",
+            ui.red(&format!("Conflicts with {}", pull.base))
+        );
+        for file in &pull.conflict_files {
+            outln!("{INDENT}  {file}");
+        }
+        outln!(
+            "{INDENT}{}",
+            ui.muted(&format!(
+                "Can’t merge or update until it is resolved: {}",
+                resolve_words(&pull.base)
+            ))
+        );
+    } else if pull.state == PullState::Open && pull.behind() > 0 {
+        let behind = behind_words(pull.behind(), &pull.base);
+        outln!();
+        if pull.merge.on_github {
+            outln!(
+                "{INDENT}{}",
+                ui.muted(&format!("{behind}. Update the branch on GitHub."))
+            );
+        } else if pull.can_update() {
+            outln!(
+                "{INDENT}{}{}",
+                ui.muted(&format!("{behind}: ")),
+                ui.amber(&format!("atl pr update {}", pull.number))
+            );
+        } else {
+            outln!("{INDENT}{}", ui.muted(&format!("{behind}.")));
+        }
+    }
     if let Some(line) = merge_line(ui, pull) {
         outln!();
         outln!("{INDENT}{line}");
     }
+}
+
+/// `3 behind master`.
+fn behind_words(behind: u64, base: &str) -> String {
+    if base.is_empty() {
+        format!("{behind} behind")
+    } else {
+        format!("{behind} behind {base}")
+    }
+}
+
+/// Resolving a conflict by hand, in one line.
+fn resolve_words(base: &str) -> String {
+    format!("git fetch, git merge origin/{base}, fix the files, git push.")
+}
+
+/// What a list says after the checks: how far behind, and conflicts.
+fn standing(ui: &Ui, pull: &PullSummary) -> String {
+    let mut line = String::new();
+    if pull.state != PullState::Open {
+        return line;
+    }
+    if pull.has_conflicts() {
+        line.push_str(&format!("   {}", ui.red("✗ conflicts")));
+    }
+    if pull.behind() > 0 {
+        line.push_str(&ui.muted(&format!("   {}", behind_words(pull.behind(), &pull.base))));
+    }
+    line
 }
 
 fn method_words(method: MergeMethod) -> &'static str {
@@ -236,7 +303,11 @@ pub async fn list(ctx: &Ctx, scope: RepoScope, all: bool, state: StateArg) -> Cl
         }
         let repo = target.is_none().then_some(pull.repo.as_str());
         header(ui, pull.number, &pull.title, &pull.head, &pull.base, repo);
-        outln!("{INDENT}{}", counts_line(ui, &pull.checks));
+        outln!(
+            "{INDENT}{}{}",
+            counts_line(ui, &pull.checks),
+            standing(ui, pull)
+        );
     }
     Ok(())
 }
@@ -261,6 +332,115 @@ pub async fn show(ctx: &Ctx, number: u64, scope: RepoScope) -> CliResult<()> {
         print_pull(&ctx.ui, &pull);
     }
     Ok(())
+}
+
+/// `atl pr update [N]`: merge the base branch into the pull request's
+/// branch, in the studio. Without a number, the open pull request of the
+/// branch this folder is on. Conflicts end with a non-zero exit and the files.
+pub async fn update(ctx: &Ctx, number: Option<u64>, scope: RepoScope) -> CliResult<()> {
+    let client = ctx.client()?;
+    let ui = &ctx.ui;
+    let (owner, repo) = ctx.target_repo(&client, scope.repo.as_deref()).await?;
+    // The branch this folder is on, when it is a folder of that repository.
+    let here = match scope.repo {
+        Some(_) => None,
+        None => ctx.here().await?.and_then(|local| local.branch),
+    };
+    let number = match number {
+        Some(number) => number,
+        None => {
+            let Some(branch) = here.as_deref() else {
+                return Err(CliError::plain("Say which pull request to update.")
+                    .hint("Name it: atl pr update N."));
+            };
+            let open = client
+                .repo_pulls(&owner, &repo, PullState::Open)
+                .await
+                .map_err(|e| ctx.err(e))?;
+            match open.iter().find(|p| p.head == branch) {
+                Some(pull) => pull.number,
+                None => {
+                    return Err(CliError::plain(format!(
+                        "There is no open pull request for {branch}."
+                    ))
+                    .hint("Name one: atl pr update N."))
+                }
+            }
+        }
+    };
+    let tag = ui.amber(&format!("#{number}"));
+    // Its branches, for the words. Never a reason to fail.
+    let pull = client.pull(&owner, &repo, number).await.ok();
+    let base = pull
+        .as_ref()
+        .map(|p| p.base.clone())
+        .filter(|b| !b.is_empty());
+    let head = pull
+        .as_ref()
+        .map(|p| p.head.clone())
+        .filter(|h| !h.is_empty());
+    let base_word = base.clone().unwrap_or_else(|| "its base".to_string());
+
+    let outcome = client
+        .update_pull(&owner, &repo, number)
+        .await
+        .map_err(|e| ctx.err(e))?;
+    match outcome {
+        UpdateOutcome::Conflicts { message, files } => {
+            // With --json the studio's own sentence; in text the short of it.
+            let message = if ctx.json {
+                message
+            } else {
+                format!("#{number} conflicts with {base_word}.")
+            };
+            Err(CliError::plain(message)
+                .kind("conflicts")
+                .files(files)
+                .hint(format!(
+                    "Resolve it here: {}",
+                    resolve_words(base.as_deref().unwrap_or("<base>"))
+                )))
+        }
+        UpdateOutcome::UpToDate { head_sha } => {
+            if ctx.json {
+                crate::print_json(&json!({
+                    "number": number, "updated": false, "head_sha": head_sha, "head": head, "base": base,
+                }));
+            } else {
+                outln!("{tag} already has everything from {base_word}.");
+            }
+            Ok(())
+        }
+        UpdateOutcome::Updated { head_sha } => {
+            // The folder here is on that branch: it is behind the studio now.
+            let local_behind = here.is_some() && here == head;
+            if ctx.json {
+                crate::print_json(&json!({
+                    "number": number, "updated": true, "head_sha": head_sha, "head": head, "base": base,
+                    "local_behind": local_behind,
+                }));
+                return Ok(());
+            }
+            let short: String = head_sha.chars().take(7).collect();
+            outln!(
+                "{}Updated {tag} from {base_word}{}",
+                ui.green("✓ "),
+                if short.is_empty() {
+                    ".".to_string()
+                } else {
+                    format!(" {}", ui.muted(&format!("({short})")))
+                }
+            );
+            if local_behind {
+                outln!(
+                    "{}{}",
+                    ui.muted("Your local branch is behind now: "),
+                    ui.amber("git pull")
+                );
+            }
+            Ok(())
+        }
+    }
 }
 
 async fn default_method(client: &Client, owner: &str, repo: &str, number: u64) -> MergeMethod {

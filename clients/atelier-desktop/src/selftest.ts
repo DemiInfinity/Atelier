@@ -155,6 +155,7 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
     const copy = overview?.copies[0];
     await screen(shell, "pulls", () => shell.go({ screen: "pulls" }), () => sees("open across your studio") && sees("Conversation"));
     await log(`pulls checks (all repos): ${[...document.querySelectorAll(".pulls-card")].map((c) => `${text(c.querySelector(".pulls-card-title"))} => ${text(c.querySelector(".checks-chip"))}`).join(" | ")}`);
+    await log(`pulls behind (all repos): ${[...document.querySelectorAll(".pulls-card")].map((c) => `${text(c.querySelector(".pulls-card-title"))} => ${text(c.querySelector(".pulls-behind")) || "-"}`).join(" | ")}`);
     // Asked again and again once the harness is told to flip the switch.
     let allowedNow = false;
     const poll = setInterval(() => {
@@ -195,6 +196,63 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
         await shot("repo-pulls");
       });
 
+      // Update from the base: a pull request that is behind says so and has
+      // the button; the update goes through and the folder, being on that
+      // branch, is offered a pull (never pulled unasked). The other one
+      // conflicts: the dialog lists the files, and from then on the pull
+      // request says "Conflicts" itself, with the guidance where the button was.
+      await step("update-branch", async () => {
+        const pane = () => stage().querySelector<HTMLElement>(".pulls-detail") as HTMLElement;
+        const card = (title: string) =>
+          [...stage().querySelectorAll<HTMLElement>(".pulls-card")].find((c) => text(c.querySelector(".pulls-card-title")).startsWith(title)) ?? null;
+        const rows = () =>
+          [...stage().querySelectorAll(".pulls-card")]
+            .map((c) => `${text(c.querySelector(".pulls-card-title"))} => ${text(c.querySelector(".pulls-behind")) || "not behind"}${c.querySelector(".pulls-conflicts") ? " + Conflicts" : ""}`)
+            .join(" | ");
+        const dialog = () => document.querySelector<HTMLElement>(".dialog");
+        const mergeCard = () => text(pane().querySelector(".pulls-merge")).slice(0, 360);
+        await log(`update rows before: ${rows()}`);
+
+        // The folder goes onto the pull request's branch, as after "Check out this branch".
+        await api.repoSwitch(copy.path, "feature/tunnel-ui");
+        card("Remote access")?.click();
+        await waitFor("the update button", () => text(pane().querySelector(".pulls-title")).startsWith("Remote access") && button("Update from main", pane()));
+        await log(`update behind: ${mergeCard()}`);
+        await shot("update-behind");
+        const before = (await api.repoHistory(copy.path)).rows.length;
+        button("Update from main", pane())?.click();
+        await waitFor("the offer to pull", () => dialog() && text(dialog()).includes("Your local branch is now behind"));
+        await log(`update offer: ${text(dialog())} | commits here before any pull: ${(await api.repoHistory(copy.path)).rows.length - before} new`);
+        await log(`update after: button ${button("Update from main", pane()) ? "still there" : "gone"} | ${mergeCard()}`);
+        await shot("update-offer");
+        (await waitFor("the Pull button", () => button("Pull", dialog() ?? undefined))).click();
+        await waitFor("the pull to finish", () => !dialog() && [...document.querySelectorAll(".toast")].some((t) => text(t).includes("Pulled")));
+        const after = await api.repoView(copy.path);
+        await log(`update pulled: branch=${after.branch} behind=${after.behind} new commits here=${(await api.repoHistory(copy.path)).rows.length - before}`);
+        await log(`update rows after: ${rows()}`);
+        await api.repoSwitch(copy.path, "main");
+
+        // The one that conflicts.
+        card("SSH handshake")?.click();
+        await waitFor("the other pull request", () => text(pane().querySelector(".pulls-title")).startsWith("SSH handshake") && button("Update from main", pane()));
+        await log(`conflict before: ${mergeCard()}`);
+        button("Update from main", pane())?.click();
+        await waitFor("the conflicts dialog", () => document.querySelector(".conflicts-dialog"));
+        await log(`conflict dialog: ${text(dialog())}`);
+        await log(`conflict dialog files: ${[...document.querySelectorAll(".conflicts-dialog .conflicts-files li")].map((li) => text(li)).join(", ")} | buttons: ${[...document.querySelectorAll(".conflicts-dialog button")].map((b) => text(b)).join(", ")}`);
+        await shot("update-conflicts");
+        const open = [...document.querySelectorAll<HTMLButtonElement>(".conflicts-dialog button")].find((b) => text(b).startsWith("Open in "));
+        open?.click();
+        await waitFor("the editor to open", () => !dialog() && [...document.querySelectorAll(".toast")].some((t) => text(t).startsWith("Opened in")));
+        await waitFor("the pull request to say it conflicts", () => pane().querySelector(".pulls-merge.is-conflicting") && card("SSH handshake")?.querySelector(".pulls-conflicts"));
+        await sleep(300);
+        const merge = [...pane().querySelectorAll<HTMLButtonElement>(".pulls-merge-top button")].map((b) => `${text(b) || b.getAttribute("aria-label")}${b.disabled ? " (off)" : ""}`);
+        await log(`conflict detail: ${mergeCard()}`);
+        await log(`conflict detail buttons: ${merge.join(", ")} | update button ${button("Update from main", pane()) ? "still there" : "replaced by the guidance"} | files: ${[...pane().querySelectorAll(".conflicts-files li")].map((li) => text(li)).join(", ")} | ${text(pane().querySelector(".pulls-conflicts-foot"))}`);
+        await log(`conflict rows: ${rows()}`);
+        await shot("conflicts-detail");
+      });
+
       // 8: issues.
       await step("issues", async () => {
         tab("issues")?.click();
@@ -203,9 +261,38 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
         await log(`issues open: ${[...stage().querySelectorAll(".issue-card")].map((c) => `${text(c)} (${c.className})`).join(" | ")}`);
         await log(`issue detail: ${text(stage().querySelector(".pulls-detail")).slice(0, 420)}`);
         await log(`issue markup kept as text: script elements in the pane = ${stage().querySelectorAll(".pulls-detail script").length}`);
+        // The description is Markdown, drawn; the markup in it is still text.
+        const md = stage().querySelector<HTMLElement>(".issue-body .md");
+        const count = (selector: string) => md?.querySelectorAll(selector).length ?? 0;
+        await log(
+          `issue markdown: headings=${count(".md-h")} strong=${count("strong")} code blocks=${count(".md-code")} (${text(md?.querySelector(".md-code-lang"))}) task boxes=${[...(md?.querySelectorAll<HTMLInputElement>(".md-task-box") ?? [])].map((b) => `${b.checked ? "x" : "-"}${b.disabled ? " read-only" : ""}`).join(", ")} table=${count("table")} (${count("td")} cells) quotes=${count("blockquote")} struck=${count("s")} rules=${count("hr")}`,
+        );
+        await log(
+          `issue markdown links: ${[...(md?.querySelectorAll<HTMLElement>(".md-link") ?? [])].map((a) => `${text(a)} -> ${a.title}${a.classList.contains("md-image") ? " (image, not loaded)" : ""}`).join(" | ")} | mention=${text(md?.querySelector(".md-mention"))}`,
+        );
+        await log(
+          `issue markdown safety: script=${document.querySelectorAll(".stage script").length} img=${count("img")} iframe=${count("iframe")} href=${count("[href]")} src=${count("[src]")} handlers=${[...(md?.querySelectorAll("*") ?? [])].filter((n) => n.getAttributeNames().some((a) => a.startsWith("on"))).length} | raw html shown as text: ${text(md).includes("<script>alert(1)</script>") && text(md).includes("<img src=x onerror=alert(1)>")} | trap link is text: ${![...(md?.querySelectorAll(".md-link") ?? [])].some((a) => text(a) === "a trap") && text(md).includes("a trap")}`,
+        );
+        await log(`issue comment markdown: ${[...stage().querySelectorAll(".pulls-comment .md")].map((c) => `ol items=${c.querySelectorAll("ol li").length} code=${text(c.querySelector(".md-code-inline"))}`).join(" | ")}`);
+        await shot("issue-markdown");
+        // A link that leads elsewhere is shown and asked about before it opens.
+        [...(md?.querySelectorAll<HTMLElement>(".md-link") ?? [])].find((a) => text(a) === "the docs")?.click();
+        await waitFor("the question about the link", () => document.querySelector(".dialog") && sees("Open this link in your browser?"));
+        await log(`outside link: ${text(document.querySelector(".dialog"))}`);
+        await click("Cancel");
+        await waitFor("the question to go", () => !document.querySelector(".dialog"));
         await shot("issues");
         const box = await waitFor("the comment box", () => stage().querySelector<HTMLTextAreaElement>(".issue-box"));
-        type(box, "Seen it too, on battery.");
+        // Write / Preview on the comment box.
+        type(box, "Seen it **too**, on battery.\n\n- [x] checked <script>alert(2)</script>");
+        const mdTab = (label: string, within: ParentNode = stage()) => [...within.querySelectorAll<HTMLButtonElement>(".md-tab")].find((b) => text(b) === label);
+        mdTab("Preview")?.click();
+        await waitFor("the comment preview", () => stage().querySelector(".issue-reply .md-preview .md"));
+        const pre = stage().querySelector<HTMLElement>(".issue-reply .md-preview");
+        await log(`comment preview: ${text(pre)} | strong=${text(pre?.querySelector("strong"))} task boxes=${pre?.querySelectorAll(".md-task-box").length} script=${pre?.querySelectorAll("script").length} | box hidden=${stage().querySelector(".issue-box")?.classList.contains("hidden")}`);
+        await shot("comment-preview");
+        mdTab("Write")?.click();
+        type(stage().querySelector<HTMLTextAreaElement>(".issue-box") as HTMLTextAreaElement, "Seen it too, on battery.");
         await click("Comment");
         await waitFor("the new comment", () => sees("Seen it too, on battery."));
         await log(`issue after comment: ${text(stage().querySelector(".pulls-detail .section")).slice(0, 260)}`);
@@ -221,7 +308,13 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
         await click("New issue");
         const title = await waitFor("the new issue dialog", () => document.querySelector<HTMLInputElement>("#compose-title"));
         type(title, "Walk-through issue");
-        type(document.querySelector("#compose-body") as HTMLTextAreaElement, "Opened by the self-test.");
+        type(document.querySelector("#compose-body") as HTMLTextAreaElement, "Opened by the *self-test*.");
+        const dialogEl = document.querySelector(".dialog") as HTMLElement;
+        mdTab("Preview", dialogEl)?.click();
+        await waitFor("the new issue preview", () => dialogEl.querySelector(".md-preview .md em"));
+        await log(`new issue preview: ${text(dialogEl.querySelector(".md-preview"))} | em=${text(dialogEl.querySelector(".md-preview em"))}`);
+        await shot("new-issue-preview");
+        mdTab("Write", dialogEl)?.click();
         await click("Open issue");
         await waitFor("the new issue", () => text(stage().querySelector(".pulls-title")) === "Walk-through issue");
         await sleep(300);

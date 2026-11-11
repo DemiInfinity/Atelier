@@ -55,6 +55,22 @@ make_copy() {
 }
 make_copy Atelier
 make_copy Marbl
+# Atelier also has the branch of pull request 14, pushed. The studio's copy
+# then gets one more commit on it, standing in for what "Update from main"
+# adds there, so a pull afterwards really has something to bring in. The
+# folder goes back to main.
+copy="$world/home/Atelier/DemiInfinity/Atelier"
+g -C "$copy" switch --quiet -c feature/tunnel-ui
+printf 'The switch lives under Open studio.\n' > "$copy/tunnel.md"
+g -C "$copy" add tunnel.md && g -C "$copy" commit --quiet -m "Remote access switch"
+g -C "$copy" push --quiet -u local feature/tunnel-ui
+g clone --quiet -b feature/tunnel-ui "$world/studio/Atelier.git" "$world/studio/merge-tmp"
+printf 'From main.\n' > "$world/studio/merge-tmp/from-main.md"
+g -C "$world/studio/merge-tmp" add from-main.md
+g -C "$world/studio/merge-tmp" commit --quiet -m "Merge main into feature/tunnel-ui"
+g -C "$world/studio/merge-tmp" push --quiet origin feature/tunnel-ui
+rm -rf "$world/studio/merge-tmp"
+g -C "$copy" switch --quiet main
 # Atelier: a pushed commit, an unpushed one, and three uncommitted changes.
 copy="$world/home/Atelier/DemiInfinity/Atelier"
 printf 'package main\n\nfunc main() {\n\tprintln("hello, studio")\n\tprintln("remote access")\n}\n' > "$copy/cmd/app/main.go"

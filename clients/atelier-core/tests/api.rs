@@ -1752,3 +1752,200 @@ fn the_device_says_whether_it_may_administer() {
     let me: Me = serde_json::from_value(json!({"device": null})).unwrap();
     assert_eq!(me.device, None);
 }
+
+#[tokio::test]
+async fn update_pull_updated_current_conflicts_and_refusals() {
+    let server = MockServer::start().await;
+    let at = |n: u64| format!("/api/app/v1/repos/DemiInfinity/Atelier/pulls/{n}/update");
+    for (n, status, body) in [
+        (14, 200, r#"{"updated":true,"head_sha":"4f2a9c1e"}"#),
+        (15, 200, r#"{"updated":false,"head_sha":"77aa01bc"}"#),
+        (
+            16,
+            409,
+            r#"{"error":"conflicts","message":"main and feature/tray both changed 2 files.","files":["cmd/app/main.go","README.md"]}"#,
+        ),
+        (
+            17,
+            422,
+            r#"{"error":"not_open","message":"This pull request is already merged."}"#,
+        ),
+        (18, 403, r#"{"error":"forbidden"}"#),
+        // Leniently: no flag, the sha under another name, files as null.
+        (19, 200, r#"{"sha":"abc1234","later":1}"#),
+        (20, 409, r#"{"error":"conflicts","files":null}"#),
+        (21, 409, r#"{"error":"busy","message":"Try again."}"#),
+        (22, 200, ""),
+    ] {
+        Mock::given(method("POST"))
+            .and(path(at(n)))
+            .and(header("authorization", bearer().as_str()))
+            .respond_with(raw(status, body))
+            .mount(&server)
+            .await;
+    }
+    let client = client(&server);
+    let update = |n| client.update_pull("DemiInfinity", "Atelier", n);
+
+    assert_eq!(
+        update(14).await.unwrap(),
+        UpdateOutcome::Updated {
+            head_sha: "4f2a9c1e".into()
+        }
+    );
+    assert_eq!(
+        update(15).await.unwrap(),
+        UpdateOutcome::UpToDate {
+            head_sha: "77aa01bc".into()
+        }
+    );
+    assert_eq!(
+        update(16).await.unwrap(),
+        UpdateOutcome::Conflicts {
+            message: "main and feature/tray both changed 2 files.".into(),
+            files: vec!["cmd/app/main.go".into(), "README.md".into()],
+        }
+    );
+    let closed = update(17).await.unwrap_err();
+    assert_eq!(
+        (closed.status(), closed.code()),
+        (Some(422), Some("not_open"))
+    );
+    assert_eq!(closed.to_string(), "This pull request is already merged.");
+    let forbidden = update(18).await.unwrap_err();
+    assert_eq!(
+        (forbidden.status(), forbidden.code()),
+        (Some(403), Some("forbidden"))
+    );
+    assert_eq!(
+        forbidden.to_string(),
+        "This device isn’t allowed to do that."
+    );
+    assert_eq!(
+        update(19).await.unwrap(),
+        UpdateOutcome::Updated {
+            head_sha: "abc1234".into()
+        }
+    );
+    assert_eq!(
+        update(20).await.unwrap(),
+        UpdateOutcome::Conflicts {
+            message: "This branch conflicts with its base.".into(),
+            files: vec![],
+        }
+    );
+    // A push that landed meanwhile, and the other refusals, by their codes.
+    for (n, status, code) in [
+        (23, 409, "branch_moved"),
+        (24, 422, "on_github"),
+        (25, 403, "branch_protected"),
+        (26, 422, "branch_missing"),
+        (27, 422, "unrelated"),
+    ] {
+        Mock::given(method("POST"))
+            .and(path(at(n)))
+            .respond_with(raw(status, &format!(r#"{{"error":"{code}"}}"#)))
+            .mount(&server)
+            .await;
+        let refused = update(n).await.unwrap_err();
+        assert_eq!(
+            (refused.status(), refused.code()),
+            (Some(status), Some(code))
+        );
+        assert!(!refused.to_string().contains("HTTP"), "{refused}");
+    }
+    // Another 409 stays an error.
+    let busy = update(21).await.unwrap_err();
+    assert_eq!((busy.status(), busy.code()), (Some(409), Some("busy")));
+    assert_eq!(
+        update(22).await.unwrap(),
+        UpdateOutcome::Updated {
+            head_sha: String::new()
+        }
+    );
+
+    // The request carries no body.
+    let sent = server.received_requests().await.unwrap();
+    assert!(sent.iter().all(|r| r.body.is_empty()));
+}
+
+#[tokio::test]
+async fn pulls_say_how_far_behind_they_are_and_whether_they_conflict() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/api/app/v1/pulls"))
+        .respond_with(raw(
+            200,
+            r#"{"pulls":[
+              {"repo":"a/b","number":1,"head":"x","base":"master","behind":3,"ahead":2,"conflicts":false},
+              {"repo":"a/b","number":2,"head":"y","base":"master","behind":1,"conflicts":true},
+              {"repo":"a/b","number":3,"head":"z","base":"master","behind":null,"conflicts":null},
+              {"repo":"a/b","number":4,"head":"w","base":"master"}]}"#,
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/app/v1/repos/a/b/pulls/2"))
+        .respond_with(raw(
+            200,
+            r#"{"repo":"a/b","number":2,"head":"y","base":"master","behind":1,"ahead":4,"conflicts":true,"conflict_files":["a.go","docs/b.md"]}"#,
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/app/v1/repos/a/b/pulls/3"))
+        .respond_with(raw(
+            200,
+            r#"{"repo":"a/b","number":3,"conflict_files":null}"#,
+        ))
+        .mount(&server)
+        .await;
+    let client = client(&server);
+    let pulls = client.pulls().await.unwrap();
+    assert_eq!(
+        pulls
+            .iter()
+            .map(|p| (p.behind, p.ahead, p.conflicts))
+            .collect::<Vec<_>>(),
+        [
+            (Some(3), Some(2), Some(false)),
+            (Some(1), None, Some(true)),
+            (None, None, None),
+            (None, None, None),
+        ]
+    );
+    assert_eq!(
+        pulls.iter().map(|p| p.behind()).collect::<Vec<_>>(),
+        [3, 1, 0, 0]
+    );
+    assert!(pulls[1].has_conflicts() && !pulls[0].has_conflicts() && !pulls[3].has_conflicts());
+    // No `can_update` from an older studio: behind and no conflicts.
+    assert_eq!(
+        pulls.iter().map(|p| p.can_update()).collect::<Vec<_>>(),
+        [true, false, false, false]
+    );
+    // When the studio says, that wins (a protected head, or one on GitHub).
+    let said: PullSummary =
+        serde_json::from_str(r#"{"behind":3,"conflicts":false,"can_update":false}"#).unwrap();
+    assert!(!said.can_update());
+    let detail: Pull = serde_json::from_str(r#"{"behind":0,"can_update":true}"#).unwrap();
+    assert!(detail.can_update());
+
+    let pull = client.pull("a", "b", 2).await.unwrap();
+    assert_eq!((pull.behind(), pull.ahead), (1, Some(4)));
+    assert!(pull.has_conflicts());
+    assert_eq!(pull.conflict_files, ["a.go", "docs/b.md"]);
+    let quiet = client.pull("a", "b", 3).await.unwrap();
+    assert!(!quiet.has_conflicts() && quiet.conflict_files.is_empty());
+    // What an older studio never sent isn't written back out.
+    let json = serde_json::to_value(&quiet).unwrap();
+    for key in [
+        "behind",
+        "ahead",
+        "conflicts",
+        "conflict_files",
+        "can_update",
+    ] {
+        assert!(json.get(key).is_none(), "{key}");
+    }
+}

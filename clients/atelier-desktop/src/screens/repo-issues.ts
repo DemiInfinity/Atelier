@@ -11,6 +11,7 @@ import "../styles/issues.css";
 
 import { api, asError, type Events, type IssueRow, type IssueView, type LabelView } from "../api";
 import { ago, h, mount, pill, plural } from "../dom";
+import { markdown, writePreview, type MarkdownHandlers } from "../markdown";
 import type { RepoHost, TabView } from "./repo";
 
 /** A label as a small chip; its colour (checked on the Rust side) only tints a dot. */
@@ -71,6 +72,8 @@ export function issuesTab(host: RepoHost, repo: string): TabView {
   let timer: ReturnType<typeof setTimeout> | undefined;
   // What was typed in the comment box survives a re-read of the issue.
   let draft = "";
+  /** The comment box is showing its preview. */
+  let previewing = false;
 
   const tabs = h("div", { class: "issues-states", role: "tablist", "aria-label": "Which issues" });
   const list = h("div", { class: "pulls-list" });
@@ -177,6 +180,7 @@ export function issuesTab(host: RepoHost, repo: string): TabView {
     if (number === picked && detail) return;
     picked = number;
     draft = "";
+    previewing = false;
     drawList();
     void loadDetail(true);
   }
@@ -240,6 +244,21 @@ export function issuesTab(host: RepoHost, repo: string): TabView {
     });
   }
 
+  /** `#12` in someone's text: that issue here; a pull request opens in the browser. */
+  async function openRef(number: number): Promise<void> {
+    if (rows?.some((r) => r.number === number)) {
+      select(number);
+      return;
+    }
+    try {
+      await api.issueDetail(repo, number);
+      select(number);
+    } catch {
+      await ctx.busy(null, () => api.openWeb(`/${repo}/pulls/${number}`));
+    }
+  }
+  const links: MarkdownHandlers = { openLink: (url) => ctx.openLink(url), openRef: (number) => void openRef(number) };
+
   function drawDetail(): void {
     const view = detail;
     if (!view) {
@@ -269,6 +288,7 @@ export function issuesTab(host: RepoHost, repo: string): TabView {
         void ctx.busy(send, async () => {
           await api.issueComment(repo, view.number, box.value);
           draft = "";
+          previewing = false;
           await reloadAll();
         }),
     });
@@ -309,9 +329,7 @@ export function issuesTab(host: RepoHost, repo: string): TabView {
       h(
         "section",
         { class: ["issue-body", github && "tone-github from-github"], "aria-label": "Description" },
-        view.body.trim()
-          ? h("div", { class: "issue-text selectable", text: view.body })
-          : h("span", { class: "muted", text: "No description." }),
+        view.body.trim() ? markdown(view.body_md, links) : h("span", { class: "muted", text: "No description." }),
       ),
       h(
         "section",
@@ -329,12 +347,12 @@ export function issuesTab(host: RepoHost, repo: string): TabView {
                   c.tag ? h("span", { class: "pulls-comment-tag", text: c.tag }) : null,
                   h("span", { class: "muted push-right", text: c.at ? ago(c.at) : "" }),
                 ),
-                h("span", { class: "pulls-comment-body issue-text selectable", text: c.body }),
+                markdown(c.body_md, links, "pulls-comment-body"),
               ),
             )
           : h("span", { class: "muted", text: "No comments yet." }),
       ),
-      h("div", { class: "col issue-reply" }, box, h("div", { class: "row wrap issue-actions" }, send, toggle, h("span", { class: "grow" }), browser)),
+      h("div", { class: "col issue-reply" }, writePreview(box, links, { previewing, onMode: (on) => (previewing = on) }), h("div", { class: "row wrap issue-actions" }, send, toggle, h("span", { class: "grow" }), browser)),
     );
   }
 
