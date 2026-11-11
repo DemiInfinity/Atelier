@@ -53,6 +53,10 @@ func (a *App) servePages(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if r.URL.Path == "/" {
+		pagesWelcome(w, r)
+		return
+	}
 	segs, ok := pagesSplitPath(r.URL.Path)
 	if !ok || len(segs) == 0 || segs[0] == "" {
 		pagesPlain404(w, r)
@@ -117,15 +121,6 @@ func pagesRedirectSlash(w http.ResponseWriter, r *http.Request) {
 		target += "?" + r.URL.RawQuery
 	}
 	http.Redirect(w, r, target, http.StatusMovedPermanently)
-}
-
-func pagesPlain404(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusNotFound)
-	if r.Method != http.MethodHead {
-		_, _ = io.WriteString(w, "404: no site or file here\n")
-	}
 }
 
 // pagesServeFile serves name (relative, may end in "/") from the live deploy.

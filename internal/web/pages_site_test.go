@@ -127,7 +127,7 @@ func TestPagesFromBranch(t *testing.T) {
 	f.push(t, "main")
 
 	// Not published yet.
-	pagesWant(t, pagesGet(t, a, "/zoe/demo/", nil), 404, "", "no site")
+	pagesWant(t, pagesGet(t, a, "/zoe/demo/", nil), 404, "", "There isn't a site here")
 
 	f.save(t, url.Values{"source": {"branch"}, "branch": {"main"}, "folder": {"/"}}, http.StatusSeeOther)
 	ps := f.site(t)
@@ -222,10 +222,16 @@ func TestPagesHostIsolation(t *testing.T) {
 	f.save(t, url.Values{"source": {"branch"}, "branch": {"main"}}, http.StatusSeeOther)
 
 	// The pages host serves no app routes, git, static UI files or cookies.
-	for _, p := range []string{"/", "/signin", "/setup", "/settings/tokens", "/static/atelier.css", "/zoe/demo.git/info/refs",
+	welcome := pagesGet(t, a, "/", map[string]string{"Cookie": f.ck["Cookie"]})
+	pagesWant(t, welcome, 200, "text/html; charset=utf-8", "Atelier Pages")
+	if welcome.Header().Get("Set-Cookie") != "" || strings.Contains(welcome.Body.String(), "zoe") {
+		t.Errorf("welcome page leaks: cookie %q", welcome.Header().Get("Set-Cookie"))
+	}
+	for _, p := range []string{"/signin", "/setup", "/settings/tokens", "/static/atelier.css", "/zoe/demo.git/info/refs",
 		"/api/v3/user", "/healthz", "/zoe"} {
 		rec := pagesGet(t, a, p, map[string]string{"Cookie": f.ck["Cookie"]})
-		if rec.Code != 404 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain") {
+		if rec.Code != 404 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
+			!strings.Contains(rec.Body.String(), "There isn't a site here") || rec.Header().Get("Set-Cookie") != "" {
 			t.Errorf("pages host %s = %d %q", p, rec.Code, rec.Header().Get("Content-Type"))
 		}
 	}
@@ -348,7 +354,7 @@ func TestPagesPrivateRepos(t *testing.T) {
 	if err := a.db.UpdateRepo(ctx, f.demo.ID, "", true); err != nil {
 		t.Fatal(err)
 	}
-	pagesWant(t, pagesGet(t, a, "/zoe/demo/", nil), 404, "text/plain; charset=utf-8", "")
+	pagesWant(t, pagesGet(t, a, "/zoe/demo/", nil), 404, "text/html; charset=utf-8", "There isn't a site here")
 	// …even for the owner, and nothing new can be published.
 	pagesWant(t, pagesGet(t, a, "/zoe/demo/", f.ck), 404, "", "")
 	before, _ := a.db.PagesDeploys(ctx, f.demo.ID, 100)
