@@ -1,0 +1,108 @@
+/* Messages: moments on the left, their lines in the middle, a preview on
+   the darker ground to the right. */
+
+.messages-tones {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--raised);
+  border: 1px solid var(--line2);
+}
+.messages-tone {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--ink2);
+  font: 500 12px var(--font-text);
+  cursor: pointer;
+}
+.messages-tone[aria-pressed="true"] { background: var(--amber-bg2); color: var(--amber); }
+.messages-tone:disabled { opacity: 0.7; }
+
+.messages-columns { flex: 1; min-height: 0; display: flex; }
+.messages-problem { gap: 12px; }
+
+.messages-moments {
+  flex: 0 0 240px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 12px 10px;
+  border-right: 1px solid var(--line);
+  background: var(--bar);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.messages-when { padding: 0 8px 6px; }
+.messages-moment {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--ink2);
+  font: 500 13px var(--font-text);
+  text-align: left;
+  cursor: pointer;
+}
+.messages-moment:hover { background: color-mix(in srgb, var(--sel) 60%, transparent); }
+.messages-moment[aria-pressed="true"] { background: var(--sel); color: var(--ink); }
+.messages-count { color: var(--ink3); font-size: 12px; }
+
+.messages-editor {
+  flex: 1 1 360px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.messages-heading { gap: 2px; }
+.messages-title { font: 600 16px var(--font-text); }
+.messages-lines { display: flex; flex-direction: column; gap: 6px; }
+.messages-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.messages-line-text { font-size: 14px; overflow-wrap: anywhere; }
+.messages-yours { flex: none; color: var(--amber); font-size: 12px; }
+
+.messages-form { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.messages-form-row { display: flex; gap: 8px; }
+.messages-own { flex: 1; font-size: 14px; }
+.btn.messages-add { height: 36px; padding: 0 14px; font-size: 13px; }
+.messages-add-problem { color: var(--red); font-size: 12px; }
+
+.messages-rules { margin-top: auto; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+
+.messages-preview {
+  flex: 0 1 380px;
+  min-width: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+  background: var(--deep);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 12px;
+}
+/* Drawn like a real pop-up, but it is a picture: nothing to click. */
+.messages-toast { cursor: default; animation: none; }
+.messages-toast.off { --tone: var(--ink3); border-color: var(--line2); }
+.messages-another { align-self: flex-start; }

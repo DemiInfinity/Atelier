@@ -1,0 +1,88 @@
+/* Today. */
+
+.today-head .btn { height: 32px; font-size: 13px; }
+.today-head .btn.primary { padding: 0 14px; }
+.today-actions { gap: 8px; }
+
+.today-body { display: flex; flex-direction: column; gap: 16px; }
+.today-body > .columns { width: 100%; }
+
+/* Needs you */
+.today-need {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.today-need-title { font-weight: 500; font-size: 14px; overflow-wrap: anywhere; }
+.today-need .muted { overflow-wrap: anywhere; }
+.today-need .btn { font-size: 13px; }
+
+/* Working copies */
+.today-copy {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.3fr) minmax(130px, 1fr) minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 560px;
+  padding: 10px 12px;
+}
+.today-copy-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.today-copy-name:hover .today-copy-title { text-decoration: underline; }
+.today-copy-title { font-weight: 600; font-size: 14px; }
+.today-copy-branch { font-size: 12px; color: var(--ink2); }
+.today-copy-state { color: var(--ink3); }
+.today-copy-state.is-yours { color: var(--amber); }
+.today-copy-state.is-github { color: var(--blue2); }
+
+/* Running on this machine */
+.today-running {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--violet-line);
+  background: var(--violet-bg);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.today-running:hover { border-color: var(--violet); }
+.today-running-top { gap: 8px; }
+.today-running-title { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+
+/* From your studio */
+.today-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--tone-line);
+  background: var(--tone-bg);
+  color: var(--ink);
+  text-align: left;
+}
+/* Your own items sit on the plain panel, with the plain rule. */
+.today-feed.tone-yours { border-color: var(--line); }
+button.today-feed { cursor: pointer; }
+button.today-feed:hover { border-color: var(--tone); }
+.today-feed-top { gap: 8px; }
+.today-feed-tag { color: var(--tone); font-size: 12px; font-weight: 500; }
+.today-feed-text { overflow-wrap: anywhere; }

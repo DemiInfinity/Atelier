@@ -105,6 +105,17 @@ impl Config {
         })
     }
 
+    /// Deletes `config.toml` in `dir`. A file that isn't there is fine.
+    pub fn remove(dir: &Path) -> Result<()> {
+        let path = dir.join(FILE_NAME);
+        match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                Err(Error::io(format!("Couldn’t remove {}", path.display()), e))
+            }
+            _ => Ok(()),
+        }
+    }
+
     /// Writes `config.toml` into `dir` (created if needed), atomically.
     pub fn save(&self, dir: &Path) -> Result<()> {
         std::fs::create_dir_all(dir)

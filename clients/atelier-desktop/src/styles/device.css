@@ -1,0 +1,88 @@
+/* This device. */
+
+.device-caps { gap: 6px; }
+.pill.device-cap { padding: 1px 9px; }
+
+.device-body { display: flex; flex-direction: column; gap: 16px; }
+.device-body > .columns { width: 100%; }
+.columns > .narrow.device-side { gap: 16px; }
+
+/* No runner here */
+.device-absent { gap: 8px; }
+.device-absent-title { font: 600 14px var(--font-text); }
+
+/* Running now */
+.device-job {
+  border-radius: 14px;
+  border: 1px solid var(--violet-line);
+  background: var(--violet-bg2);
+  overflow: hidden;
+}
+.device-job-top { gap: 10px; padding: 14px 16px; }
+.device-job-words { flex: 1 1 240px; min-width: 0; }
+.device-job-title { font: 600 15px var(--font-text); overflow-wrap: anywhere; }
+.device-tail {
+  margin: 0;
+  padding: 14px 16px;
+  border-top: 1px solid var(--violet-track);
+  background: var(--ground);
+  font: 400 12.5px/1.7 var(--font-mono);
+  color: var(--ink2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 50px;
+  max-height: 190px;
+  overflow: auto;
+  cursor: text;
+}
+.device-tail:focus-visible { outline-offset: -2px; }
+.device-job-foot {
+  padding: 10px 16px;
+  border-top: 1px solid var(--violet-track);
+  color: var(--ink3);
+  font-size: 12px;
+}
+
+/* Waiting for you */
+.device-waiting {
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+/* The one a "needs you" button led here for. */
+.device-waiting.is-asked { border-color: var(--violet); box-shadow: 0 0 0 1px var(--violet); }
+.device-waiting-words { flex: 1 1 260px; min-width: 0; }
+.device-waiting-title { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.device-waiting .muted { overflow-wrap: anywhere; }
+.btn.device-approve { padding: 0 14px; }
+.btn.device-approve:hover:not(:disabled) { border-color: transparent; filter: brightness(1.06); }
+
+/* Earlier on this machine */
+.device-run {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 480px;
+  min-height: 42px;
+  padding: 4px 14px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+button.device-run { border: none; border-radius: 0; cursor: pointer; }
+/* The rule between rows, which the button reset above would otherwise take away. */
+.table > button.device-run + *, .table > * + button.device-run { border-top: 1px solid var(--line); }
+button.device-run:hover { background: var(--raised); }
+button.device-run:focus-visible { outline-offset: -2px; }
+.pill.device-run-status { width: 62px; padding: 1px 0; text-align: center; }
+.device-run-name { font-weight: 500; }
+.device-run-at { flex: none; width: 54px; text-align: right; }
+
+/* The cards on the right */
+.device-card-tight { gap: 8px; }
+.device-chips { gap: 6px; }
+.device-chip { padding: 2px 9px; border-radius: 8px; border: 1px solid var(--line2); font-size: 12px; }
+.btn.device-link { height: auto; padding: 0; font-size: 13px; }

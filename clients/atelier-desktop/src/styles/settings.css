@@ -1,0 +1,66 @@
+/* Settings: a grid of cards. */
+
+.settings-grid {
+  max-width: 880px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.settings-card { padding: 18px; border-radius: 14px; min-width: 0; }
+.settings-title { font: 600 15px var(--font-text); }
+.settings-host { font: 500 13px var(--font-mono); overflow-wrap: anywhere; }
+.settings-status { display: flex; align-items: center; gap: 8px; }
+.settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-problem { color: var(--red); }
+
+/* Remote access is the one thing here that opens the studio to the outside,
+   so the whole card turns red while it is on. */
+.settings-remote.on { border-color: var(--red-line); background: var(--red-card); }
+.settings-remote-label { color: var(--ink3); font-weight: 600; }
+.settings-remote-label.on { color: var(--red); }
+.settings-address { font-size: 13px; overflow-wrap: anywhere; }
+.settings-sessions { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; color: var(--ink2); font-size: 12px; }
+.settings-sessions li { overflow-wrap: anywhere; }
+.settings-link {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--red-line);
+  background: var(--ground);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-link-url { font-size: 12px; overflow-wrap: anywhere; }
+
+.settings-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bar);
+}
+.settings-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--amber-bg2);
+  color: var(--amber);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+.settings-avatar.company { background: var(--violet-chip); color: var(--violet); }
+.settings-identity-name { font-weight: 500; }
+.settings-identity-mail { color: var(--ink3); font-size: 12px; }
+
+.settings-messages { display: flex; align-items: center; gap: 10px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* A link in the middle of a sentence. */
+.btn.settings-inline { display: inline; height: auto; padding: 0; font-size: 12px; border: none; }
+.settings-version { color: var(--ink4); font-size: 12px; }

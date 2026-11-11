@@ -1,0 +1,150 @@
+/* First run: a column of steps on the left, the current step on the right. */
+
+.welcome {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  display: flex;
+  background: var(--ground);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+.welcome-aside {
+  flex: 1 1 320px;
+  max-width: 400px;
+  min-width: 0;
+  padding: 0 28px 28px;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  overflow-y: auto;
+}
+/* The strip stands where the design draws the traffic lights. */
+.welcome-aside .drag-strip { margin: 0 -28px -12px; }
+
+.welcome-brand { display: flex; align-items: center; gap: 12px; }
+.welcome-brand-name { font-family: var(--font-head); font-weight: 700; font-size: 26px; }
+
+.welcome-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.welcome-step-row { display: flex; gap: 12px; padding: 12px; border-radius: 12px; }
+.welcome-step-row.current { background: var(--sel); }
+.welcome-step-n {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  color: var(--ink3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 13px var(--font-text);
+}
+.welcome-step-row.current .welcome-step-n { border-color: var(--amber); color: var(--amber); }
+.welcome-step-row.done .welcome-step-n { color: var(--green); }
+.welcome-step-title { font-weight: 600; color: var(--ink2); }
+.welcome-step-row.current .welcome-step-title { color: var(--ink); }
+.welcome-step-detail { color: var(--ink3); font-size: 13px; }
+
+.welcome-footnote { margin-top: auto; color: var(--ink3); font-size: 13px; }
+
+.welcome-right { flex: 2 1 480px; min-width: 0; display: flex; flex-direction: column; }
+
+/* Centred while it fits, scrolling from the top when it doesn't. */
+.welcome-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 clamp(24px, 6vw, 80px) 40px;
+  display: flex;
+  flex-direction: column;
+}
+.welcome-step { margin: auto 0; display: flex; flex-direction: column; gap: 22px; }
+
+.welcome-title {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: clamp(32px, 4vw, 46px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  outline: none;
+}
+.welcome-lead { color: var(--ink2); font-size: 16px; max-width: 34em; overflow-wrap: anywhere; }
+.welcome-quiet { color: var(--ink3); font-size: 13px; max-width: 40em; }
+
+.welcome-form { margin: 0; display: flex; flex-direction: column; gap: 10px; max-width: 520px; }
+.welcome-label { color: var(--ink3); font-size: 13px; }
+.welcome-form-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.welcome-input {
+  flex: 1 1 260px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--amber-line);
+  background: var(--panel);
+  color: var(--ink);
+  font: 400 15px var(--font-mono);
+}
+.welcome-input::placeholder { color: var(--ink4); }
+.welcome-input:focus-visible { outline: none; border-color: var(--amber); }
+
+.welcome-status { min-height: 20px; font-size: 13px; }
+.welcome-wait { color: var(--ink3); font-size: 13px; }
+.welcome-found-line { display: flex; align-items: center; gap: 8px; color: var(--green); }
+.welcome-error { display: flex; flex-direction: column; gap: 2px; color: var(--red); font-size: 13px; max-width: 520px; overflow-wrap: anywhere; }
+.welcome-error-hint { color: var(--ink2); }
+
+.welcome-box {
+  max-width: 520px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bar);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.welcome-box-title { font-weight: 600; }
+.welcome-url { overflow-wrap: anywhere; font-size: 13px; }
+
+.welcome-code {
+  align-self: flex-start;
+  padding: 14px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--amber-line);
+  background: var(--amber-card);
+  font: 500 clamp(28px, 4vw, 40px) / 1.2 var(--font-mono);
+  letter-spacing: 0.12em;
+  cursor: text;
+}
+
+.welcome-facts { gap: 12px; }
+.welcome-fact { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.welcome-fact .dot { align-self: center; }
+.welcome-fact .col { min-width: 0; }
+.welcome-fact:has(.welcome-print) .dot { align-self: flex-start; margin-top: 7px; }
+.welcome-fact.warn { color: var(--amber); }
+.welcome-print { color: var(--ink3); font-size: 12px; overflow-wrap: anywhere; }
+
+.welcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.welcome-actions .btn.lg { height: 46px; padding: 0 18px; border-radius: 10px; font-size: 14px; }
+.welcome-skip.btn.link { color: var(--ink3); }
+
+.welcome-found { display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
+.welcome-list { max-height: min(42vh, 380px); overflow-y: auto; }
+.welcome-folder { display: flex; align-items: center; gap: 14px; padding: 10px 14px; }
+.welcome-folder-top { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.welcome-folder-name { font-weight: 600; }
+.welcome-folder-branch { flex: none; max-width: 40%; color: var(--ink3); font-size: 12px; }
+.welcome-folder-path { color: var(--ink3); font-size: 12px; }
+.welcome-match { flex: none; max-width: 50%; color: var(--ink3); font-size: 13px; text-align: right; overflow-wrap: anywhere; }
+.welcome-match.yours { color: var(--amber); }
+.welcome-github { color: var(--blue2); }
+
+.welcome-runner { gap: 10px; }
+.welcome-caps { display: flex; flex-wrap: wrap; gap: 6px; }

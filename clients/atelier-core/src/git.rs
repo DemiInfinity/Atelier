@@ -12,6 +12,9 @@ use crate::api::{CreateRepo, Repo};
 use crate::client::Client;
 use crate::error::{Error, Result};
 
+mod work;
+pub use work::*;
+
 /// How to run `git`.
 #[derive(Clone, Debug)]
 pub struct Git {
@@ -115,32 +118,9 @@ impl Git {
         if output.status.success() {
             return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
         }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let message = stderr
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .map(|l| {
-                l.trim_start_matches("fatal: ")
-                    .trim_start_matches("error: ")
-            })
-            .collect::<Vec<_>>()
-            .join(" · ");
-        Err(Error::Git {
-            command: args
-                .iter()
-                .find(|a| !a.to_string_lossy().starts_with('-'))
-                .map(|a| a.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            message: if message.is_empty() {
-                format!("exit {}", output.status.code().unwrap_or(-1))
-            } else {
-                message
-            },
-        })
+        Err(failure(&args, &output))
     }
 
-    /// Like [`Git::run`], with `None` for "git said no".
     async fn try_run(&self, dir: &Path, args: &[&str]) -> Result<Option<String>> {
         match self.run(Some(dir), args).await {
             Ok(out) => Ok(Some(out)),
@@ -423,6 +403,46 @@ impl Git {
             previous_origin,
         })
     }
+}
+
+/// Turns a failed git run into [`Error::Git`]: the first word of the command
+/// and what git said, on one line.
+fn failure(args: &[OsString], output: &std::process::Output) -> Error {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let message = stderr
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(|l| {
+            l.trim_start_matches("fatal: ")
+                .trim_start_matches("error: ")
+        })
+        .collect::<Vec<_>>()
+        .join(" · ");
+    Error::Git {
+        command: command_word(args),
+        message: if message.is_empty() {
+            format!("exit {}", output.status.code().unwrap_or(-1))
+        } else {
+            message
+        },
+    }
+}
+
+/// The git subcommand in `args`, skipping options and `-c key=value` pairs.
+fn command_word(args: &[OsString]) -> String {
+    let mut skip = false;
+    for arg in args {
+        let arg = arg.to_string_lossy();
+        if skip {
+            skip = false;
+        } else if arg == "-c" {
+            skip = true;
+        } else if !arg.starts_with('-') {
+            return arg.into_owned();
+        }
+    }
+    String::new()
 }
 
 fn is_ssh_url(url: &str) -> bool {

@@ -777,3 +777,18 @@ fn editing_your_own_messages() {
         "You have no messages of your own for clean."
     );
 }
+
+#[test]
+fn removing_the_config_twice_is_fine() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        studio: Some("https://studio.example".into()),
+        ..Config::default()
+    };
+    config.save(dir.path()).unwrap();
+    assert!(dir.path().join("config.toml").exists());
+    Config::remove(dir.path()).unwrap();
+    assert!(!dir.path().join("config.toml").exists());
+    Config::remove(dir.path()).unwrap();
+    assert_eq!(Config::load(dir.path()).unwrap(), Config::default());
+}

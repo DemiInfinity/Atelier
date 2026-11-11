@@ -1,0 +1,232 @@
+/* The Repository screen: the bar, and the Changes, History and Branches tabs. */
+
+/* -------------------------------------------------------------------- bar */
+
+.repo-bar {
+  flex: none;
+  background: var(--bar);
+  border-bottom: 1px solid var(--line);
+  line-height: 1.4;
+}
+.repo-bar-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px 10px;
+}
+.repo-title {
+  min-width: 0;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.repo-title .owner { color: var(--ink3); font-weight: 500; }
+
+.repo-branch { max-width: 320px; padding: 0 10px; font: 500 12px var(--font-mono); }
+.repo-branch svg { flex: none; }
+.repo-branch-icon { color: var(--amber); }
+
+.repo-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.repo-quiet { padding: 0 4px; }
+
+/* "Open in VS Code" and its chevron: two buttons drawn as one. */
+.repo-split { display: inline-flex; }
+.repo-split .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.repo-split .btn:last-child { margin-left: -1px; padding: 0 8px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.repo-split .btn:hover, .repo-split .btn:focus-visible { position: relative; }
+
+.repo-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 14px; }
+.repo-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink2);
+  font: 500 13px var(--font-text);
+  cursor: pointer;
+}
+.repo-tab:hover { color: var(--ink); }
+.repo-tab[aria-current="page"] { color: var(--ink); border-bottom-color: var(--amber); }
+.repo-tab .count { color: var(--ink3); font-size: 12px; }
+
+.repo-body { flex: 1; min-height: 0; display: flex; }
+.repo-body > * { flex: 1; min-width: 0; min-height: 0; }
+
+.repo-note { padding: 16px 20px; color: var(--ink3); font: 400 13px/1.45 var(--font-text); white-space: normal; }
+.repo-gone { display: flex; flex-direction: column; gap: 10px; }
+
+.repo .plus { flex: none; color: var(--green); }
+.repo .minus { flex: none; color: var(--red); }
+
+/* ---------------------------------------------------------------- changes */
+
+.changes { display: flex; flex-direction: column; }
+.changes-cols { flex: 1; min-height: 0; display: flex; }
+
+.files {
+  flex: 0 0 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--bar);
+}
+.files-list { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; }
+.files-head { display: flex; align-items: center; gap: 8px; padding: 0 8px 4px; }
+.files-rows { display: flex; flex-direction: column; gap: 4px; }
+
+.file-row { display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 8px; }
+.file-row:hover { background: color-mix(in srgb, var(--sel) 60%, transparent); }
+.file-row.sel { background: var(--sel); }
+.file-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: 400 12px var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.file-mark { flex: none; width: 16px; color: var(--tone); font-weight: 500; }
+.file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.commit-form { margin: 0; padding: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.commit-buttons { display: flex; gap: 8px; }
+.commit-buttons .btn { padding: 0 8px; }
+
+.diff { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.diff-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.diff-path { flex: 1; min-width: 0; font: 500 13px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diff-body { flex: 1; min-height: 0; overflow: auto; padding: 8px 0; font: 400 12.5px/1.7 var(--font-mono); }
+.diff-body:focus-visible { outline-offset: -2px; }
+
+.diff-row { display: flex; min-width: max-content; min-height: 1.7em; color: var(--code-ink); }
+.diff-row .num { flex: none; width: 44px; padding-right: 8px; text-align: right; color: var(--ink4); }
+.diff-row .sign { flex: none; width: 18px; color: var(--red); }
+.diff-row .code { white-space: pre; tab-size: 4; padding-right: 24px; }
+.diff-row.k-add { background: var(--green-bg); }
+.diff-row.k-add .sign { color: var(--green); }
+.diff-row.k-del { background: var(--red-bg); }
+.diff-row.k-hunk { background: var(--panel); color: var(--ink3); }
+.diff-row.k-note { color: var(--ink3); }
+/* The "rest isn't shown" line has no gutters; line it up with the text. */
+.diff-more { min-width: max-content; padding: 6px 16px 6px 106px; color: var(--ink3); font: 400 12px/1.45 var(--font-text); }
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 6px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bar);
+  color: var(--ink3);
+  font-size: 12px;
+}
+
+.changes-clean { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; justify-content: center; }
+.clean-card {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 28px 32px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.clean-card > svg { flex: none; }
+.clean-words { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.clean-head { font-family: var(--font-head); font-weight: 700; font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
+.clean-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--ink2); font-size: 14px; }
+
+/* ---------------------------------------------------------------- history */
+
+.history { display: flex; }
+.hist-list { flex: 1; min-width: 0; overflow: auto; }
+
+.hist-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 520px;
+  height: 40px;
+  padding: 0 16px 0 8px;
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--ink);
+  font: 400 13px var(--font-text);
+  text-align: left;
+  cursor: pointer;
+}
+.hist-row:hover { background: color-mix(in srgb, var(--sel) 60%, transparent); }
+.hist-row[aria-current="true"] { background: var(--sel); }
+.hist-row:focus-visible { outline-offset: -2px; }
+.hist-graph { flex: none; }
+.hist-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.hist-subject { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.hist-who { flex: none; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink3); }
+.hist-when { flex: none; width: 76px; text-align: right; color: var(--ink3); }
+.hist-sha { flex: none; font: 400 12px var(--font-mono); color: var(--ink3); }
+.hist-more { padding: 12px 16px 16px 70px; color: var(--ink3); }
+
+.hist-aside {
+  flex: 0 0 340px;
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  background: var(--bar);
+  padding: 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.hist-words { display: flex; flex-direction: column; gap: 6px; }
+.hist-title { font: 600 15px var(--font-text); overflow-wrap: anywhere; }
+.hist-body { color: var(--ink2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.hist-meta { color: var(--ink3); font: 400 12px var(--font-mono); overflow-wrap: anywhere; }
+.hist-status { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 2px; }
+.hist-status .head { font-weight: 500; }
+.hist-files { display: flex; flex-direction: column; gap: 6px; }
+.hist-file { display: flex; gap: 8px; font: 400 12px var(--font-mono); }
+.hist-buttons { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* --------------------------------------------------------------- branches */
+
+.branches { overflow-y: auto; padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; }
+.branches-head { display: flex; align-items: center; gap: 12px; }
+.branches-list .repo-note { padding: 0; }
+.branch-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) minmax(150px, 1fr) 64px minmax(160px, 2fr) 76px;
+  align-items: center;
+  gap: 12px;
+  min-width: 720px;
+  min-height: 44px;
+  padding: 6px 14px;
+}
+.branch-name { min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.branch-do { display: flex; justify-content: flex-end; }
