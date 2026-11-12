@@ -65,9 +65,20 @@ To run it properly on a server with Docker, behind a proxy, with backups: see **
 - [Backups and restore](docs/backups.md)
 - [Remote access](docs/remote-access.md): Cloudflare Tunnel or Tailscale
 - [Pages](docs/pages.md): static sites
+- [The Atelier badge](docs/badge.md): show you use Atelier, or that you're waiting for it
 - [Agent workflow examples](docs/agents/)
 - [Desktop app and `atl`](clients/README.md)
 - [Roadmap](docs/roadmap.md): what's done and what's next
+
+## Show your support
+
+Waiting for Atelier to be ready? Add a small `.atelier` file to your GitHub profile repository and people running Atelier will see a "Waiting for Atelier" mark next to your name:
+
+```json
+{ "waiting": true }
+```
+
+How it works, and what it does and doesn't share: [The Atelier badge](docs/badge.md).
 
 ## Free and Pro
 
