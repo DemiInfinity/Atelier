@@ -83,7 +83,7 @@ Duo, Team and Company are planned and not built yet. Solo people shouldn't pay f
 
 ## Contributing
 
-Not open to code contributions yet; we'll say here when that changes. Bug reports and ideas are welcome as issues. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Atelier is not open to contributions yet: no pull requests, issues or feature requests for now. We'll say here when that changes. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licence
 

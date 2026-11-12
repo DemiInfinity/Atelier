@@ -2,21 +2,15 @@
 
 Thank you for wanting to help.
 
-## Not open to code contributions yet
+## Not open to contributions yet
 
-Atelier is still early and changing quickly, so **pull requests are not being accepted for now**. A pull request opened today will be closed without review. That is not a comment on its quality; the project is not ready to take outside code.
+Atelier is still early and changing quickly, so **it is not open to contributions of any kind for now**: no pull requests, no issues, no feature requests. Anything opened today will be closed without review. That is not a comment on its quality; the project is not ready to take outside input.
 
 We will say so here, and in the README, when that changes.
 
-## What helps right now
+## Security problems
 
-- **Bug reports.** Open an issue with what you did, what you expected, and what happened. Say how you run Atelier (Docker or from source) and which commit you built.
-- **Ideas and feedback.** Open an issue, especially if you run things on your own hardware and can say what you would need before trusting Atelier with your code.
-- **Security problems.** Please do not open a public issue. Use GitHub's private "Report a vulnerability" option on this repository.
-
-## When contributions open
-
-Expect a short contributor agreement before your first pull request is merged, so contributed code can be shipped in every edition of Atelier.
+If you find a security problem, please do not post it publicly. Use GitHub's private "Report a vulnerability" option on this repository.
 
 ## Licence
 
