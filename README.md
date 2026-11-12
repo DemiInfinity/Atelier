@@ -91,4 +91,6 @@ Copyright © 2026 DemiInfinity.
 
 Atelier is free software under the [GNU Affero General Public License v3.0](LICENSE): you may use, run, study, change and share it, and if you offer a changed version to others, including over a network, you must make your changes available under the same licence.
 
+**Credit is required.** If you share Atelier or something built from it, or run a changed version for other people, keep the copyright notices and show the credit "Based on Atelier by DemiInfinity" with a link to this repository, and mark your version as changed. The exact terms are in [NOTICE](NOTICE).
+
 The Team and Company editions (Atelier Pro) are separate, are not in this repository, and are under a commercial licence.
