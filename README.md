@@ -78,7 +78,11 @@ Waiting for Atelier to be ready? Add a small `.atelier` file to your GitHub prof
 { "waiting": true }
 ```
 
-How it works, and what it does and doesn't share: [The Atelier badge](docs/badge.md).
+And put the badge on your README so people can see it:
+
+[![Waiting for Atelier](docs/badges/waiting-for-atelier.svg)](docs/badge.md)
+
+The snippet to copy, how it works, and what it does and doesn't share: [The Atelier badge](docs/badge.md).
 
 ## Free and Pro
 

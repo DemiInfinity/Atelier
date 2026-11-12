@@ -31,6 +31,28 @@ Once you run your own studio, Atelier writes the file for you: **Settings → Te
 
 `studio` is only filled in when your studio has a public address; a home-network address is never published. If both `atelier` and `waiting` are true, `atelier` wins.
 
+## A picture for your README
+
+The file is for Atelier to read. If you also want people to see it, put one of these on your profile README or a project README.
+
+**Waiting for Atelier**
+
+[![Waiting for Atelier](badges/waiting-for-atelier.svg)](https://github.com/DemiInfinity/Atelier)
+
+```markdown
+[![Waiting for Atelier](https://raw.githubusercontent.com/DemiInfinity/Atelier/main/docs/badges/waiting-for-atelier.svg)](https://github.com/DemiInfinity/Atelier)
+```
+
+**I use Atelier**
+
+[![I use Atelier](badges/i-use-atelier.svg)](https://github.com/DemiInfinity/Atelier)
+
+```markdown
+[![I use Atelier](https://raw.githubusercontent.com/DemiInfinity/Atelier/main/docs/badges/i-use-atelier.svg)](https://github.com/DemiInfinity/Atelier)
+```
+
+Both also come as PNG, for places that don't show SVG: [`badges/waiting-for-atelier.png`](badges/waiting-for-atelier.png) and [`badges/i-use-atelier.png`](badges/i-use-atelier.png). Use the two together: the picture is for people, the `.atelier` file is for studios.
+
 ## What the file does and doesn't do
 
 - It is read by other people's Atelier studios, through GitHub, about once a day.

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="206" height="44" viewBox="0 0 206 44" role="img" aria-label="Waiting for Atelier">
+  <title>Waiting for Atelier</title>
+  <rect x="1" y="1" width="204" height="42" rx="11" fill="#1a1917" stroke="#f2b85c" stroke-opacity="0.55" stroke-dasharray="4 3" stroke-width="1.5"/>
+  <g transform="translate(10 8)" fill="none" stroke="#f2b85c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="2" width="24" height="24" rx="7" fill="none"/>
+    <path d="M9 19 L14 8 L19 19 M11 15 H17"/>
+  </g>
+  <text x="48" y="27" fill="#eeeae4" font-family="Inter, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" font-weight="600">Waiting for Atelier</text>
+</svg>
