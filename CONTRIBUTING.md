@@ -4,9 +4,9 @@ Thank you for wanting to help.
 
 ## Not open to contributions yet
 
-Atelier is still early and changing quickly, so **it is not open to contributions of any kind for now**: no pull requests, no issues, no feature requests. Anything opened today will be closed without review. That is not a comment on its quality; the project is not ready to take outside input.
+**Atelier is not open to contributions of any kind for now**: no pull requests, no issues, no feature requests. Anything opened today will be closed without review. That is not a comment on its quality.
 
-We will say so here, and in the README, when that changes.
+**This will change.** Right now we are building the core and its foundations, and we want to get those right and deliver a good product before taking outside input. Once they are solid, contributions will open, and we will say so here and in the README.
 
 ## Security problems
 
