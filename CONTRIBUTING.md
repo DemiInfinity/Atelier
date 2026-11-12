@@ -10,7 +10,7 @@ Thank you for wanting to help.
 
 ## Security problems
 
-If you find a security problem, please do not post it publicly. Use GitHub's private "Report a vulnerability" option on this repository.
+If you find a security problem, please do not post the details publicly. A private way to report one will be set up and announced here before contributions open.
 
 ## Licence
 
