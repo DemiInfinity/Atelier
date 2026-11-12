@@ -302,3 +302,19 @@ See [`deploy/nginx/atelier.conf`](deploy/nginx/atelier.conf). The important part
 **Built to grow:** sessions, tokens, SSH keys and passkeys belong to a person, and one permission check covers the web, HTTPS and SSH, so the Duo / Team / Company addons can plug in later.
 
 Design canvas: https://claude.ai/artifact/Pk6J4jME2YuBfMdhRHKX2q
+
+## Status
+
+Atelier is early and nowhere near finished. There is no installer yet: to try it you build it yourself (see [Running it](#running-it)). Expect rough edges and breaking changes.
+
+## Contributing
+
+Not open to code contributions yet; we will say here when that changes. Bug reports and ideas are welcome as issues. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Licence
+
+Copyright © 2026 DemiInfinity.
+
+Atelier is free software under the [GNU Affero General Public License v3.0](LICENSE): you may use, run, study, change and share it, and if you offer a changed version to others, including over a network, you must make your changes available under the same licence.
+
+The Team and Company editions (Atelier Pro) are separate, are not in this repository, and are under a commercial licence.
