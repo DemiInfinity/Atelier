@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorkingCopy } from "../api";
 import { copy } from "../testdata";
-import { ownerKey, PINNED_KEY, sidebarGroups, toggled } from "./sidebar";
+import { ownerKey, PINNED_KEY, sidebarGroups, splitWorktrees, toggled } from "./sidebar";
 
 const company = (name: string, over: Partial<WorkingCopy> = {}) =>
   copy(name, { owner: "Elyndra Studios LTD", owner_name: "elyndrastudios", owner_kind: "company", full_name: `elyndrastudios/${name}`, ...over });
@@ -57,5 +57,24 @@ describe("toggled", () => {
     expect(toggled([], "a", true)).toEqual(["a"]);
     expect(toggled(["a"], "a", true)).toEqual(["a"]);
     expect(toggled(["a", "b"], "a", false)).toEqual(["b"]);
+  });
+});
+
+describe("splitWorktrees", () => {
+  it("puts a linked worktree under its repository and leaves the rest", () => {
+    const main = copy("Atelier");
+    const tree = copy("fix-setup-race", { path: "/code/Atelier.worktrees/fix-setup-race", worktree_of: "/code/Atelier", branch: "fix/setup-race" });
+    const orphan = copy("lonely", { worktree_of: "/elsewhere/not-listed" });
+    const { roots, linked } = splitWorktrees([main, tree, copy("Tray"), orphan]);
+    expect(roots.map((c) => c.name)).toEqual(["Atelier", "Tray", "lonely"]);
+    expect([...linked.keys()]).toEqual(["/code/Atelier"]);
+    expect(linked.get("/code/Atelier")?.map((c) => c.branch)).toEqual(["fix/setup-race"]);
+  });
+
+  it("finds the repository in another list too", () => {
+    const tree = copy("side", { worktree_of: "/code/Atelier" });
+    const { roots, linked } = splitWorktrees([tree], [copy("Atelier"), tree]);
+    expect(roots).toEqual([]);
+    expect(linked.get("/code/Atelier")).toEqual([tree]);
   });
 });

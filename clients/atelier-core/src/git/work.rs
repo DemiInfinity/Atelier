@@ -1010,7 +1010,7 @@ fn parse_track(track: &str) -> (u64, u64) {
 }
 
 /// `HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1`.
-fn parse_decoration(decoration: &str) -> Vec<RefLabel> {
+pub(super) fn parse_decoration(decoration: &str) -> Vec<RefLabel> {
     let mut labels = Vec::new();
     for part in decoration.split(", ") {
         let part = part.trim();

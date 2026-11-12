@@ -1,0 +1,35 @@
+/* The flow area of the git client: tidy up commits, resolve conflicts, the
+   Undo bar, the in-progress banner, the careful dialogs. Loaded with the
+   repository screen (undo.ts), so the few shared pieces of the git client
+   live here too. Tokens are in base.css. */
+
+/* ---------------------------------------------- shared: the stand-ins */
+
+.git-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 28px;
+  overflow: auto;
+}
+.git-facts { margin: 0; padding-left: 18px; color: var(--ink2); font-size: 13px; line-height: 1.7; }
+.git-placeholder-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ------------------------------------------- undo bar and the banner */
+
+.undo-bar,
+.flow-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.undo-bar { background: var(--amber-bg); color: var(--ink); border-bottom-color: var(--amber-line); }
+.flow-banner { background: var(--blue-bg); color: var(--ink); border-bottom-color: var(--blue-line); }
+.undo-bar.hidden,
+.flow-banner.hidden { display: none; }
+
+.git-flow { }

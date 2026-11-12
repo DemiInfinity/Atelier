@@ -5,11 +5,20 @@
 
 import "../styles/repo.css";
 
-import { api, asError, type Events, type RepoView } from "../api";
+import { api, asError, flowApi, type Events, type RepoView } from "../api";
 import type { Ctx, MenuItem, Screen } from "../ctx";
 import { h, icon, mount } from "../dom";
+import { createGitNav, gitReady, type GitNav, type Place } from "../git-nav";
 import { manageMenu } from "../manage";
-import { DEFAULT_REPO_TAB, type RepoTab, type Route } from "../routes";
+import { DEFAULT_REPO_TAB, tabOfView, type GitView, type RepoTab, type Route } from "../routes";
+import * as flow from "../undo";
+import { gitBlameView, gitFileHistoryView } from "./git-blame";
+import * as gitBranches from "./git-branches";
+import { gitConflictView } from "./git-conflict";
+import * as gitHistory from "./git-history";
+import { gitTidyView } from "./git-rebase";
+import * as gitStage from "./git-stage";
+import { gitWorktreesView } from "./git-worktrees";
 import { pullsView } from "./pulls";
 import { aheadBehind, branchesTab } from "./repo-branches";
 import { changesTab } from "./repo-changes";
@@ -60,6 +69,12 @@ export interface RepoHost {
   switchBranch(name: string, button: HTMLButtonElement | null): Promise<void>;
   /** Asks for a name and makes a branch (from `from`, or from where you are). */
   newBranch(from: string | null): Promise<void>;
+  /**
+   * How the git client's screens lead to each other (History, file
+   * history, blame, Branches, worktrees, tidy up, conflicts, the Undo bar,
+   * the careful dialogs). See git-nav.ts.
+   */
+  nav: GitNav;
 }
 
 /** One tab's body. `reload` never rejects: it shows what went wrong itself. */
@@ -76,7 +91,15 @@ export interface TabView {
 export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>): Screen {
   const path = route.path;
   let view: RepoView | null = null;
-  let tab: RepoTab = route.tab ?? DEFAULT_REPO_TAB;
+  // A repository opens on History, unless the route asks for a view.
+  let place: Place = {
+    tab: route.view ? tabOfView(route.view) : (route.tab ?? DEFAULT_REPO_TAB),
+    view: route.view ?? null,
+    commit: route.commit,
+    section: route.section,
+    file: route.file,
+  };
+  let tab: RepoTab = place.tab;
   let current: TabView | null = null;
   let disposed = false;
   // True while our own `ctx.refresh()` is on its way, so the overview it
@@ -85,6 +108,9 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
 
   const bar = h("header", { class: "repo-bar", "data-tauri-drag-region": true });
   const body = h("div", { class: "repo-body" });
+  // The flow area's parts: made once, when that area is switched on.
+  let undoBar: flow.UndoBar | null = null;
+  let banner: flow.ProgressBanner | null = null;
   const el = h("div", { class: "screen repo" }, h("div", { class: "loading", text: "Opening the folder…" }));
 
   const host: RepoHost = {
@@ -97,6 +123,14 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
     push,
     switchBranch,
     newBranch,
+    nav: createGitNav({
+      ctx,
+      path,
+      place: () => place,
+      show,
+      reloadAll,
+      undoBar: () => undoBar,
+    }),
   };
 
   async function loadView(): Promise<void> {
@@ -114,6 +148,7 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
       ctx.fail(e);
     }
     await current?.reload();
+    void banner?.refresh();
     ownRefresh = true;
     void ctx.refresh().finally(() => {
       ownRefresh = false;
@@ -129,15 +164,37 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
       // A passing failure: what is on screen stays until the next look.
     }
     if (!disposed && tab === "changes") await current?.reload();
+    void banner?.refresh();
   }
 
+  /** A view of the git client: inside a tab, or a focused work view over it. */
+  function makeView(v: GitView): TabView {
+    switch (v.kind) {
+      case "file-history":
+        return gitFileHistoryView(host, { file: v.file, at: v.at });
+      case "blame":
+        return gitBlameView(host, { file: v.file, at: v.at });
+      case "worktrees":
+        return gitWorktreesView(host);
+      case "tidy":
+        return gitTidyView(host, { base: v.base, plan: v.plan });
+      case "conflicts":
+        return gitConflictView(host, { cause: v.cause });
+    }
+  }
+
+  // History, Changes and Branches each have a new screen (git-*.ts) that
+  // takes over from the old one when its area says it is ready.
   function makeTab(id: RepoTab): TabView {
     const fullName = view?.full_name ?? null;
     switch (id) {
+      case "history":
+        if (gitReady(gitHistory.READY)) return gitHistory.gitHistoryTab(host, { commit: place.commit });
+        break;
       case "changes":
-        return changesTab(host);
+        return gitReady(gitStage.READY) ? gitStage.gitStageTab(host, { file: place.file }) : changesTab(host);
       case "branches":
-        return branchesTab(host);
+        return gitReady(gitBranches.READY) ? gitBranches.gitBranchesTab(host, { section: place.section }) : branchesTab(host);
       case "pulls":
         if (fullName) return pullsView(ctx, {}, { repo: fullName, name: (view as RepoView).name });
         break;
@@ -152,14 +209,37 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
   }
 
   function showTab(next: RepoTab): void {
+    show({ tab: next, view: null });
+  }
+
+  /** Shows a tab, or a view of the git client over it. */
+  function show(next: Place): void {
     current?.dispose?.();
     // A tab that needs the studio falls back to History without it.
-    tab = view && repoTabs(view).some((t) => t.id === next) ? next : DEFAULT_REPO_TAB;
-    current = makeTab(tab);
+    const wanted = next.view ? tabOfView(next.view) : next.tab;
+    tab = view && repoTabs(view).some((t) => t.id === wanted) ? wanted : DEFAULT_REPO_TAB;
+    place = { ...next, tab };
+    current = place.view ? makeView(place.view) : makeTab(tab);
     mount(body, current.el);
     drawBar();
     // The studio tabs read by themselves when they are made.
-    if (tab === "history" || tab === "changes" || tab === "branches") void current.reload();
+    if (place.view || tab === "history" || tab === "changes" || tab === "branches") void current.reload();
+    // While something is under way, the new Changes tab is Resolve conflicts.
+    if (!place.view && tab === "changes" && gitReady(gitStage.READY)) void conflictsInstead();
+  }
+
+  async function conflictsInstead(): Promise<void> {
+    const state = await flowState();
+    if (disposed || !state || state.kind === "none") return;
+    if (place.view === null && tab === "changes") show({ tab: "changes", view: { kind: "conflicts" } });
+  }
+
+  async function flowState() {
+    try {
+      return await flowApi.state(path);
+    } catch {
+      return null;
+    }
   }
 
   /** After a pin, a rename or a delete: read everything again. */
@@ -322,20 +402,6 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
       ),
     );
 
-    const handOver = v.git_tool
-      ? h("button", {
-          type: "button",
-          class: "btn",
-          text: `Hand over to ${v.git_tool.label}`,
-          title: "For anything heavier than this app does",
-          onclick: (e) =>
-            void ctx.busy(e.currentTarget as HTMLButtonElement, async () => {
-              const label = await api.repoHandOver(path);
-              ctx.say(`Handed over to ${label}.`);
-            }),
-        })
-      : null;
-
     const webPath = v.web_path;
     const studio = webPath
       ? h("button", {
@@ -363,7 +429,7 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
           dataset: { tab: spec.id },
           "aria-current": tab === spec.id ? "page" : undefined,
           onclick: () => {
-            if (tab !== spec.id) showTab(spec.id);
+            if (tab !== spec.id || place.view !== null) showTab(spec.id);
           },
         },
         spec.label,
@@ -414,7 +480,7 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
           v.name,
         ),
         branch,
-        h("div", { class: "repo-actions" }, fetch, pull, pushButton, open, handOver, studio, pin, more),
+        h("div", { class: "repo-actions" }, undoBar ? flow.repoBarButtons(host) : null, fetch, pull, pushButton, open, studio, pin, more),
       ),
       h("nav", { class: "repo-tabs", "aria-label": "Repository", "data-tauri-drag-region": true }, repoTabs(v).map(tabButton)),
     );
@@ -446,8 +512,15 @@ export function repoScreen(ctx: Ctx, route: Extract<Route, { screen: "repo" }>):
       return;
     }
     if (disposed) return;
-    mount(el, bar, body);
-    showTab(tab);
+    if (gitReady(flow.READY)) {
+      undoBar = flow.undoBar(host);
+      banner = flow.progressBanner(host);
+      mount(el, bar, banner.el, undoBar.el, body);
+      void banner.refresh();
+    } else {
+      mount(el, bar, body);
+    }
+    show(place);
   })();
 
   return {

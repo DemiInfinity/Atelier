@@ -82,6 +82,8 @@ src-tauri/src/
                 No Tauri in it, so tests drive it directly.
   today.rs      Today / sidebar / popover data (needs, working copies, feed)
   repo.rs       one working copy: changes, diffs, commit, history, branches
+  gitui_*.rs    the git client, one module per area (stage, history,
+                branches, flow): see docs/git-client.md
   manage.rs     rename / delete in the studio, pins, folded groups, runs
                 by pull request
   pulls.rs      pull requests       device.rs   the runner and its jobs
@@ -90,7 +92,7 @@ src-tauri/src/
   add.rs        publish / clone / start new
   studio.rs     remote access, messages, the app's own settings
   notify.rs     a notify event → the words, colour and target of a pop-up
-  tools.rs      the fixed table of editors and git tools
+  tools.rs      the fixed table of editors
   paths.rs      which folders may be touched
   prefs.rs      [desktop] in the shared config.toml
   commands.rs   #[tauri::command] wrappers, one line each
@@ -101,6 +103,9 @@ src/
   sideview.ts   the sidebar's repositories: Pinned, a group per owner
   manage.ts     pin, rename, delete: shared by the sidebar and the bar
   markdown.ts   draws that tree; Write / Preview over a text box
+  git-nav.ts    how the git client's screens lead to each other
+  screens/git-*.ts, undo.ts, git-dialogs.ts, sidebar-worktrees.ts
+                the git client's screens, by area (docs/git-client.md)
   screens/*.ts  one module per screen       tray.ts  the popover
                 (repo.ts and its tabs: repo-history, repo-changes,
                 pulls.ts scoped to the repository, repo-issues,
@@ -186,7 +191,8 @@ src/
 | --- | --- |
 | App, first run | `app_state` `connect_start` `connect_poll` `connect_reopen` `connect_cancel` `find_folders` `suggest_folders` `add_suggested_folders` `folders_done` `runner_probe` `disconnect` |
 | Today | `overview` `run_log` |
-| Repository | `repo_view` `repo_changes` `repo_diff` `repo_commit` `repo_discard` `repo_undo_commit` `repo_history` `repo_commit_detail` `repo_branches` `repo_switch` `repo_new_branch` `repo_fetch` `repo_pull` `repo_push` `repo_open` `repo_hand_over` |
+| Repository | `repo_view` `repo_changes` `repo_diff` `repo_commit` `repo_discard` `repo_undo_commit` `repo_history` `repo_commit_detail` `repo_branches` `repo_switch` `repo_new_branch` `repo_fetch` `repo_pull` `repo_push` `repo_open` |
+| Git client | `stage_…` `history_…` `branches_…` `flow_…`: listed in [docs/git-client.md](docs/git-client.md) |
 | Links | `open_web` `open_studio` `open_github` `open_link` `markdown_preview` |
 | Looking after a repository | `repo_rename` `repo_delete` `repo_set_pinned` `set_group_collapsed` `repo_runs` |
 | Issues | `issues_list` `issue_detail` `issue_create` `issue_comment` `issue_set_open` |
@@ -194,12 +200,22 @@ src/
 | This device | `device_view` `runner_set_taking` `runner_set_rule` `runner_tail` `job_stop` |
 | Folders | `add_watch_folder` `remove_watch_folder` `choose_clone_root` `open_folder` |
 | Add a repository | `choose_folder` `folder_plan` `folder_init` `publish` `search_repos` `clone_repo` `mirror_and_clone` `create_new` |
-| Settings | `remote_view` `remote_set` `remote_link` `set_editor` `set_git_tool` `set_notify_pref` `set_app_pref` |
+| Settings | `remote_view` `remote_set` `remote_link` `set_editor` `set_notify_pref` `set_app_pref` |
 | Messages | `messages_view` `messages_set_tone` `messages_add` `messages_remove` `messages_set_rule` |
 | Windows | `show_main` `hide_popover` `quit` (`selftest_*` for the walk-through) |
 
 Events to the windows: `notify`, `status`, `remote`, `runner`, `connection`,
 `signed-out`, `navigate` (main window), `popover-shown` (popover).
+
+### The git client
+
+Staging by chunk and line, the commit graph, branches, tags, remotes,
+putting changes aside, worktrees, merge, rebase, tidying up commits,
+resolving conflicts and undo are in `atelier-core` (`src/git/`), wrapped by
+`src-tauri/src/gitui_<area>.rs` and drawn by the files of four areas.
+[docs/git-client.md](docs/git-client.md) has who owns which file, every
+command with its types, how the screens lead to each other, and the fixture
+repository (`scripts/git-fixture.sh`) they are built against.
 
 ### Adding a screen
 

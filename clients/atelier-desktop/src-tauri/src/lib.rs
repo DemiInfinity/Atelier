@@ -8,6 +8,10 @@ pub mod add;
 pub mod desk;
 pub mod device;
 pub mod error;
+pub mod gitui_branches;
+pub mod gitui_flow;
+pub mod gitui_history;
+pub mod gitui_stage;
 pub mod issues;
 pub mod manage;
 pub mod markdown;
@@ -21,7 +25,7 @@ pub mod today;
 pub mod tools;
 
 mod commands;
-mod shell;
+pub(crate) mod shell;
 
 pub use desk::Desk;
 pub use shell::run;

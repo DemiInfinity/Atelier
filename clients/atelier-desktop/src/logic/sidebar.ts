@@ -61,3 +61,23 @@ export function toggled(collapsed: readonly string[], key: string, shut: boolean
   const rest = collapsed.filter((k) => k !== key);
   return shut ? [...rest, key] : rest;
 }
+
+/**
+ * Takes linked worktrees out of a list of working copies: `roots` are the
+ * rest, `linked` maps a repository's folder to its worktrees. A worktree
+ * whose repository isn't in the list stays a row of its own.
+ */
+export function splitWorktrees<T extends Pick<WorkingCopy, "path" | "worktree_of">>(
+  copies: readonly T[],
+  known: readonly Pick<WorkingCopy, "path">[] = copies,
+): { roots: T[]; linked: Map<string, T[]> } {
+  const paths = new Set(known.map((copy) => copy.path));
+  const roots: T[] = [];
+  const linked = new Map<string, T[]>();
+  for (const copy of copies) {
+    const main = copy.worktree_of;
+    if (main !== null && paths.has(main)) linked.set(main, [...(linked.get(main) ?? []), copy]);
+    else roots.push(copy);
+  }
+  return { roots, linked };
+}

@@ -1,4 +1,4 @@
-//! Editors and git tools the app can open a folder in. The table is fixed
+//! Editors the app can open a folder in. The table is fixed
 //! and built in; nothing from the studio or from a config file is ever run
 //! as a command, and nothing goes through a shell.
 
@@ -9,8 +9,9 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
     Editor,
-    GitTool,
-    /// Offered in both lists.
+    /// Not offered as an editor; opened only when asked for by id.
+    Terminal,
+    /// A file manager, offered with the editors.
     Either,
 }
 
@@ -25,7 +26,7 @@ pub struct Preset {
     cli: Option<&'static str>,
 }
 
-pub const PRESETS: [Preset; 8] = [
+pub const PRESETS: [Preset; 7] = [
     Preset {
         id: "vscode",
         label: "VS Code",
@@ -62,16 +63,9 @@ pub const PRESETS: [Preset; 8] = [
         cli: Some("studio"),
     },
     Preset {
-        id: "fork",
-        label: "Fork",
-        role: Role::GitTool,
-        mac_app: Some("Fork"),
-        cli: Some("fork"),
-    },
-    Preset {
         id: "terminal",
         label: "Terminal",
-        role: Role::GitTool,
+        role: Role::Terminal,
         mac_app: Some("Terminal"),
         cli: None,
     },
@@ -85,9 +79,6 @@ pub const PRESETS: [Preset; 8] = [
 ];
 
 pub const DEFAULT_EDITOR: &str = "vscode";
-pub const DEFAULT_GIT_TOOL: &str = "fork";
-/// The git tool choice that means "don't offer to hand over".
-pub const NO_TOOL: &str = "none";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct PresetInfo {
@@ -128,20 +119,6 @@ pub fn editors(os: &str) -> Vec<PresetInfo> {
         .collect()
 }
 
-pub fn git_tools(os: &str) -> Vec<PresetInfo> {
-    let mut tools: Vec<PresetInfo> = PRESETS
-        .iter()
-        .filter(|p| p.role == Role::GitTool)
-        .filter(|p| launch_plan(p.id, Path::new("/"), os).is_some())
-        .map(|p| info(p, os))
-        .collect();
-    tools.push(PresetInfo {
-        id: NO_TOOL.to_string(),
-        label: "Nothing".to_string(),
-    });
-    tools
-}
-
 /// The configured editor when it is a preset, otherwise the default. (`atl`
 /// accepts any command in `editor`; the app never runs one.)
 pub fn editor_or_default(configured: Option<&str>) -> &'static Preset {
@@ -150,17 +127,6 @@ pub fn editor_or_default(configured: Option<&str>) -> &'static Preset {
         .filter(|p| matches!(p.role, Role::Editor | Role::Either))
         .or_else(|| find(DEFAULT_EDITOR))
         .expect("the default editor is in the table")
-}
-
-/// The configured git tool: `None` when it is "none".
-pub fn git_tool_or_default(configured: Option<&str>) -> Option<&'static Preset> {
-    match configured {
-        Some(NO_TOOL) => None,
-        Some(id) => find(id)
-            .filter(|p| p.role == Role::GitTool)
-            .or_else(|| find(DEFAULT_GIT_TOOL)),
-        None => find(DEFAULT_GIT_TOOL),
-    }
 }
 
 /// The program and arguments that open `folder` in preset `id` on `os`
@@ -217,18 +183,13 @@ mod tests {
         assert_eq!(launch_plan("/bin/sh", folder, "linux"), None);
         assert_eq!(editor_or_default(Some("my-own-script")).id, "vscode");
         assert_eq!(
-            editor_or_default(Some("fork")).id,
+            editor_or_default(Some("terminal")).id,
             "vscode",
-            "a git tool isn’t an editor"
+            "the terminal isn’t an editor"
         );
+        assert_eq!(launch_plan("fork", folder, "macos"), None);
         assert_eq!(editor_or_default(Some("cursor")).id, "cursor");
         assert_eq!(editor_or_default(None).id, "vscode");
-        assert_eq!(git_tool_or_default(Some("none")).map(|p| p.id), None);
-        assert_eq!(
-            git_tool_or_default(Some("terminal")).unwrap().id,
-            "terminal"
-        );
-        assert_eq!(git_tool_or_default(Some("nonsense")).unwrap().id, "fork");
     }
 
     #[test]
@@ -249,7 +210,11 @@ mod tests {
         assert_eq!(launch_plan("xcode", folder, "linux"), None);
         assert!(editors("linux").iter().all(|e| e.id != "xcode"));
         assert!(editors("macos").iter().any(|e| e.id == "xcode"));
-        assert_eq!(git_tools("macos").last().unwrap().id, "none");
+        assert!(editors("macos").iter().all(|e| e.id != "terminal"));
+        assert_eq!(
+            launch_plan("terminal", folder, "macos").unwrap().1[..2],
+            ["-a".to_string(), "Terminal".to_string()]
+        );
         assert_eq!(editors("windows").last().unwrap().label, "Explorer");
     }
 }

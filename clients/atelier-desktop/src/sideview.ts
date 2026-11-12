@@ -16,9 +16,15 @@ export interface SideActions {
   publish(copy: WorkingCopy): void;
   othersOpen: boolean;
   toggleOthers(): void;
+  /** Rows to draw under a repository's row (its linked worktrees). */
+  under?(copy: WorkingCopy): Child;
 }
 
-function repoRow(copy: WorkingCopy, actions: SideActions): HTMLElement {
+function repoRow(copy: WorkingCopy, actions: SideActions): Child {
+  return [repoLine(copy, actions), actions.under?.(copy) ?? null];
+}
+
+function repoLine(copy: WorkingCopy, actions: SideActions): HTMLElement {
   const known = copy.full_name !== null;
   const more: HTMLButtonElement = h(
     "button",

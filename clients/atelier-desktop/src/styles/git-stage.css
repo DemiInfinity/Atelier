@@ -1,0 +1,5 @@
+/* The Changes tab of the git client (area "stage"): the staged and
+   not-staged lists, the commit form, chunks and line selection.
+   Tokens are in base.css; shared git-client pieces are in git-flow.css. */
+
+.git-stage { }

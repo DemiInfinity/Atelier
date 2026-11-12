@@ -164,6 +164,31 @@ impl World {
         .await;
     }
 
+    /// The git client's fixture (`scripts/git-fixture.sh`) under the clone
+    /// root: feature/tunnel-ui with 5 commits to push, 3 changed files (2
+    /// staged), 2 put-aside entries, two tags, the remotes `studio` and
+    /// `github`, a branch that conflicts (`feature/backoff-rework`) and a
+    /// linked worktree at `<folder>.worktrees/fix-setup-race`.
+    pub fn git_fixture(&self, name: &str) -> PathBuf {
+        let repo = self.home().join("Atelier").join(name);
+        std::fs::create_dir_all(repo.parent().unwrap()).unwrap();
+        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/git-fixture.sh");
+        let out = std::process::Command::new("sh")
+            .arg(&script)
+            .arg(&repo)
+            .env("HOME", self.home())
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("sh runs");
+        assert!(
+            out.status.success(),
+            "git-fixture.sh: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        repo
+    }
+
     /// A bare repository standing in for the studio's copy.
     pub async fn bare(&self, name: &str) -> PathBuf {
         let bare = self.base().join("studio").join(format!("{name}.git"));

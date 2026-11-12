@@ -222,20 +222,6 @@ impl Desk {
         self.update_config(|config| config.editor = Some(preset.id.to_string()))
     }
 
-    pub fn set_git_tool(&self, id: &str) -> CmdResult<()> {
-        let id = if id == tools::NO_TOOL {
-            tools::NO_TOOL
-        } else {
-            tools::find(id)
-                .filter(|p| p.role == tools::Role::GitTool)
-                .ok_or_else(|| {
-                    CmdError::invalid(format!("“{id}” isn’t a git tool Atelier knows."))
-                })?
-                .id
-        };
-        self.update_config(|config| config.git_tool = Some(id.to_string()))
-    }
-
     /// One of the "Notifications on this Mac" switches.
     pub fn set_notify_pref(&self, key: &str, on: bool) -> CmdResult<()> {
         self.update_prefs(|prefs| match key {

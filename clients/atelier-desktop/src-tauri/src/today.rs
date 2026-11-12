@@ -80,6 +80,9 @@ pub struct WorkingCopy {
     pub action: &'static str,
     /// The short form for the sidebar: `3 · ↑1`, `↓2`.
     pub short: String,
+    /// For a linked worktree: the main folder of its repository. The
+    /// sidebar shows it under that repository, not as one of its own.
+    pub worktree_of: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -204,7 +207,6 @@ pub fn working_copy(
     let (state, tone, action, short) =
         copy_state(local.changed_files, ahead, behind, follows_github);
     WorkingCopy {
-        path,
         name: repo.map_or_else(|| local.folder_name(), |r| r.name.clone()),
         owner: owner_label,
         owner_name: repo.map(|r| r.owner.clone()).unwrap_or_default(),
@@ -222,6 +224,9 @@ pub fn working_copy(
         tone,
         action,
         short,
+        worktree_of: atelier_core::git::worktree::linked_worktree_main(std::path::Path::new(&path))
+            .map(|main| main.to_string_lossy().into_owned()),
+        path,
     }
 }
 

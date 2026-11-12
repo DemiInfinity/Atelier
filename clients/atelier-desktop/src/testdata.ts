@@ -18,5 +18,6 @@ export const copy = (name: string, over: Partial<WorkingCopy> = {}): WorkingCopy
   tone: "quiet",
   action: "open",
   short: "",
+  worktree_of: null,
   ...over,
 });

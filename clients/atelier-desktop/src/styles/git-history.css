@@ -1,0 +1,5 @@
+/* The History tab of the git client (area "history"): the graph, search
+   and filters, the commit pane, one file's history, blame.
+   Tokens are in base.css; shared git-client pieces are in git-flow.css. */
+
+.git-history { }

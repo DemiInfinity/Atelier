@@ -1,0 +1,8 @@
+/* The Branches tab of the git client (area "branches"): branches, tags,
+   put aside, remotes, worktrees, and the sidebar's worktree rows.
+   Tokens are in base.css; shared git-client pieces are in git-flow.css. */
+
+.git-branches { }
+
+/* A linked worktree under its repository in the sidebar. */
+.side-worktree { padding-left: 34px; min-height: 26px; font-size: 12px; }

@@ -227,11 +227,6 @@ pub async fn repo_open(desk: D<'_>, path: String, preset: Option<String>) -> Cmd
     desk.repo_open(&path, preset.as_deref()).await
 }
 
-#[tauri::command]
-pub async fn repo_hand_over(desk: D<'_>, path: String) -> CmdResult<String> {
-    desk.repo_hand_over(&path).await
-}
-
 // ------------------------------------------------------------------ links
 
 #[tauri::command]
@@ -420,11 +415,6 @@ pub async fn remote_link(desk: D<'_>) -> CmdResult<PasskeyLink> {
 #[tauri::command]
 pub async fn set_editor(desk: D<'_>, id: String) -> CmdResult<()> {
     desk.set_editor(&id)
-}
-
-#[tauri::command]
-pub async fn set_git_tool(desk: D<'_>, id: String) -> CmdResult<()> {
-    desk.set_git_tool(&id)
 }
 
 #[tauri::command]

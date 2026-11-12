@@ -103,9 +103,7 @@ export interface AppState {
   clone_root: string;
   watch: string[];
   editor: PresetInfo;
-  git_tool: PresetInfo | null;
   editors: PresetInfo[];
-  git_tools: PresetInfo[];
   prefs: Prefs;
   os: "macos" | "windows" | "linux";
   /** "Mac", "PC" or "computer": for "On this Mac". */
@@ -230,6 +228,8 @@ export interface WorkingCopy {
   action: "open" | "push" | "pull";
   /** `3 · ↑1` for the sidebar. */
   short: string;
+  /** For a linked worktree: the main folder (`path`) of its repository. */
+  worktree_of: string | null;
 }
 
 export interface RunningRow {
@@ -308,7 +308,6 @@ export interface RepoView {
   default_branch: string | null;
   on_github: boolean;
   editor: PresetInfo;
-  git_tool: PresetInfo | null;
   /** `Demi · personal identity` */
   committing_as: string | null;
   /** RFC 3339 */
@@ -783,7 +782,12 @@ export interface MessagesView {
 
 // --------------------------------------------------------------- commands
 
-const call = <T>(name: string, args?: Record<string, unknown>): Promise<T> => invoke<T>(name, args);
+/**
+ * Calls a command. The git client's areas may use this from their own files
+ * for a command they added to their own `gitui_*.rs` (and nothing else:
+ * commands that exist already have a typed function below).
+ */
+export const call = <T>(name: string, args?: Record<string, unknown>): Promise<T> => invoke<T>(name, args);
 
 export const api = {
   /** `fresh`: ask the studio again now instead of using what was read in the last minute. */
@@ -840,8 +844,6 @@ export const api = {
   repoPush: (path: string) => call<PushResult>("repo_push", { path }),
   /** Opens in an editor preset (the configured one when omitted). Resolves to its label. */
   repoOpen: (path: string, preset?: string) => call<string>("repo_open", { path, preset: preset ?? null }),
-  /** Hands over to the configured git tool. Resolves to its label. */
-  repoHandOver: (path: string) => call<string>("repo_hand_over", { path }),
 
   // Links (only the studio and github.com are ever opened)
   openWeb: (webPath: string) => call<void>("open_web", { webPath }),
@@ -915,7 +917,6 @@ export const api = {
   remoteSet: (on: boolean) => call<RemoteView>("remote_set", { on }),
   remoteLink: () => call<{ url: string; expires_in: number }>("remote_link"),
   setEditor: (id: string) => call<void>("set_editor", { id }),
-  setGitTool: (id: string) => call<void>("set_git_tool", { id }),
   setNotifyPref: (key: keyof NotifyPrefs, on: boolean) => call<void>("set_notify_pref", { key, on }),
   setAppPref: (key: "autostart" | "menu_bar" | "hide_dock", on: boolean) =>
     call<void>("set_app_pref", { key, on }),
@@ -938,6 +939,764 @@ export const api = {
   selftestPlan: () => call<string | null>("selftest_plan"),
   selftestLog: (line: string) => call<void>("selftest_log", { line }),
   selftestPopover: () => call<void>("selftest_popover"),
+};
+
+// ===================================================================
+// The git client. Four areas, each with its own commands
+// (src-tauri/src/gitui_<area>.rs), its own types here and its own object
+// of typed calls: `stageApi`, `historyApi`, `branchesApi`, `flowApi`.
+// Every call takes the working copy's folder (`path`) first.
+// docs/git-client.md says who owns what.
+// ===================================================================
+
+// ------------------------------------------------- git client: shared
+
+export type FileStatus = "modified" | "added" | "deleted" | "renamed" | "copied";
+
+/** One file of a diff, as flat numbered lines (`atelier_core::diff::FileDiff`). */
+export interface FileDiff {
+  /** null for a new file. */
+  old_path: string | null;
+  /** null for a deleted file. */
+  new_path: string | null;
+  status: FileStatus;
+  binary: boolean;
+  additions: number;
+  deletions: number;
+  lines: DiffLine[];
+  truncated: boolean;
+}
+
+export interface RefLabel {
+  kind: "head" | "branch" | "remote" | "tag";
+  /** `main`, `v0.9`; for a remote branch, the branch without the remote. */
+  name: string;
+  remote: string | null;
+}
+
+/** A ref drawn as a pill, in the colour threads. */
+export interface Pill {
+  text: string;
+  tone: "yours" | "github" | "quiet";
+}
+
+export type OperationKind = "none" | "merge" | "rebase" | "cherry_pick" | "revert" | "stash_apply";
+
+export interface PlanItem {
+  id: string;
+  short: string;
+  action: "keep" | "reword" | "squash" | "fixup" | "drop";
+  subject: string;
+  done: boolean;
+  /** The step it stopped at. */
+  current: boolean;
+}
+
+/** What is under way in a working copy. */
+export interface OperationState {
+  kind: OperationKind;
+  /** What started it: `merge`, `pull`, `rebase`, `tidy`, `cherry_pick`, `revert`, `stash_apply`, `stash_pop`, `switch`. */
+  cause: string | null;
+  /** `Merging main into feature/tunnel-ui` */
+  title: string;
+  yours: string | null;
+  theirs: string | null;
+  step: number | null;
+  total: number | null;
+  plan: PlanItem[];
+  /** Files that still have an unresolved conflict. */
+  conflicts: number;
+  can_continue: boolean;
+  can_skip: boolean;
+}
+
+/** How an action ended: done, or stopped at conflicts (`done: false`). */
+export interface OpOutcome {
+  done: boolean;
+  /** Plain words for the Undo bar: `Rebased feature/x onto main`. */
+  summary: string;
+  conflicts: string[];
+  head: string | null;
+  /** Its entry in Recent actions, once done. */
+  journal: number | null;
+  state: OperationState;
+}
+
+// -------------------------------------------------- git client: stage
+
+export type StageSide = "staged" | "unstaged";
+
+export interface StageEntry {
+  path: string;
+  old_path: string | null;
+  kind: ChangeKind;
+  additions: number | null;
+  deletions: number | null;
+  binary: boolean;
+}
+
+export interface HeadCommit {
+  sha: string;
+  short: string;
+  subject: string;
+  body: string;
+  /** Some remote has it: amending rewrites shared history. */
+  pushed: boolean;
+}
+
+export interface StageView {
+  branch: string | null;
+  /** The commit "Amend last commit" would rewrite. */
+  head: HeadCommit | null;
+  staged: StageEntry[];
+  unstaged: StageEntry[];
+  /** Neither staged nor not: resolve them first (flow area). */
+  conflicted: StageEntry[];
+  /** `Demi <demi@example.com>` */
+  committing_as: string | null;
+}
+
+export interface ChunkLine {
+  /** Position in the chunk: what a line selection sends back. */
+  index: number;
+  kind: "context" | "add" | "delete";
+  old: number | null;
+  new: number | null;
+  text: string;
+  /** The file ends here without a newline. */
+  no_newline: boolean;
+}
+
+export interface Chunk {
+  index: number;
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  /** What git printed after the `@@`: usually the enclosing function. */
+  section: string;
+  additions: number;
+  deletions: number;
+  lines: ChunkLine[];
+}
+
+export interface StageDiff {
+  path: string;
+  old_path: string | null;
+  side: StageSide;
+  kind: ChangeKind;
+  status: FileStatus;
+  /** Binary files are staged or discarded whole. */
+  binary: boolean;
+  additions: number;
+  deletions: number;
+  chunks: Chunk[];
+  /** Send this back with a chunk or line selection: a file that changed in between is refused, not mangled. */
+  token: string;
+}
+
+export type Selection =
+  | { kind: "file" }
+  | { kind: "chunks"; chunks: number[] }
+  | { kind: "lines"; lines: { chunk: number; line: number }[] };
+
+export interface Committed {
+  sha: string;
+  short: string;
+  subject: string;
+  amended: boolean;
+  journal: number | null;
+}
+
+export const stageApi = {
+  status: (path: string) => call<StageView>("stage_status", { path }),
+  diff: (path: string, file: string, side: StageSide) => call<StageDiff>("stage_diff", { path, file, side }),
+  /** Stages a file, chunks or lines of its unstaged diff. */
+  add: (path: string, file: string, selection: Selection, token?: string) =>
+    call<void>("stage_add", { path, file, selection, token: token ?? null }),
+  /** Unstages a file, chunks or lines of its staged diff. */
+  remove: (path: string, file: string, selection: Selection, token?: string) =>
+    call<void>("stage_remove", { path, file, selection, token: token ?? null }),
+  addAll: (path: string) => call<void>("stage_add_all", { path }),
+  removeAll: (path: string) => call<void>("stage_remove_all", { path }),
+  /** Ask first (`nav.openDiscardDialog`). Resolves to the Recently discarded entry, or null when nothing went. */
+  discard: (path: string, file: string, selection: Selection, token?: string) =>
+    call<number | null>("stage_discard", { path, file, selection, token: token ?? null }),
+  /** Ask first. Several files as one Recently discarded entry. */
+  discardFiles: (path: string, files: string[]) => call<number | null>("stage_discard_files", { path, files }),
+  /** Ask first. Everything uncommitted, untracked files too. */
+  discardAll: (path: string) => call<number | null>("stage_discard_all", { path }),
+  /** Commits what is staged; `amend` rewrites the last commit with it. */
+  commit: (path: string, message: string, description: string, amend: boolean) =>
+    call<Committed>("stage_commit", { path, message, description, amend }),
+};
+
+// ------------------------------------------------ git client: history
+
+export type EdgeKind = "pass" | "in" | "out";
+
+/** One line segment of the graph in one row. `pass`: straight down column `from`; `in`: from the top of column `from` into the dot; `out`: from the dot to the bottom of column `to`. */
+export interface GraphEdge {
+  kind: EdgeKind;
+  from: number;
+  to: number;
+  /** The same number all the way down one line of work. */
+  color: number;
+}
+
+export interface GraphRow {
+  id: string;
+  short: string;
+  parents: string[];
+  refs: RefLabel[];
+  pills: Pill[];
+  author: string;
+  email: string;
+  /** RFC 3339 */
+  time: string;
+  subject: string;
+  body: string;
+  /** The column of the commit's dot. */
+  column: number;
+  color: number;
+  edges: GraphEdge[];
+  /** No remote has it yet. */
+  unpushed: boolean;
+  is_head: boolean;
+}
+
+export interface GraphQuery {
+  /** One branch (or any ref); every branch, remote and tag when left out. */
+  branch?: string | null;
+  /** Found in the message, the author, or the start of an id. */
+  text?: string | null;
+  author?: string | null;
+  /** Only commits that touched this file or folder. */
+  path?: string | null;
+  skip?: number;
+  /** 0 or left out: 200. */
+  limit?: number;
+}
+
+export interface GraphView {
+  rows: GraphRow[];
+  more: boolean;
+  /** The widest the graph gets on this page. */
+  columns: number;
+  /** A search is on: a flat list (no edges), not a graph. */
+  filtered: boolean;
+  branch: string | null;
+  head: string | null;
+}
+
+export interface CommitFile {
+  path: string;
+  old_path: string | null;
+  status: FileStatus;
+  additions: number | null;
+  deletions: number | null;
+  binary: boolean;
+}
+
+export interface CommitInfo {
+  id: string;
+  short: string;
+  parents: string[];
+  author: string;
+  email: string;
+  time: string;
+  committer: string;
+  subject: string;
+  body: string;
+  refs: RefLabel[];
+  pills: Pill[];
+  /** Against the first parent, for a merge. */
+  files: CommitFile[];
+  pushed: boolean;
+  is_head: boolean;
+  /** Part of the branch that is checked out. */
+  on_current: boolean;
+}
+
+export interface FileHistoryEntry {
+  id: string;
+  short: string;
+  author: string;
+  time: string;
+  subject: string;
+  /** The file's name in this commit. */
+  path: string;
+  /** What it was called before this commit renamed it. */
+  old_path: string | null;
+  status: FileStatus;
+  additions: number | null;
+  deletions: number | null;
+}
+
+export interface FileHistory {
+  path: string;
+  entries: FileHistoryEntry[];
+  more: boolean;
+}
+
+export interface FileContent {
+  path: string;
+  rev: string;
+  text: string;
+  binary: boolean;
+  truncated: boolean;
+}
+
+export interface BlameRun {
+  commit: string;
+  short: string;
+  author: string;
+  email: string;
+  time: string;
+  summary: string;
+  /** First and last line, from 1. */
+  start: number;
+  end: number;
+  /** The file's name in that commit. */
+  path: string;
+  /** Where "Blame before this change" looks next. */
+  previous: { commit: string; path: string } | null;
+  /** Changed in the working tree, not committed yet. */
+  uncommitted: boolean;
+  lines: string[];
+}
+
+export interface Blame {
+  path: string;
+  at: string | null;
+  runs: BlameRun[];
+  lines: number;
+}
+
+export const historyApi = {
+  graph: (path: string, query: GraphQuery = {}) => call<GraphView>("history_graph", { path, query }),
+  commit: (path: string, id: string) => call<CommitInfo>("history_commit", { path, id }),
+  /** What one commit did to one file. `oldFile`: its name before, when the commit renamed it. */
+  commitDiff: (path: string, id: string, file: string, oldFile?: string | null) =>
+    call<FileDiff>("history_commit_diff", { path, id, file, oldFile: oldFile ?? null }),
+  /** The commits that changed a file, across renames, starting at `from` (HEAD). */
+  file: (path: string, file: string, from?: string | null, limit?: number) =>
+    call<FileHistory>("history_file", { path, file, from: from ?? null, limit: limit ?? null }),
+  fileAt: (path: string, id: string, file: string) => call<FileContent>("history_file_at", { path, id, file }),
+  /** Blame at a commit, or of the working tree. */
+  blame: (path: string, file: string, at?: string | null) => call<Blame>("history_blame", { path, file, at: at ?? null }),
+  /** Blame as it was just before `commit` (a run's own `previous` is more exact across renames). */
+  blameBefore: (path: string, file: string, commit: string) => call<Blame>("history_blame_before", { path, file, commit }),
+};
+
+// ----------------------------------------------- git client: branches
+
+export interface BranchInfo {
+  /** `main`; for a remote branch, without the remote. */
+  name: string;
+  full_ref: string;
+  remote: string | null;
+  current: boolean;
+  upstream: string | null;
+  /** The upstream was deleted on the remote. */
+  upstream_gone: boolean;
+  ahead: number;
+  behind: number;
+  sha: string;
+  short: string;
+  subject: string;
+  author: string;
+  time: string;
+  /** The folder of another worktree that has it checked out. */
+  worktree: string | null;
+}
+
+export interface RemoteGroup {
+  remote: string;
+  kind: "studio" | "github" | "other";
+  /** `On your studio`, `On GitHub`, `On upstream` */
+  label: string;
+  branches: BranchInfo[];
+}
+
+export interface BranchesView {
+  current: string | null;
+  head: string | null;
+  local: BranchInfo[];
+  remotes: RemoteGroup[];
+  /** Uncommitted files: Switch asks first when there are any. */
+  changes: number;
+  fetched_at: string | null;
+}
+
+export type SwitchHow = "ask" | "carry" | "put_aside";
+
+export interface SwitchOutcome {
+  switched: boolean;
+  /** Uncommitted changes and `ask`: nothing happened; ask carry / put aside / cancel. */
+  needs_choice: boolean;
+  changes: number;
+  put_aside: string | null;
+  /** Carried changes that collided: open Resolve conflicts. */
+  conflicts: string[];
+  branch: string;
+  journal: number | null;
+}
+
+export type PullMode = "merge" | "rebase" | "ff_only";
+
+export interface DeleteCheck {
+  branch: string;
+  /** Nothing is lost by deleting it. */
+  safe: boolean;
+  /** Commits only this branch has. */
+  unmerged: number;
+  current: boolean;
+  worktree: string | null;
+}
+
+export interface ForcePushPreview {
+  branch: string;
+  remote: string;
+  remote_branch: string;
+  /** The lease: send it back to `forcePush`. */
+  expected: string | null;
+  /** Commits on the remote that would go. */
+  replaced: number;
+  /** Commits from here that would arrive. */
+  new: number;
+}
+
+export interface Pushed {
+  branch: string;
+  remote: string;
+  forced: boolean;
+}
+
+export interface TagInfo {
+  name: string;
+  sha: string;
+  short: string;
+  annotated: boolean;
+  subject: string;
+  time: string;
+}
+
+export interface RemoteEntry {
+  name: string;
+  url: string;
+  push_url: string | null;
+  kind: "studio" | "github" | "other";
+  /** `Your studio · fetch and push` */
+  what: string;
+}
+
+export interface StashEntry {
+  /** The stash commit: what every action takes. */
+  id: string;
+  short: string;
+  position: number;
+  message: string;
+  branch: string | null;
+  time: string;
+  files: number;
+}
+
+export interface StashDetail {
+  entry: StashEntry;
+  files: FileDiff[];
+}
+
+export interface Worktree {
+  path: string;
+  /** With the home folder as `~`. */
+  display_path: string;
+  /** The repository's main folder. */
+  main: boolean;
+  /** The one these questions were asked from. */
+  current: boolean;
+  branch: string | null;
+  head: string | null;
+  head_short: string | null;
+  locked: boolean;
+  lock_reason: string | null;
+  /** Its folder is gone; `worktreePrune` forgets it. */
+  prunable: boolean;
+  /** Uncommitted files. */
+  dirty: number;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  subject: string | null;
+  time: string | null;
+}
+
+export type WorktreeSource =
+  | { kind: "branch"; name: string }
+  /** `from`: a branch, a fetched ref (`origin/x`, `refs/pull/14/head`) or a commit; HEAD when left out. */
+  | { kind: "new_branch"; name: string; from?: string | null }
+  | { kind: "detached"; rev: string };
+
+export const branchesApi = {
+  list: (path: string) => call<BranchesView>("branches_list", { path }),
+  /** Makes a branch at `from` (HEAD); it isn't switched to. */
+  create: (path: string, name: string, from?: string | null) => call<void>("branches_create", { path, name, from: from ?? null }),
+  rename: (path: string, old: string, name: string) => call<void>("branches_rename", { path, old, new: name }),
+  deleteCheck: (path: string, name: string) => call<DeleteCheck>("branches_delete_check", { path, name }),
+  /** Local only. `force` when `deleteCheck` says it isn't safe (ask first). */
+  delete: (path: string, name: string, force: boolean) => call<void>("branches_delete", { path, name, force }),
+  /** A local branch, or `remote/branch` (which gets a local follower). */
+  switch: (path: string, target: string, how: SwitchHow = "ask") => call<SwitchOutcome>("branches_switch", { path, target, how }),
+  setUpstream: (path: string, branch: string, upstream: string | null) =>
+    call<void>("branches_set_upstream", { path, branch, upstream }),
+  /** One remote, or all of them when left out. */
+  fetch: (path: string, remote?: string | null, prune = true) => call<void>("branches_fetch", { path, remote: remote ?? null, prune }),
+  /** `done: false` means conflicts: `nav.after(outcome, "pull")`. */
+  pull: (path: string, mode: PullMode) => call<OpOutcome>("branches_pull", { path, mode }),
+  push: (path: string, branch?: string | null, remote?: string | null) =>
+    call<Pushed>("branches_push", { path, branch: branch ?? null, remote: remote ?? null }),
+  forcePreview: (path: string, branch?: string | null, remote?: string | null) =>
+    call<ForcePushPreview>("branches_force_preview", { path, branch: branch ?? null, remote: remote ?? null }),
+  /** With lease: only if the remote still stands at `expected` (from the preview shown). Ask first. */
+  forcePush: (path: string, expected: string, branch?: string | null, remote?: string | null) =>
+    call<Pushed>("branches_force_push", { path, branch: branch ?? null, remote: remote ?? null, expected }),
+
+  tags: (path: string) => call<TagInfo[]>("branches_tags", { path }),
+  /** Annotated when there is a message. `at`: a commit (HEAD). */
+  tagCreate: (path: string, name: string, at?: string | null, message?: string | null) =>
+    call<void>("branches_tag_create", { path, name, at: at ?? null, message: message ?? null }),
+  tagDelete: (path: string, name: string) => call<void>("branches_tag_delete", { path, name }),
+  tagPush: (path: string, name: string, remote: string) => call<void>("branches_tag_push", { path, name, remote }),
+
+  remotes: (path: string) => call<RemoteEntry[]>("branches_remotes", { path }),
+  remoteAdd: (path: string, name: string, url: string) => call<void>("branches_remote_add", { path, name, url }),
+  remoteRename: (path: string, old: string, name: string) => call<void>("branches_remote_rename", { path, old, new: name }),
+  remoteRemove: (path: string, name: string) => call<void>("branches_remote_remove", { path, name }),
+  remoteSetUrl: (path: string, name: string, url: string) => call<void>("branches_remote_set_url", { path, name, url }),
+
+  stashes: (path: string) => call<StashEntry[]>("branches_stashes", { path }),
+  /** Puts changes aside: everything, or only `files`. */
+  stashSave: (path: string, message: string, includeUntracked = true, files: string[] = []) =>
+    call<StashEntry>("branches_stash_save", { path, message, includeUntracked, files }),
+  stashShow: (path: string, id: string) => call<StashDetail>("branches_stash_show", { path, id }),
+  /** `done: false` means conflicts: `nav.after(outcome, "stash")`. */
+  stashApply: (path: string, id: string) => call<OpOutcome>("branches_stash_apply", { path, id }),
+  stashPop: (path: string, id: string) => call<OpOutcome>("branches_stash_pop", { path, id }),
+  /** Resolves to its entry in Recent actions (it can be brought back). */
+  stashDrop: (path: string, id: string) => call<number>("branches_stash_drop", { path, id }),
+
+  worktrees: (path: string) => call<Worktree[]>("branches_worktrees", { path }),
+  worktreeSuggest: (path: string, branch: string) =>
+    call<{ path: string; display_path: string }>("branches_worktree_suggest", { path, branch }),
+  /** Opens the folder chooser for a parent folder; null when cancelled. */
+  worktreePick: () => call<string | null>("branches_worktree_pick"),
+  /** Without `target` it goes to the suggested folder beside the repository. */
+  worktreeAdd: (path: string, source: WorktreeSource, target?: string | null) =>
+    call<Worktree>("branches_worktree_add", { path, target: target ?? null, source }),
+  /** Refused while it has uncommitted changes or is locked, unless `force` (ask first). */
+  worktreeRemove: (path: string, worktree: string, force = false) =>
+    call<void>("branches_worktree_remove", { path, worktree, force }),
+  worktreeLock: (path: string, worktree: string, reason?: string) =>
+    call<void>("branches_worktree_lock", { path, worktree, reason: reason ?? null }),
+  worktreeUnlock: (path: string, worktree: string) => call<void>("branches_worktree_unlock", { path, worktree }),
+  worktreePrune: (path: string) => call<string[]>("branches_worktree_prune", { path }),
+};
+
+// --------------------------------------------------- git client: flow
+
+export type MergeMode = "auto" | "no_ff" | "ff_only";
+export type ResetMode = "soft" | "mixed" | "hard";
+export type PlanAction = "keep" | "reword" | "squash" | "fixup" | "drop";
+
+/** One line of a tidy-up plan, oldest commit first. */
+export interface PlanStep {
+  id: string;
+  action: PlanAction;
+  /** The new message for `reword` (and, optionally, `squash`). */
+  message?: string | null;
+}
+
+export interface PlanCommit {
+  id: string;
+  short: string;
+  subject: string;
+  body: string;
+  author: string;
+  time: string;
+  /** Some remote has it: rewriting it means a force push. */
+  pushed: boolean;
+}
+
+export interface RebasePlan {
+  branch: string | null;
+  /** The commit that stays exactly as it is: pass it to `tidy`. */
+  base: string;
+  base_short: string;
+  base_name: string | null;
+  /** Oldest first. */
+  commits: PlanCommit[];
+  has_merges: boolean;
+}
+
+export interface ResetPreview {
+  branch: string | null;
+  target: string;
+  target_short: string;
+  /** Commits the branch steps back. */
+  commits: number;
+  /** How many of those a remote already has. */
+  pushed: number;
+  uncommitted: number;
+}
+
+export type Choice =
+  | { kind: "yours" }
+  | { kind: "theirs" }
+  | { kind: "both"; yours_first: boolean }
+  | { kind: "custom"; text: string };
+
+export type ConflictKind =
+  | "both_modified"
+  | "both_added"
+  | "deleted_by_you"
+  | "deleted_by_them"
+  | "added_by_you"
+  | "added_by_them"
+  | "both_deleted";
+
+export interface ConflictFile {
+  path: string;
+  kind: ConflictKind;
+  binary: boolean;
+  resolved: boolean;
+  /** Binary, or one side deleted it: only `conflictTake` applies. */
+  whole_file_only: boolean;
+  regions: number;
+  chosen: number;
+  /** `yours`, `theirs`, `mixed` or `edited`, once resolved. */
+  how: string | null;
+}
+
+export interface ConflictList {
+  state: OperationState;
+  needs_you: ConflictFile[];
+  /** Files that merged without help. */
+  auto_resolved: string[];
+  done: number;
+  total: number;
+}
+
+export type Region =
+  | { kind: "common"; lines: string[]; yours_start: number; theirs_start: number }
+  | {
+      kind: "conflict";
+      /** Counts conflicts only, from 0. */
+      index: number;
+      yours: string[];
+      theirs: string[];
+      /** null when the file is new on both sides. */
+      base: string[] | null;
+      yours_start: number;
+      theirs_start: number;
+      choice: Choice | null;
+    };
+
+export interface ResultLine {
+  text: string;
+  from: "common" | "yours" | "theirs" | "custom" | "undecided";
+  region: number | null;
+}
+
+export interface ConflictDetail {
+  path: string;
+  kind: ConflictKind;
+  binary: boolean;
+  resolved: boolean;
+  whole_file_only: boolean;
+  /** The branch names to put over the two panes. */
+  yours_label: string;
+  theirs_label: string;
+  regions: Region[];
+  total: number;
+  chosen: number;
+  /** The file as it will be. */
+  result: ResultLine[];
+}
+
+export interface JournalEntry {
+  id: number;
+  unix: number;
+  /** RFC 3339 */
+  time: string;
+  kind: string;
+  /** `Rebased feature/x onto main` */
+  title: string;
+  /** It was undone since. */
+  undone: boolean;
+  /** What going back to before this does, in plain words. */
+  how: string;
+  /** For `discard` entries. */
+  discarded: { files: number; additions: number; deletions: number; paths: string[]; restored: boolean } | null;
+}
+
+export interface UndoOptions {
+  /** Put the current uncommitted changes aside first. */
+  put_aside?: boolean;
+  /** Go back although commits were made since outside Atelier. */
+  force?: boolean;
+}
+
+export interface UndoOutcome {
+  done: boolean;
+  /** `Undid “Rebased feature/x onto main”` */
+  title: string;
+  /** Why not, and what would let it: `nothing`, `busy`, `dirty` (offer put aside) or `moved` (offer force). */
+  refusal: { reason: "nothing" | "busy" | "dirty" | "moved"; message: string; can_put_aside: boolean; can_force: boolean } | null;
+  put_aside: string | null;
+  journal: number | null;
+}
+
+export const flowApi = {
+  /** What is under way: nothing, a merge, a rebase (step n of m, its plan), a cherry-pick, a revert, applying put-aside changes. */
+  state: (path: string) => call<OperationState>("flow_state", { path }),
+  continue: (path: string) => call<OpOutcome>("flow_continue", { path }),
+  skip: (path: string) => call<OpOutcome>("flow_skip", { path }),
+  /** Stop and go back: everything as it was before it started. */
+  abort: (path: string) => call<OpOutcome>("flow_abort", { path }),
+
+  merge: (path: string, branch: string, mode: MergeMode = "auto") => call<OpOutcome>("flow_merge", { path, branch, mode }),
+  rebase: (path: string, onto: string) => call<OpOutcome>("flow_rebase", { path, onto }),
+  /** The commits a tidy-up from `base` would work on (from the upstream or main when left out). */
+  rebasePlan: (path: string, base?: string | null) => call<RebasePlan>("flow_rebase_plan", { path, base: base ?? null }),
+  /** Every commit of the plan exactly once, in the order they should end up, oldest first. */
+  tidy: (path: string, base: string, plan: PlanStep[]) => call<OpOutcome>("flow_tidy", { path, base, plan }),
+  cherryPick: (path: string, id: string) => call<OpOutcome>("flow_cherry_pick", { path, id }),
+  revert: (path: string, id: string) => call<OpOutcome>("flow_revert", { path, id }),
+  resetPreview: (path: string, id: string) => call<ResetPreview>("flow_reset_preview", { path, id }),
+  /** Ask first (`nav.openResetDialog`). `hard` keeps the uncommitted part in Recently discarded. */
+  reset: (path: string, id: string, mode: ResetMode) => call<OpOutcome>("flow_reset", { path, id, mode }),
+
+  conflicts: (path: string) => call<ConflictList>("flow_conflicts", { path }),
+  conflictFile: (path: string, file: string) => call<ConflictDetail>("flow_conflict_file", { path, file }),
+  /** Chooses what one conflict becomes (null takes the choice back). The file is marked resolved once all are chosen. */
+  conflictChoose: (path: string, file: string, region: number, choice: Choice | null) =>
+    call<ConflictDetail>("flow_conflict_choose", { path, file, region, choice }),
+  /** One side's whole file: the only choice for a binary file or a deletion. */
+  conflictTake: (path: string, file: string, side: "yours" | "theirs") => call<void>("flow_conflict_take", { path, file, side }),
+  /** After editing by hand: refused while conflict markers are left. */
+  conflictMark: (path: string, file: string) => call<void>("flow_conflict_mark", { path, file }),
+  conflictReopen: (path: string, file: string) => call<void>("flow_conflict_reopen", { path, file }),
+
+  /** Recent actions, newest first. */
+  journal: (path: string) => call<JournalEntry[]>("flow_journal", { path }),
+  undo: (path: string, options: UndoOptions = {}) => call<UndoOutcome>("flow_undo", { path, options }),
+  /** "Go back to before this". */
+  goBack: (path: string, entry: number, options: UndoOptions = {}) => call<UndoOutcome>("flow_go_back", { path, entry, options }),
+  /** Recently discarded (kept 30 days), newest first. */
+  discarded: (path: string) => call<JournalEntry[]>("flow_discarded", { path }),
+  /** `overwrite`: replace the files when the old changes no longer fit on top. */
+  restoreDiscarded: (path: string, entry: number, overwrite = false) =>
+    call<void>("flow_restore_discarded", { path, entry, overwrite }),
 };
 
 // ----------------------------------------------------------------- events

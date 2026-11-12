@@ -5,7 +5,9 @@
 // which prints to the app's standard error. It never runs unless the app
 // was started with that variable.
 
-import { api } from "./api";
+import { api, type WorkingCopy } from "./api";
+import { setGitPreview } from "./git-nav";
+import type { GitView } from "./routes";
 import type { Shell } from "./shell";
 
 const log = (line: string) => api.selftestLog(line).catch(() => {});
@@ -65,6 +67,61 @@ async function step(name: string, work: () => Promise<void>): Promise<void> {
     await log(`FAIL step ${name}: ${String(e)} :: ${text(document.querySelector(".dialog") ?? document.querySelector(".stage")).slice(0, 300)}`);
     // Leave nothing open for the next step to trip over.
     document.querySelectorAll(".scrim, .menu").forEach((el) => el.remove());
+  }
+}
+
+/** The folder name `scripts/git-fixture.sh` is given by `try-with-mock.sh` (with ATELIER_TRY_GIT=1). */
+export const GIT_FIXTURE = "Tunnel";
+
+/**
+ * The git client's fixture repository, when the world has one: on
+ * feature/tunnel-ui with 5 commits to push, 3 changed files (2 staged),
+ * 2 put-aside entries, a branch that conflicts (feature/backoff-rework),
+ * two remotes, two tags and a linked worktree. See scripts/git-fixture.sh.
+ */
+export async function findGitFixture(): Promise<WorkingCopy | null> {
+  const view = await api.overview();
+  return [...view.copies, ...view.others].find((c) => c.path.endsWith(`/${GIT_FIXTURE}`) && c.worktree_of === null) ?? null;
+}
+
+/**
+ * Walks the git client's screens on the fixture and logs what each shows,
+ * as `[selftest] git <name>: …` lines. The new screens are shown whether
+ * or not their area says it is ready. The area agents extend this with
+ * their own steps (keep each in a `step`, so one failure doesn't stop the
+ * walk); nothing here changes the fixture.
+ */
+export async function gitClientWalk(shell: Shell): Promise<void> {
+  const fixture = await findGitFixture();
+  if (!fixture) {
+    await log("git: no fixture in this world (start with ATELIER_TRY_GIT=1)");
+    return;
+  }
+  const stage = () => text(document.querySelector(".repo-body")).slice(0, 600);
+  const facts = () => document.querySelector(".repo-body .git-facts li:not(.muted)");
+  const show = async (name: string, route: { tab?: "history" | "changes" | "branches"; view?: GitView }) => {
+    await step(`git-${name}`, async () => {
+      shell.go({ screen: "repo", path: fixture.path, ...route });
+      await waitFor(`the ${name} stand-in`, facts);
+      await log(`git ${name}: ${stage()}`);
+      await shot(`git-${name}`);
+    });
+  };
+  setGitPreview(true);
+  try {
+    await show("history", {});
+    await log(`git default tab: ${text(document.querySelector(".repo-tab[aria-current='page']"))} | bar: ${text(document.querySelector(".repo-actions"))}`);
+    await show("changes", { tab: "changes" });
+    await show("branches", { tab: "branches" });
+    await show("worktrees", { view: { kind: "worktrees" } });
+    await show("file-history", { view: { kind: "file-history", file: "internal/tunnel/supervisor.go" } });
+    await show("blame", { view: { kind: "blame", file: "internal/tunnel/supervisor.go" } });
+    await show("tidy", { view: { kind: "tidy" } });
+    await show("conflicts", { view: { kind: "conflicts" } });
+    await log(`git sidebar: ${text(document.querySelector(".sidebar .repos"))}`);
+  } finally {
+    setGitPreview(false);
+    shell.go({ screen: "today" });
   }
 }
 
@@ -439,6 +496,8 @@ export async function runSelfTest(shell: Shell, address: string): Promise<void> 
     } else {
       await log("FAIL no folder outside the studio to publish");
     }
+    // The git client's screens, on the fixture repository when there is one.
+    await gitClientWalk(shell);
     shell.go({ screen: "today" });
     // The menu bar popover, shown without a click on its icon.
     await api.selftestPopover().catch(() => {});

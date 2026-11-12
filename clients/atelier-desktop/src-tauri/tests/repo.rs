@@ -64,7 +64,6 @@ async fn folders_outside_the_roots_are_refused_everywhere() {
         assert!(world.desk.repo_fetch(path).await.is_err());
         assert!(world.desk.repo_history(path).await.is_err());
         assert!(world.desk.repo_open(path, None).await.is_err());
-        assert!(world.desk.repo_hand_over(path).await.is_err());
         assert!(world.desk.folder_init(path).await.is_err());
     }
     // Nothing happened out there, and nothing was launched.
@@ -132,7 +131,6 @@ async fn the_bar_knows_the_repository_and_who_commits() {
         Some("Demi · personal identity")
     );
     assert_eq!(view.editor.label, "VS Code");
-    assert_eq!(view.git_tool.unwrap().label, "Fork");
     assert!(view.fetched_at.is_some());
 }
 

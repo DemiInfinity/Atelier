@@ -940,7 +940,7 @@ async fn fake_runner(socket: std::path::PathBuf, origin: String) {
                     "→ pulls.diff Atelier 14", "← 19 lines added, 3 removed", "  Reading tray.go: the new switch calls toggleRemote", "  without checking the result…"]})
                 }
                 Some("workspaces") => {
-                    json!({"ok": true, "root": "~/Atelier", "presets": ["fork", "vscode", "cursor"], "items": []})
+                    json!({"ok": true, "root": "~/Atelier", "presets": ["vscode", "cursor"], "items": []})
                 }
                 Some("cancel") => json!({"ok": true}),
                 _ => json!({"ok": false, "error": "unknown op"}),

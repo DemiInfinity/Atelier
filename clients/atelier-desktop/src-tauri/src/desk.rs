@@ -89,9 +89,7 @@ pub struct AppState {
     pub clone_root: String,
     pub watch: Vec<String>,
     pub editor: PresetInfo,
-    pub git_tool: Option<PresetInfo>,
     pub editors: Vec<PresetInfo>,
-    pub git_tools: Vec<PresetInfo>,
     pub prefs: Prefs,
     /// `macos`, `windows` or `linux`.
     pub os: &'static str,
@@ -265,18 +263,41 @@ impl Desk {
     }
 
     /// A working copy the app may touch: inside one of the roots, and the
-    /// top folder of a git repository.
+    /// top folder of a git repository. A linked worktree of such a
+    /// repository may be touched too, wherever its folder is (by default
+    /// `<repo>.worktrees/<branch>`, beside the repository).
     pub async fn repo_path(&self, path: &str) -> CmdResult<PathBuf> {
         let roots = self.roots();
-        let real = paths::validate(&roots, path)?;
+        let real = match paths::validate(&roots, path) {
+            Ok(real) => real,
+            Err(refused) if refused.kind == "outside" => {
+                return self.worktree_path(&roots, path).ok_or(refused);
+            }
+            Err(e) => return Err(e),
+        };
         let top = self
             .git()
             .toplevel(&real)
             .await?
             .ok_or_else(|| CmdError::from(atelier_core::Error::NotARepo(real.clone())))?;
         // A folder inside a root whose repository starts above the root.
-        let top = paths::validate(&roots, &top.to_string_lossy())?;
-        Ok(top)
+        match paths::validate(&roots, &top.to_string_lossy()) {
+            Ok(top) => Ok(top),
+            Err(refused) => self.worktree_path(&roots, path).ok_or(refused),
+        }
+    }
+
+    /// `path` when it is the top folder of a linked worktree whose main
+    /// repository is inside one of the roots.
+    fn worktree_path(&self, roots: &[PathBuf], path: &str) -> Option<PathBuf> {
+        let raw = Path::new(path);
+        if !raw.is_absolute() {
+            return None;
+        }
+        let real = raw.canonicalize().ok()?;
+        let main = atelier_core::git::worktree::linked_worktree_main(&real)?;
+        paths::validate(roots, &main.to_string_lossy()).ok()?;
+        Some(real)
     }
 
     pub fn display_path(&self, path: &Path) -> String {
@@ -536,7 +557,6 @@ impl Desk {
             }
         }
         let editor = tools::editor_or_default(settings.config.editor.as_deref());
-        let git_tool = tools::git_tool_or_default(settings.config.git_tool.as_deref());
         let info = |p: &tools::Preset| PresetInfo {
             id: p.id.to_string(),
             label: p.label.to_string(),
@@ -572,9 +592,7 @@ impl Desk {
                 .map(|w| paths::display(w, &settings.home))
                 .collect(),
             editor: info(editor),
-            git_tool: git_tool.map(info),
             editors: tools::editors(self.os),
-            git_tools: tools::git_tools(self.os),
             prefs: Prefs::read(&settings.config),
             os: self.os,
             machine: self.machine(),

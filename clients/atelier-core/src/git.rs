@@ -12,7 +12,17 @@ use crate::api::{CreateRepo, Repo};
 use crate::client::Client;
 use crate::error::{Error, Result};
 
+pub mod blame;
+pub mod branch;
+pub mod conflict;
+pub mod history;
+pub mod integrate;
+pub mod stage;
+pub mod stash;
+pub mod undo;
+mod util;
 mod work;
+pub mod worktree;
 pub use work::*;
 
 /// How to run `git`.

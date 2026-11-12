@@ -119,16 +119,13 @@ export function historyTab(host: RepoHost): TabView {
     }
     aside.classList.remove("hidden");
     for (const row of history.rows) rows.set(row.sha, commitRow(row));
-    const gitTool = host.view().git_tool;
     mount(
       list,
       [...rows.values()],
       history.more
         ? h("p", {
             class: "hist-more",
-            text: gitTool
-              ? `Older commits aren’t shown here. Hand over to ${gitTool.label} for the full history.`
-              : "Older commits aren’t shown here. A git tool has the full history.",
+            text: "Older commits aren’t shown here.",
           })
         : null,
     );

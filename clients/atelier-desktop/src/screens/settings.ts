@@ -316,7 +316,6 @@ export function settingsScreen(ctx: Ctx, _route: Extract<Route, { screen: "setti
     return card(
       title("Editors and tools"),
       picker("settings-editor", "Open repositories in", app.editors, app.editor.id, api.setEditor),
-      picker("settings-git-tool", "For heavier git work, hand over to", app.git_tools, app.git_tool?.id ?? "none", api.setGitTool),
     );
   }
 

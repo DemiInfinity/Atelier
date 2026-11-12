@@ -11,6 +11,13 @@
 #       no watch folders, an empty clone folder, the repositories in
 #       ~/Projects (one through a remote called `atelier`, one only on GitHub)
 #
+#   ATELIER_TRY_GIT=1 scripts/try-with-mock.sh [selftest]
+#       also builds the git client's fixture repository (git-fixture.sh) as
+#       ~/Atelier/DemiInfinity/Tunnel in that home: 5 commits to push on
+#       feature/tunnel-ui, a branch that conflicts with it, 3 changed files
+#       (2 staged), 2 put-aside entries, tags, two remotes and a linked
+#       worktree. The self-test then walks the git client's screens on it.
+#
 # Build first: (cd .. && cargo build -p atelier-desktop --example mock_studio)
 # and `npm run tauri build -- --debug`.
 set -eu
@@ -82,6 +89,12 @@ printf 'The menu shows what is running.\n' > "$copy/notes.md"
 copy="$world/home/Atelier/DemiInfinity/Marbl"
 echo one > "$copy/one.txt" && g -C "$copy" add . && g -C "$copy" commit --quiet -m "One"
 echo two > "$copy/two.txt" && g -C "$copy" add . && g -C "$copy" commit --quiet -m "Two"
+
+# The git client's fixture: a folder the studio doesn't know (it shows
+# under "Other folders"), with everything the git screens need to show.
+if [ -n "${ATELIER_TRY_GIT:-}" ] && [ "${2:-}" != "atl" ]; then
+  sh "$here/scripts/git-fixture.sh" "$world/home/Atelier/DemiInfinity/Tunnel"
+fi
 
 if [ "${2:-}" = "atl" ]; then
   mv "$world/home/Atelier/DemiInfinity/Atelier" "$world/home/Atelier/DemiInfinity/Marbl" "$world/home/Projects/"

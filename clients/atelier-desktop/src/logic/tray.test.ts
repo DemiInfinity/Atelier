@@ -17,7 +17,7 @@ const copy = (name: string, changes = 0, ahead = 0, behind = 0): WorkingCopy => 
   state: "",
   tone: "quiet",
   action: "open",
-  short: "",
+  short: "", worktree_of: null,
 });
 
 describe("popoverStep", () => {

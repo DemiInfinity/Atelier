@@ -280,7 +280,8 @@ async fn this_device_reads_the_runner_and_flips_its_switches() {
         ]
     );
     let workspaces = view.workspaces.unwrap();
-    assert_eq!(workspaces.presets, ["Fork", "VS Code"]);
+    // An id the app has no preset for is shown as the runner sent it.
+    assert_eq!(workspaces.presets, ["fork", "VS Code"]);
 
     world.desk.runner_set_taking(false).await.unwrap();
     world
@@ -935,7 +936,7 @@ async fn editors_are_presets_launched_without_a_shell() {
     let path = repo.to_string_lossy().into_owned();
     world.mock_get("/repos", json!({"repos": []})).await;
 
-    // The configured editor (none yet: VS Code), then a chosen one, then the git tool.
+    // The configured editor (none yet: VS Code), then a chosen one, then the terminal.
     assert_eq!(world.desk.repo_open(&path, None).await.unwrap(), "VS Code");
     world.desk.set_editor("zed").unwrap();
     assert_eq!(world.desk.repo_open(&path, None).await.unwrap(), "Zed");
@@ -943,12 +944,13 @@ async fn editors_are_presets_launched_without_a_shell() {
         world.desk.repo_open(&path, Some("finder")).await.unwrap(),
         "Finder"
     );
-    assert_eq!(world.desk.repo_hand_over(&path).await.unwrap(), "Fork");
-    world.desk.set_git_tool("terminal").unwrap();
-    assert_eq!(world.desk.repo_hand_over(&path).await.unwrap(), "Terminal");
+    assert_eq!(
+        world.desk.repo_open(&path, Some("terminal")).await.unwrap(),
+        "Terminal"
+    );
 
     let launched = world.effects.launched.lock().unwrap().clone();
-    assert_eq!(launched.len(), 5);
+    assert_eq!(launched.len(), 4);
     if cfg!(target_os = "macos") {
         assert_eq!(
             launched[0],
@@ -989,22 +991,24 @@ async fn editors_are_presets_launched_without_a_shell() {
         world.desk.set_editor("/bin/sh").unwrap_err().kind,
         "invalid"
     );
-    assert_eq!(world.desk.set_editor("fork").unwrap_err().kind, "invalid");
     assert_eq!(
-        world.desk.set_git_tool("vscode").unwrap_err().kind,
+        world.desk.set_editor("terminal").unwrap_err().kind,
         "invalid"
     );
-    world.desk.set_git_tool("none").unwrap();
     assert_eq!(
-        world.desk.repo_hand_over(&path).await.unwrap_err().kind,
+        world
+            .desk
+            .repo_open(&path, Some("fork"))
+            .await
+            .unwrap_err()
+            .kind,
         "invalid"
     );
-    assert_eq!(world.effects.launched.lock().unwrap().len(), 5);
+    assert_eq!(world.effects.launched.lock().unwrap().len(), 4);
 
     // What was chosen is in the shared config, where atl reads it too.
     let config = atelier_core::Config::load(&world.base().join("config")).unwrap();
     assert_eq!(config.editor.as_deref(), Some("zed"));
-    assert_eq!(config.git_tool.as_deref(), Some("none"));
     // A command someone put in the config by hand for atl is never run here.
     world
         .desk

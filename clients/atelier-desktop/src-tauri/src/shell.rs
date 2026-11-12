@@ -420,6 +420,96 @@ pub fn stop_live(app: &AppHandle) {
 
 // -------------------------------------------------------------------- run
 
+/// The commands of everything but the git client's four areas.
+fn main_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        commands::app_state,
+        commands::connect_start,
+        commands::connect_poll,
+        commands::connect_reopen,
+        commands::connect_cancel,
+        commands::disconnect,
+        commands::find_folders,
+        commands::add_watch_folder,
+        commands::remove_watch_folder,
+        commands::choose_clone_root,
+        commands::suggest_folders,
+        commands::add_suggested_folders,
+        commands::folders_done,
+        commands::open_folder,
+        commands::runner_probe,
+        commands::overview,
+        commands::run_log,
+        commands::repo_view,
+        commands::repo_changes,
+        commands::repo_diff,
+        commands::repo_commit,
+        commands::repo_discard,
+        commands::repo_undo_commit,
+        commands::repo_history,
+        commands::repo_commit_detail,
+        commands::repo_branches,
+        commands::repo_switch,
+        commands::repo_new_branch,
+        commands::repo_fetch,
+        commands::repo_pull,
+        commands::repo_push,
+        commands::repo_open,
+        commands::open_web,
+        commands::open_studio,
+        commands::open_github,
+        commands::open_link,
+        commands::markdown_preview,
+        commands::pulls_list,
+        commands::pull_detail,
+        commands::pull_merge,
+        commands::pull_update,
+        commands::pull_cancel_merge,
+        commands::pull_checkout,
+        commands::agent_approve,
+        commands::device_view,
+        commands::runner_set_taking,
+        commands::runner_set_rule,
+        commands::runner_tail,
+        commands::job_stop,
+        commands::choose_folder,
+        commands::folder_plan,
+        commands::folder_init,
+        commands::publish,
+        commands::search_repos,
+        commands::clone_repo,
+        commands::mirror_and_clone,
+        commands::create_new,
+        commands::remote_view,
+        commands::remote_set,
+        commands::remote_link,
+        commands::set_editor,
+        commands::set_notify_pref,
+        commands::set_app_pref,
+        commands::messages_view,
+        commands::messages_set_tone,
+        commands::messages_add,
+        commands::messages_remove,
+        commands::messages_set_rule,
+        commands::show_main,
+        commands::hide_popover,
+        commands::quit,
+        commands::selftest_log,
+        commands::selftest_plan,
+        commands::selftest_popover,
+        commands::repo_rename,
+        commands::repo_delete,
+        commands::repo_set_pinned,
+        commands::set_group_collapsed,
+        commands::repo_runs,
+        commands::issues_list,
+        commands::issue_detail,
+        commands::issue_create,
+        commands::issue_comment,
+        commands::issue_set_open,
+    ]
+}
+
 pub fn run() {
     let env = Env::process();
     let effects = Arc::new(SystemEffects {
@@ -435,6 +525,12 @@ pub fn run() {
         }
     };
 
+    let main = main_handler();
+    let stage = crate::gitui_stage::handler();
+    let history = crate::gitui_history::handler();
+    let branches = crate::gitui_branches::handler();
+    let flow = crate::gitui_flow::handler();
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -445,94 +541,22 @@ pub fn run() {
         ))
         .manage(desk)
         .manage(Live::default())
-        .invoke_handler(tauri::generate_handler![
-            commands::app_state,
-            commands::connect_start,
-            commands::connect_poll,
-            commands::connect_reopen,
-            commands::connect_cancel,
-            commands::disconnect,
-            commands::find_folders,
-            commands::add_watch_folder,
-            commands::remove_watch_folder,
-            commands::choose_clone_root,
-            commands::suggest_folders,
-            commands::add_suggested_folders,
-            commands::folders_done,
-            commands::open_folder,
-            commands::runner_probe,
-            commands::overview,
-            commands::run_log,
-            commands::repo_view,
-            commands::repo_changes,
-            commands::repo_diff,
-            commands::repo_commit,
-            commands::repo_discard,
-            commands::repo_undo_commit,
-            commands::repo_history,
-            commands::repo_commit_detail,
-            commands::repo_branches,
-            commands::repo_switch,
-            commands::repo_new_branch,
-            commands::repo_fetch,
-            commands::repo_pull,
-            commands::repo_push,
-            commands::repo_open,
-            commands::repo_hand_over,
-            commands::open_web,
-            commands::open_studio,
-            commands::open_github,
-            commands::open_link,
-            commands::markdown_preview,
-            commands::pulls_list,
-            commands::pull_detail,
-            commands::pull_merge,
-            commands::pull_update,
-            commands::pull_cancel_merge,
-            commands::pull_checkout,
-            commands::agent_approve,
-            commands::device_view,
-            commands::runner_set_taking,
-            commands::runner_set_rule,
-            commands::runner_tail,
-            commands::job_stop,
-            commands::choose_folder,
-            commands::folder_plan,
-            commands::folder_init,
-            commands::publish,
-            commands::search_repos,
-            commands::clone_repo,
-            commands::mirror_and_clone,
-            commands::create_new,
-            commands::remote_view,
-            commands::remote_set,
-            commands::remote_link,
-            commands::set_editor,
-            commands::set_git_tool,
-            commands::set_notify_pref,
-            commands::set_app_pref,
-            commands::messages_view,
-            commands::messages_set_tone,
-            commands::messages_add,
-            commands::messages_remove,
-            commands::messages_set_rule,
-            commands::show_main,
-            commands::hide_popover,
-            commands::quit,
-            commands::selftest_log,
-            commands::selftest_plan,
-            commands::selftest_popover,
-            commands::repo_rename,
-            commands::repo_delete,
-            commands::repo_set_pinned,
-            commands::set_group_collapsed,
-            commands::repo_runs,
-            commands::issues_list,
-            commands::issue_detail,
-            commands::issue_create,
-            commands::issue_comment,
-            commands::issue_set_open,
-        ])
+        .invoke_handler(move |invoke| {
+            // The git client's areas each own their commands; the name's
+            // first word says whose it is.
+            let command = invoke.message.command();
+            if command.starts_with("stage_") {
+                stage(invoke)
+            } else if command.starts_with("history_") {
+                history(invoke)
+            } else if command.starts_with("branches_") {
+                branches(invoke)
+            } else if command.starts_with("flow_") {
+                flow(invoke)
+            } else {
+                main(invoke)
+            }
+        })
         .setup(|app| {
             let handle = app.handle().clone();
             build_tray(&handle)?;

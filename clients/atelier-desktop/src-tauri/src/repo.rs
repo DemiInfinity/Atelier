@@ -43,7 +43,6 @@ pub struct RepoView {
     pub default_branch: Option<String>,
     pub on_github: bool,
     pub editor: tools::PresetInfo,
-    pub git_tool: Option<tools::PresetInfo>,
     /// `Demi · personal identity`.
     pub committing_as: Option<String>,
     /// RFC 3339, when this copy last fetched.
@@ -244,8 +243,47 @@ fn rfc3339(at: std::time::SystemTime) -> Option<String> {
 }
 
 impl Desk {
+    /// Which of a working copy's remotes is the studio (`studio`), which is
+    /// GitHub (`github`), and which is something else (`other`).
+    pub async fn remote_kinds(&self, repo: &Path) -> CmdResult<HashMap<String, &'static str>> {
+        let local = self.git().inspect(repo).await?;
+        let _ = self.studio_repo_of(&local).await;
+        let studio_remote = self
+            .repos_cached()
+            .and_then(|repos| local.studio_remote(&repos).map(|(r, _)| r.name.clone()));
+        let mut hosts: Vec<String> = Vec::new();
+        if let Some(host) = self
+            .settings()
+            .studio()
+            .and_then(|url| url::Url::parse(&url).ok())
+            .and_then(|u| u.host_str().map(str::to_lowercase))
+        {
+            hosts.push(host);
+        }
+        if let Some(ssh) = self.me_cached().and_then(|me| me.studio.ssh) {
+            hosts.push(ssh.host.to_lowercase());
+        }
+        Ok(local
+            .remotes
+            .iter()
+            .map(|remote| {
+                let host = remote.remote.as_ref().map(|r| r.host.as_str());
+                let kind = match host {
+                    Some("github.com") => "github",
+                    Some(host) if hosts.iter().any(|h| h == host) => "studio",
+                    _ if studio_remote.as_deref() == Some(remote.name.as_str()) => "studio",
+                    _ => "other",
+                };
+                (remote.name.clone(), kind)
+            })
+            .collect())
+    }
+
     /// The studio repository a working copy belongs to, if any.
-    async fn studio_repo_of(&self, local: &atelier_core::git::LocalRepo) -> Option<Repo> {
+    pub(crate) async fn studio_repo_of(
+        &self,
+        local: &atelier_core::git::LocalRepo,
+    ) -> Option<Repo> {
         let repos = match self.repos(Duration::from_secs(300)).await {
             Ok(repos) => repos,
             Err(_) => self.repos_cached()?,
@@ -264,7 +302,6 @@ impl Desk {
         let (name, email) = git.identity(&repo).await?;
         let settings = self.settings();
         let editor = tools::editor_or_default(settings.config.editor.as_deref());
-        let git_tool = tools::git_tool_or_default(settings.config.git_tool.as_deref());
         let info = |p: &tools::Preset| tools::PresetInfo {
             id: p.id.to_string(),
             label: p.label.to_string(),
@@ -307,7 +344,6 @@ impl Desk {
                 .filter(|b| !b.is_empty()),
             on_github: studio.as_ref().is_some_and(|r| r.github.is_some()),
             editor: info(editor),
-            git_tool: git_tool.map(info),
             committing_as,
             fetched_at: git.last_fetch(&repo).await?.and_then(rfc3339),
         })
@@ -665,18 +701,6 @@ impl Desk {
             None => tools::editor_or_default(settings.config.editor.as_deref()).id,
         };
         self.launch(id, &repo)
-    }
-
-    /// Hands the working copy to the configured git tool for heavier work.
-    pub async fn repo_hand_over(&self, path: &str) -> CmdResult<String> {
-        let repo = self.repo_path(path).await?;
-        let settings = self.settings();
-        let tool =
-            tools::git_tool_or_default(settings.config.git_tool.as_deref()).ok_or_else(|| {
-                CmdError::invalid("No git tool is chosen.")
-                    .hint("Pick one in Settings → Editors and tools.")
-            })?;
-        self.launch(tool.id, &repo)
     }
 }
 

@@ -6,8 +6,10 @@ import type { Ctx, MenuItem, Screen } from "./ctx";
 import { composeDialog, confirmDialog, conflictsDialog, logDialog, openMenu, promptDialog, typedConfirmDialog } from "./dialogs";
 import { h, icon, mark, mount, settingsIcon } from "./dom";
 import { needStep, routeFor } from "./logic/needs";
-import { sidebarGroups, toggled } from "./logic/sidebar";
+import { sidebarGroups, splitWorktrees, toggled } from "./logic/sidebar";
 import { manageMenu } from "./manage";
+import { gitReady } from "./git-nav";
+import * as sideTrees from "./sidebar-worktrees";
 import { sideRepos, type SideActions } from "./sideview";
 import { sidebarKey, type Route } from "./routes";
 import { addScreen } from "./screens/add";
@@ -383,8 +385,18 @@ export class Shell {
         count > 0 ? h("span", { class: ["count", hot && "hot"], text: count }) : null,
       );
 
-    const groups = sidebarGroups(view?.copies ?? [], view?.others ?? [], this.state.prefs.collapsed);
+    // Linked worktrees are drawn under their repository once the branches
+    // area's sidebar rows are switched on; until then they are plain rows.
+    const nest = gitReady(sideTrees.READY);
+    const all = [...(view?.copies ?? []), ...(view?.others ?? [])];
+    const mine = nest ? splitWorktrees(view?.copies ?? [], all) : { roots: view?.copies ?? [], linked: new Map<string, never[]>() };
+    const theirs = nest ? splitWorktrees(view?.others ?? [], all) : { roots: view?.others ?? [], linked: new Map<string, never[]>() };
+    const linked = new Map([...mine.linked, ...theirs.linked]);
+    const groups = sidebarGroups(mine.roots, theirs.roots, this.state.prefs.collapsed);
     const actions: SideActions = {
+      under: nest
+        ? (copy) => sideTrees.worktreeRows(copy, linked.get(copy.path) ?? [], { currentKey: key, open: (tree) => this.go({ screen: "repo", path: tree.path }) })
+        : undefined,
       currentKey: key,
       open: (copy) => this.go({ screen: "repo", path: copy.path }),
       more: (copy, anchor) => openMenu(anchor, manageMenu(this.ctx, copy, () => this.afterManage(copy.path))),
@@ -435,7 +447,7 @@ export class Shell {
       h(
         "nav",
         { class: "repos", "aria-label": "Repositories" },
-        sideRepos(groups, view?.others ?? [], actions),
+        sideRepos(groups, theirs.roots, actions),
         view && view.copies.length === 0 && view.others.length === 0
           ? h(
               "div",
