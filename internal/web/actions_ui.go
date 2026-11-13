@@ -232,12 +232,17 @@ type actStepView struct {
 	Hidden   int // lines not shown (too many)
 	Open     bool
 	Duration string
+	Log      template.HTML // Lines, rendered (actions_log.go)
+	LastN    int           // number of the last line, so live lines carry on from it
 }
 
 type actJobView struct {
 	store.ActionsJob
 	Summaries   []template.HTML // step summaries, rendered Markdown
 	Setup       []actions.LogLine
+	SetupLog    template.HTML
+	SetupN      int
+	ErrorAt     string // anchor of the first error line (or the failed step) in a failed job
 	Steps       []actStepView
 	NeedNames   []string
 	Hint        string // why a queued job isn't running
@@ -266,7 +271,9 @@ type actRunData struct {
 	Agent     *agentRunInfo // agentic workflow runs (actions_agent.go)
 }
 
-const actMaxStepLines = 3000
+// actMaxStepLines guards the browser against enormous steps: past it, the
+// run page shows the end of the step unless ?all=1 asks for every line.
+var actMaxStepLines = 100000
 
 func (a *App) loadRun(w http.ResponseWriter, r *http.Request) (*repoView, *gitrepo.Repo, store.ActionsRun, bool) {
 	v, g, ok := a.loadRepo(w, r, "actions")
@@ -311,6 +318,7 @@ func (a *App) actionsRunPage(w http.ResponseWriter, r *http.Request) {
 func (a *App) renderRun(w http.ResponseWriter, r *http.Request, v *repoView, g *gitrepo.Repo, run store.ActionsRun, errMsg string, code int) {
 	ctx := r.Context()
 	who := a.actor(r)
+	showAll := r.URL.Query().Get("all") == "1"
 	d := &actRunData{V: v, Run: run, URL: actionsRunURL(v.Repo, run), CanWrite: a.can(ctx, who, v.Repo, PermWrite),
 		Duration: fmtDuration(run.Duration()), Live: !run.Done(), Commit: g.LastCommit(ctx, run.SHA, "")}
 	d.CanCancel = d.CanWrite && !run.Done()
@@ -356,6 +364,7 @@ func (a *App) renderRun(w http.ResponseWriter, r *http.Request, v *repoView, g *
 		}
 		steps, _ := a.db.ActionsSteps(ctx, j.ID)
 		byStep := map[int][]actions.LogLine{}
+		var stepBlocks [][]logBlock
 		for _, l := range perJob[j.ID] {
 			if l.Step < 0 {
 				jv.Setup = append(jv.Setup, l)
@@ -366,16 +375,25 @@ func (a *App) renderRun(w http.ResponseWriter, r *http.Request, v *repoView, g *
 		for _, s := range steps {
 			sv := actStepView{ActionsStep: s, Lines: byStep[s.Index], Duration: fmtDuration(s.Duration()),
 				Open: s.Status == actions.StatusFailure || s.Status == actions.StatusRunning}
-			if n := len(sv.Lines); n > actMaxStepLines {
+			if n := len(sv.Lines); n > actMaxStepLines && !showAll {
 				sv.Hidden, sv.Lines = n-actMaxStepLines, sv.Lines[n-actMaxStepLines:]
 			}
+			stepBlocks = append(stepBlocks, buildLog(sv.Lines, sv.Hidden+1))
 			jv.Steps = append(jv.Steps, sv)
 			if strings.TrimSpace(s.Summary) != "" {
 				jv.Summaries = append(jv.Summaries, renderMarkdown([]byte(s.Summary)))
 			}
 		}
-		if n := len(jv.Setup); n > actMaxStepLines {
+		if n := len(jv.Setup); n > actMaxStepLines && !showAll {
 			jv.Setup = jv.Setup[n-actMaxStepLines:]
+		}
+		setupBlocks := buildLog(jv.Setup, 1)
+		if j.Status == actions.StatusFailure {
+			jv.ErrorAt = markFirstError(j.ID, jv.Steps, stepBlocks, setupBlocks)
+		}
+		jv.SetupLog, jv.SetupN = renderLog(setupBlocks), len(jv.Setup)
+		for i := range jv.Steps {
+			jv.Steps[i].Log, jv.Steps[i].LastN = renderLog(stepBlocks[i]), jv.Steps[i].Hidden+len(jv.Steps[i].Lines)
 		}
 		jv.Open = j.Status == actions.StatusRunning || j.Status == actions.StatusFailure || len(jobs) == 1
 		if j.Status == actions.StatusQueued {
@@ -589,6 +607,7 @@ type actStreamLog struct {
 	ID    int64             `json:"id"`
 	Job   int64             `json:"job"`
 	Lines []actions.LogLine `json:"lines"`
+	Rows  []logStreamRow    `json:"rows"` // Lines, rendered (actions_log.go)
 }
 
 // actionsLogStream sends new log chunks and status changes for a run until
@@ -621,6 +640,7 @@ func (a *App) actionsLogStream(w http.ResponseWriter, r *http.Request) {
 	keepalive := time.NewTicker(20 * time.Second)
 	defer keepalive.Stop()
 	lastStatus := ""
+	parsers := map[[2]int64]*logParser{} // per job step, for ::stop-commands::
 	for {
 		wake := st.waitCh()
 		chunks, err := a.db.ActionsRunLogs(ctx, run.ID, after, 200)
@@ -632,7 +652,15 @@ func (a *App) actionsLogStream(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal([]byte(c.Lines), &lines) != nil {
 				continue
 			}
-			b, _ := json.Marshal(actStreamLog{ID: c.ID, Job: c.JobID, Lines: lines})
+			msg := actStreamLog{ID: c.ID, Job: c.JobID, Lines: lines}
+			for _, l := range lines {
+				key := [2]int64{c.JobID, int64(l.Step)}
+				if parsers[key] == nil {
+					parsers[key] = &logParser{}
+				}
+				msg.Rows = append(msg.Rows, streamRow(parsers[key], l))
+			}
+			b, _ := json.Marshal(msg)
 			fmt.Fprintf(w, "id: %d\nevent: log\ndata: %s\n\n", c.ID, b)
 			after = c.ID
 		}

@@ -401,7 +401,8 @@ func TestActionsEndToEnd(t *testing.T) {
 	mustContain(t, body, "workflow", "Run workflow", "paths-ignore", "input.level")
 	body = expectStatus(t, do(t, a, "GET", "/zoe/demo/actions/runs/1", nil, f.ck), 200, "run page")
 	mustContain(t, body, "run page", "resolved without a lockfile", "Download actions.lock", "test (linux, 1.22)",
-		"running Run echo 1.22 1.2.3", "Re-run all jobs", "act-graph", "<h3>Step summary</h3>")
+		"running Run echo 1.22 1.2.3", "Re-run all jobs", "act-graph", "<h3>Step summary</h3>",
+		`<div class="act-ln" data-ln="1">`, `role="log"`)
 	rec := do(t, a, "GET", "/zoe/demo/actions/runs/1/lockfile", nil, f.ck)
 	if l, err := workflow.ParseLockfile(rec.Body.Bytes()); err != nil || l["acme/tool@v1"] != f.tagSHA {
 		t.Errorf("lockfile download = %v %v", l, err)
@@ -409,7 +410,7 @@ func TestActionsEndToEnd(t *testing.T) {
 	body = expectStatus(t, do(t, a, "GET", "/zoe/demo/actions/runs/1/jobs/"+itoa(build.ID)+"/logs", nil, f.ck), 200, "raw log")
 	mustContain(t, body, "raw log", "Setting up", "running Run acme/tool@v1", "Job assigned to runner Linux box")
 	body = expectStatus(t, do(t, a, "GET", "/zoe/demo/actions/runs/1/logs/stream", nil, f.ck), 200, "stream")
-	mustContain(t, body, "stream", "event: log", "event: status", "event: done", "Setting up")
+	mustContain(t, body, "stream", "event: log", "event: status", "event: done", "Setting up", `"rows":[{"step":-1,"h":"\u003cdiv class=\"act-ln\"`)
 	body = expectStatus(t, do(t, a, "GET", "/settings/runners", nil, f.ck), 200, "runners page")
 	mustContain(t, body, "runners", "Linux box", "Docker box", "Online", "self-hosted", "x64", "docker", "last job")
 

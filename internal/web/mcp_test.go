@@ -557,6 +557,8 @@ func TestMCPOutputCapsAndLog(t *testing.T) {
 	for i := 0; i < 5000; i++ {
 		lines = append(lines, actions.LogLine{Step: 0, Stream: "stdout", Text: fmt.Sprintf("line %05d %s", i, strings.Repeat(".", 20))})
 	}
+	lines = append(lines, actions.LogLine{Step: 0, Stream: "stdout", Text: "\x1b[32m✓\x1b[39m colour-free"},
+		actions.LogLine{Step: 0, Stream: "stdout", Text: "10%\r100%"})
 	b, _ := json.Marshal(lines)
 	if _, err := f.a.db.AppendActionsLog(ctx, jobs[0].ID, string(b), int64(len(b)), 1<<30); err != nil {
 		t.Fatal(err)
@@ -569,6 +571,44 @@ func TestMCPOutputCapsAndLog(t *testing.T) {
 	j := logs["jobs"].([]any)[0].(map[string]any)
 	if j["truncated"] != true || !strings.Contains(j["log"].(string), "line 04999") || strings.Contains(j["log"].(string), "line 00000") {
 		t.Errorf("actions.logs: truncated=%v", j["truncated"])
+	}
+	if l := j["log"].(string); !strings.Contains(l, "\n✓ colour-free\n100%\n") || strings.Contains(l, "\x1b") || strings.Contains(l, "10%") {
+		t.Errorf("actions.logs kept terminal codes or a redrawn line:\n%.300s", l[len(l)-300:])
+	}
+
+	// A failing publish step, as the user pasted it: problems come first, and
+	// the log reads as words.
+	pub := []actions.LogLine{
+		{Step: 1, Stream: "stdout", Text: "Unable to find image 'ubuntu:24.04' locally"},
+		{Step: 1, Stream: "stderr", Text: "26538842dfbf: Pull complete"},
+		{Step: 1, Stream: "stderr", Text: "Status: Downloaded newer image for ubuntu:24.04"},
+		{Step: 1, Stream: "stderr", Text: "debconf: delaying package configuration, since apt-utils is not installed"},
+		{Step: 1, Stream: "stdout", Text: "::set-output name=x::1"},
+		{Step: 1, Stream: "stdout", Text: "::warning file=SHA256SUMS::stale checksums"},
+		{Step: 1, Stream: "stdout", Text: "::error::Missing AetherHub-0.4.1-beta.5-native-mac-arm64.zip"},
+		{Step: 1, Stream: "stdout", Text: "::error::Missing SHA256SUMS"},
+		{Step: 1, Stream: "stdout", Text: "Error: process completed with exit code 1"},
+	}
+	b, _ = json.Marshal(pub)
+	if _, err := f.a.db.AppendActionsLog(ctx, jobs[0].ID, string(b), int64(len(b)), 1<<30); err != nil {
+		t.Fatal(err)
+	}
+	logs = call(t, s, "actions.logs", map[string]any{"repo": "zoe/demo", "run": run.Seq, "step": "1"})
+	j = logs["jobs"].([]any)[0].(map[string]any)
+	l := j["log"].(string)
+	want := "=== Step 1 ===\n[3 lines of download progress]\nWARNING: stale checksums (SHA256SUMS)\n" +
+		"ERROR: Missing AetherHub-0.4.1-beta.5-native-mac-arm64.zip\nERROR: Missing SHA256SUMS\nError: process completed with exit code 1\n"
+	if !strings.HasSuffix(l, want) || strings.Contains(l, "line 0") || strings.Contains(l, "debconf") || strings.Contains(l, "set-output") {
+		t.Errorf("step log =\n%s", l)
+	}
+	probs, _ := j["problems"].([]any)
+	if len(probs) != 4 {
+		t.Fatalf("problems = %v", probs)
+	}
+	first := probs[0].(map[string]any)
+	if first["kind"] != "error" || first["text"] != "Missing AetherHub-0.4.1-beta.5-native-mac-arm64.zip" ||
+		probs[3].(map[string]any)["kind"] != "warning" || probs[3].(map[string]any)["where"] != "SHA256SUMS" {
+		t.Errorf("problems = %v", probs)
 	}
 
 	// The call log: tool, actor, repo and ids, no arguments.

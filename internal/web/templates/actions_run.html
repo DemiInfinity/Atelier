@@ -95,6 +95,12 @@
         {{if .NeedNames}}· needs {{range $i, $n := .NeedNames}}{{if $i}}, {{end}}<span class="mono">{{$n}}</span>{{end}}{{end}}
         {{if .Steps}}· <a href="{{.LogsURL}}">Raw log</a> · <a href="{{.LogsURL}}?download=1">Download</a>{{end}}
       </p>
+      {{if or .Setup .Steps}}
+      <div class="act-log-tools">
+        {{if .ErrorAt}}<a class="btn btn-sm btn-danger act-jump" href="#{{.ErrorAt}}" data-act-jump>Jump to the error</a>{{end}}
+        <button class="btn btn-sm" type="button" data-act-ts aria-pressed="false" hidden>Show times</button>
+      </div>
+      {{end}}
       {{if .Hint}}<p class="small act-hint">{{.Hint}}</p>{{end}}
       {{range .Summaries}}<section class="act-summary markdown" aria-label="Job summary">{{.}}</section>{{end}}
       {{if .Error}}<p class="small act-error" role="alert">{{.Error}}</p>{{end}}
@@ -105,16 +111,16 @@
       </div>
       {{end}}
       {{if or .Setup .Steps}}
-      <details class="act-step" data-act-step="{{.ID}}:-1">
+      <details class="act-step" id="step-{{.ID}}--1" data-act-step="{{.ID}}:-1">
         <summary>{{template "actions-status" "success"}}<span class="act-step-name">Set up job</span></summary>
-        <ol class="act-log" data-act-log="{{.ID}}:-1">{{range .Setup}}<li class="is-{{.Stream}}">{{.Text}}</li>{{end}}</ol>
+        <div class="act-log" role="log" data-act-log="{{.ID}}:-1" data-n="{{.SetupN}}">{{.SetupLog}}</div>
       </details>
       {{end}}
       {{range .Steps}}
-      <details class="act-step" data-act-step="{{$job.ID}}:{{.Index}}" {{if .Open}}open{{end}}>
+      <details class="act-step" id="step-{{$job.ID}}-{{.Index}}" data-act-step="{{$job.ID}}:{{.Index}}" {{if .Open}}open{{end}}>
         <summary><span data-act-step-status="{{$job.ID}}:{{.Index}}">{{template "actions-status" .Status}}</span><span class="act-step-name min0">{{.Name}}</span><span class="small muted act-step-time" data-act-step-duration="{{$job.ID}}:{{.Index}}">{{.Duration}}</span></summary>
-        {{if .Hidden}}<p class="small muted act-hidden">{{.Hidden}} earlier lines aren't shown. <a href="{{$job.LogsURL}}">Open the raw log</a>.</p>{{end}}
-        <ol class="act-log" data-act-log="{{$job.ID}}:{{.Index}}">{{range .Lines}}<li class="is-{{.Stream}}">{{.Text}}</li>{{end}}</ol>
+        {{if .Hidden}}<p class="small muted act-hidden">This step is very long, so its first {{.Hidden}} lines are hidden. <a href="{{$d.URL}}?all=1#step-{{$job.ID}}-{{.Index}}">Show every line</a> · <a href="{{$job.LogsURL}}">raw log</a></p>{{end}}
+        <div class="act-log" role="log" data-act-log="{{$job.ID}}:{{.Index}}" data-n="{{.LastN}}">{{.Log}}</div>
       </details>
       {{end}}
     </div>
