@@ -8,6 +8,7 @@
 .tt-mark { display: inline-flex; align-items: center; }
 .tt-mark-dot { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 5px;
   background: var(--amber-chip); color: var(--amber); border: 1px solid #5a4320; font: 700 10px/1 var(--font-display); }
+.tt-mark-waiting .tt-mark-dot { background: transparent; color: var(--muted); border-color: var(--border-strong); }
 .tt-studio { color: var(--amber); font-size: 12px; }
 .tt-gh-out { color: var(--tether-2); font-size: 12px; opacity: .8; }
 .tt-gh-out:hover { color: var(--tether); opacity: 1; text-decoration: none; }

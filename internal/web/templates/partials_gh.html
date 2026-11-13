@@ -9,8 +9,11 @@
 {{if not .AsOf.IsZero}}<div class="gh-stale" role="status"><strong>As of {{ago .AsOf}}.</strong> {{.Notice}}</div>{{end}}
 {{end}}
 
-{{/* The Atelier mark for a person: pass a tetherPerson. */}}
-{{define "gh-badge"}}{{if .Atelier}}<span class="gh-badge" title="{{.Login}} uses Atelier">{{template "logo"}}<span>Atelier</span></span>{{end}}{{end}}
+{{/* The Atelier mark for a person: pass a tetherPerson. Waiting (a supporter without a studio) is the same pill, outlined and dimmed. */}}
+{{define "gh-badge"}}{{if .Atelier}}{{if .Early}}<span class="gh-badge" title="Uses Atelier (early)">{{template "logo"}}<span aria-hidden="true">Atelier</span><span class="sr-only">Uses Atelier (early)</span></span>{{else}}<span class="gh-badge" title="{{.Login}} uses Atelier">{{template "logo"}}<span>Atelier</span></span>{{end}}{{else if .Waiting}}<span class="gh-badge gh-badge-waiting" title="Waiting for Atelier">{{template "logo"}}<span aria-hidden="true">Waiting</span><span class="sr-only">Waiting for Atelier</span></span>{{end}}{{end}}
+
+{{/* The small amber mark for someone with a studio: pass a tetherPerson. */}}
+{{define "tt-mark-atelier"}}{{if .Early}}<span class="tt-mark" title="Uses Atelier (early)"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">Uses Atelier (early)</span></span>{{else}}<span class="tt-mark" title="{{.Login}} uses Atelier"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">uses Atelier</span></span>{{end}}{{end}}
 
 {{/* The repository header: pass a *ghRepoView. */}}
 {{define "gh-repohead"}}
@@ -19,7 +22,7 @@
     <div class="repohead-title gh-title">
       <p class="repo-name">
         <span class="gh-ink">{{template "tether-icon" 18}}</span>
-        <a href="{{.Owner.URL}}" class="muted-link">{{.Owner.Login}}</a>{{if .Owner.Atelier}}<span class="tt-mark" title="{{.Owner.Login}} uses Atelier"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">uses Atelier</span></span>{{end}}
+        <a href="{{.Owner.URL}}" class="muted-link">{{.Owner.Login}}</a>{{if .Owner.Atelier}}{{template "tt-mark-atelier" .Owner}}{{else if .Owner.Waiting}}<span class="tt-mark tt-mark-waiting" title="Waiting for Atelier"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">Waiting for Atelier</span></span>{{end}}
         <span class="slash">/</span> <a href="{{.Base}}"><strong>{{.Repo.Name}}</strong></a>
       </p>
       {{if .Repo.Private}}<span class="pill">Private</span>{{else}}<span class="pill gh-pill-public">Public</span>{{end}}

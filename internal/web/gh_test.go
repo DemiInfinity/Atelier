@@ -455,7 +455,53 @@ func TestGHProfileAndBadge(t *testing.T) {
 	mustContain(t, body, "carol", "Carol")
 	mustNotContain(t, body, "carol", "Visit their studio", "has a studio of their own", `class="gh-badge"`)
 
-	// Organisations list their repositories; GraphQL failing falls back to popular ones.
+	// Waiting for Atelier: the quieter mark, the sentence, and no studio link
+	// (even if the file carries one).
+	f.gh.mu.Lock()
+	f.w.profiles["wendy"] = map[string]any{"login": "wendy", "name": "Wendy", "type": "User", "avatar_url": "https://avatars.githubusercontent.com/u/44"}
+	f.gh.files["wendy/wendy/.atelier"] = fakeFile{data: []byte(`{"waiting":true,"studio":"https://studio.wendy.dev/wendy"}`), sha: "w1"}
+	f.gh.mu.Unlock()
+	body = f.get(t, "/gh/wendy", 200)
+	mustContain(t, body, "wendy", "Wendy", "wendy is waiting for Atelier.",
+		`<span class="gh-badge gh-badge-waiting" title="Waiting for Atelier">`, `<span class="sr-only">Waiting for Atelier</span>`)
+	mustNotContain(t, body, "wendy", "Visit their studio", "studio.wendy.dev", "has a studio of their own", "uses Atelier", "gh-avatar-atelier")
+	ghNoXSS(t, body, "wendy")
+
+	// An early user: the same amber mark under another name, and the longer sentence.
+	mustNotContain(t, f.get(t, "/gh/dave", 200), "dave not early", "was here early", "Uses Atelier (early)")
+	f.gh.mu.Lock()
+	f.w.profiles["earl"] = map[string]any{"login": "earl", "name": "Earl", "type": "User", "avatar_url": "https://avatars.githubusercontent.com/u/45"}
+	f.gh.files["earl/earl/.atelier"] = fakeFile{data: []byte(`{"atelier":true,"early":true,"studio":"https://studio.earl.dev/earl"}`), sha: "e1"}
+	f.gh.mu.Unlock()
+	body = f.get(t, "/gh/earl", 200)
+	mustContain(t, body, "earl", "earl has a studio of their own, and was here early.", "Visit their studio", "https://studio.earl.dev/earl", "gh-avatar-atelier",
+		`<span class="gh-badge" title="Uses Atelier (early)">`, `<span class="sr-only">Uses Atelier (early)</span>`)
+	mustNotContain(t, body, "earl", "waiting", "earl uses Atelier")
+	ghNoXSS(t, body, "earl")
+
+	// In lists of people: carol (cached as waiting) gets the outlined mark, dave keeps the amber one.
+	if err := f.a.db.SaveTetherBadge(context.Background(), store.TetherBadge{Login: "carol", Waiting: true, CheckedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	body = f.get(t, "/gh/dave/rocket/issues/3", 200)
+	mustContain(t, body, "issue people",
+		`<span class="tt-mark tt-mark-waiting" title="Waiting for Atelier"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">Waiting for Atelier</span></span>`)
+	mustNotContain(t, body, "issue people", "Uses Atelier (early)")
+	body = f.get(t, "/gh/dave/rocket", 200)
+	mustContain(t, body, "repo head", `<span class="tt-mark" title="dave uses Atelier"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">uses Atelier</span></span>`)
+	mustNotContain(t, body, "repo head", "tt-mark-waiting", "Uses Atelier (early)")
+	// Once carol and dave are cached as early users, their marks say so.
+	for _, l := range []string{"carol", "dave"} {
+		if err := f.a.db.SaveTetherBadge(context.Background(), store.TetherBadge{Login: l, Present: true, Early: true, CheckedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	early := `<span class="tt-mark" title="Uses Atelier (early)"><span class="tt-mark-dot" aria-hidden="true">A</span><span class="sr-only">Uses Atelier (early)</span></span>`
+	body = f.get(t, "/gh/dave/rocket/issues/3", 200)
+	mustContain(t, body, "early issue people", early)
+	mustNotContain(t, body, "early issue people", "tt-mark-waiting")
+	mustContain(t, f.get(t, "/gh/dave/rocket", 200), "early repo head", early)
+
 	f.gh.mu.Lock()
 	f.w.gqlFail = true
 	f.gh.search = []tether.Repo{{Name: "anvil", FullName: "acme/anvil", Stars: 5, Owner: tether.User{Login: "acme"}}}

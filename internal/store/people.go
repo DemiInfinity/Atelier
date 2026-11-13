@@ -32,6 +32,7 @@ var migrations = []migration{
 	{"person ownership for sessions, tokens, ssh keys and passkeys", migratePersonOwnership},
 	{"Tailscale as a remote access provider", migrateTunnelTailscale},
 	{"devices allowed to rename and delete repositories", migrateAppDeviceAdmin},
+	{"waiting for Atelier and early user badges", migrateTetherBadgeStates},
 }
 
 const settingSchemaVersion = "schema.version"

@@ -485,9 +485,15 @@ func (s *Store) SaveTetherStatus(ctx context.Context, repoID int64, sha, context
 
 // ---------- "I use Atelier" badges ----------
 
+// TetherBadge is what a GitHub person's .atelier file says. Present means
+// they run Atelier; Waiting means they don't yet but published their
+// support. Present wins: the two are never both true. Early (ran Atelier
+// before its first release) only ever goes with Present.
 type TetherBadge struct {
 	Login     string
 	Present   bool
+	Waiting   bool
+	Early     bool
 	Studio    string
 	ETag      string
 	CheckedAt time.Time
@@ -495,19 +501,39 @@ type TetherBadge struct {
 
 func (s *Store) TetherBadge(ctx context.Context, login string) (TetherBadge, error) {
 	var b TetherBadge
-	var present int
+	var present, waiting, early int
 	var at int64
-	err := s.db.QueryRowContext(ctx, `SELECT login, present, studio, etag, checked_at FROM tether_badges WHERE login=?`, login).
-		Scan(&b.Login, &present, &b.Studio, &b.ETag, &at)
+	err := s.db.QueryRowContext(ctx, `SELECT login, present, waiting, early, studio, etag, checked_at FROM tether_badges WHERE login=?`, login).
+		Scan(&b.Login, &present, &waiting, &early, &b.Studio, &b.ETag, &at)
 	b.Present, b.CheckedAt = present != 0, time.Unix(at, 0)
+	b.Waiting, b.Early = waiting != 0 && !b.Present, early != 0 && b.Present
 	return b, notFound(err)
 }
 
 func (s *Store) SaveTetherBadge(ctx context.Context, b TetherBadge) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO tether_badges (login, present, studio, etag, checked_at) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(login) DO UPDATE SET present=excluded.present, studio=excluded.studio, etag=excluded.etag,
-		checked_at=excluded.checked_at`, b.Login, b.Present, b.Studio, b.ETag, b.CheckedAt.Unix())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO tether_badges (login, present, waiting, early, studio, etag, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(login) DO UPDATE SET present=excluded.present, waiting=excluded.waiting, early=excluded.early,
+		studio=excluded.studio, etag=excluded.etag, checked_at=excluded.checked_at`,
+		b.Login, b.Present, b.Waiting && !b.Present, b.Early && b.Present, b.Studio, b.ETag, b.CheckedAt.Unix())
 	return err
+}
+
+// migrateTetherBadgeStates adds the "waiting for Atelier" and "early user"
+// states to cached badges; every badge already cached starts without them
+// (the next check of its file fills them in).
+func migrateTetherBadgeStates(ctx context.Context, tx *sql.Tx) error {
+	for _, col := range []string{"waiting", "early"} {
+		ok, err := hasColumn(ctx, tx, "tether_badges", col)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			if _, err := tx.ExecContext(ctx, `ALTER TABLE tether_badges ADD COLUMN `+col+` INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // ---------- local search ----------

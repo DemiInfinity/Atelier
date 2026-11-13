@@ -22,11 +22,27 @@ import (
 // When Tether shows GitHub people, it looks for the same file (cached for a
 // day, re-checked with conditional requests) and shows a small amber mark
 // and "Visit their studio".
+//
+// Someone who doesn't run Atelier yet can show support with the same file:
+//
+//	{"waiting": true}
+//
+// They get a quieter, outlined mark ("Waiting for Atelier"). "atelier": true
+// wins over "waiting"; a file with neither is no badge.
+//
+// People who ran Atelier before its first release add "early": true next to
+// "atelier": true ("Uses Atelier (early)"); on its own it means nothing.
+
+// tetherEarlyAccess marks the owner's own badge as an early user's. Flip it
+// to false at the first release.
+const tetherEarlyAccess = true
 
 const tetherBadgeFile = ".atelier"
 
 type tetherBadgeFileJSON struct {
 	Atelier bool   `json:"atelier"`
+	Waiting bool   `json:"waiting,omitempty"` // a supporter without a studio yet; never written by Atelier itself
+	Early   bool   `json:"early,omitempty"`   // ran Atelier before its first release; only counts with atelier:true
 	Studio  string `json:"studio"`
 	Connect string `json:"connect,omitempty"` // the studio's Atelier Connect actor (ConnectBadgeActor), for "Follow on Atelier"
 }
@@ -58,7 +74,7 @@ func (a *App) tetherSetBadge(ctx context.Context, personID int64, on bool) error
 		return err
 	}
 	if on {
-		body, _ := json.Marshal(tetherBadgeFileJSON{Atelier: true, Studio: a.tetherStudioURL(ctx, personID),
+		body, _ := json.Marshal(tetherBadgeFileJSON{Atelier: true, Early: tetherEarlyAccess, Studio: a.tetherStudioURL(ctx, personID),
 			Connect: a.ConnectBadgeActor(ctx, personID)})
 		body = append(body, '\n')
 		if exists {
@@ -77,7 +93,7 @@ func (a *App) tetherSetBadge(ctx context.Context, personID int64, on bool) error
 			return err
 		}
 	}
-	_ = a.db.SaveTetherBadge(ctx, store.TetherBadge{Login: acc.Login, Present: on, Studio: a.tetherStudioURL(ctx, personID), CheckedAt: time.Now()})
+	_ = a.db.SaveTetherBadge(ctx, store.TetherBadge{Login: acc.Login, Present: on, Early: on && tetherEarlyAccess, Studio: a.tetherStudioURL(ctx, personID), CheckedAt: time.Now()})
 	return a.db.SetTetherBadge(ctx, personID, on)
 }
 
@@ -165,8 +181,12 @@ func (a *App) tetherCheckBadge(ctx context.Context, c *tether.Client, login stri
 	default:
 		raw, derr := cur.Decoded()
 		var f tetherBadgeFileJSON
-		if derr == nil && len(raw) < 4096 && json.Unmarshal(raw, &f) == nil && f.Atelier {
-			b.Present, b.Studio = true, tetherSafeStudio(f.Studio)
+		if derr == nil && len(raw) < 4096 && json.Unmarshal(raw, &f) == nil {
+			if f.Atelier {
+				b.Present, b.Early, b.Studio = true, f.Early, tetherSafeStudio(f.Studio)
+			} else if f.Waiting {
+				b.Waiting = true
+			}
 		}
 		a.connectNoteBadge(ctx, login, f.Connect)
 		b.ETag = cur.SHA
@@ -243,13 +263,19 @@ type tetherPerson struct {
 	URL     string
 	GH      string
 	Atelier bool
+	Waiting bool // supports Atelier but has no studio yet; never set together with Atelier
+	Early   bool // ran Atelier before its first release; only set together with Atelier
 	Studio  string
 }
 
 func (a *App) tetherPersonView(login, avatar string, badges map[string]store.TetherBadge) tetherPerson {
 	p := tetherPerson{Login: login, Avatar: tetherAvatar(avatar), URL: ghLocalURL(login), GH: a.tetherWebURL(url.PathEscape(login))}
-	if b, ok := badges[strings.ToLower(login)]; ok && b.Present {
-		p.Atelier, p.Studio = true, b.Studio
+	if b, ok := badges[strings.ToLower(login)]; ok {
+		if b.Present {
+			p.Atelier, p.Early, p.Studio = true, b.Early, b.Studio
+		} else {
+			p.Waiting = b.Waiting
+		}
 	}
 	return p
 }

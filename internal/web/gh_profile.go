@@ -44,6 +44,8 @@ type ghProfileData struct {
 	Org        bool
 	Self       bool
 	Atelier    bool
+	Waiting    bool // "waiting for Atelier": a supporter without a studio
+	Early      bool // an early user: ran Atelier before its first release
 	Studio     string
 	Pinned     []ghRepoCard
 	PinnedKind string // "pinned" or "popular"
@@ -115,9 +117,11 @@ func (a *App) ghProfile(w http.ResponseWriter, r *http.Request, g *ghReq) {
 	b, present := a.tetherBadgeNow(ctx, g.c, login)
 	d.Atelier, d.Studio = present, ""
 	if present {
-		d.Studio = b.Studio
+		d.Studio, d.Early = b.Studio, b.Early
+	} else {
+		d.Waiting = b.Waiting
 	}
-	d.Person = tetherPerson{Login: login, Avatar: d.Avatar, URL: ghLocalURL(login), GH: d.GH, Atelier: d.Atelier, Studio: d.Studio}
+	d.Person = tetherPerson{Login: login, Avatar: d.Avatar, URL: ghLocalURL(login), GH: d.GH, Atelier: d.Atelier, Waiting: d.Waiting, Early: d.Early, Studio: d.Studio}
 
 	a.ghProfilePinned(r, g, login, d)
 	a.ghProfileRepos(r, g, login, d)

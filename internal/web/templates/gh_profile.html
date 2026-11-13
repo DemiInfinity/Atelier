@@ -18,9 +18,13 @@
       {{if $d.Self}}<p class="gh-self small"><strong>This is you.</strong> <a href="/{{$.Me.Name}}">Your Atelier profile</a></p>{{end}}
       {{if $d.Atelier}}
       <section class="gh-atelier stack-sm" aria-label="Atelier">
-        <p class="row gap-sm">{{template "gh-badge" $d.Person}}<span class="small">{{$d.Person.Login}} has a studio of their own.</span></p>
+        <p class="row gap-sm">{{template "gh-badge" $d.Person}}<span class="small">{{$d.Person.Login}} has a studio of their own{{if $d.Early}}, and was here early{{end}}.</span></p>
         {{if $d.Studio}}<a class="btn btn-sm gh-studio-btn" href="{{$d.Studio}}" rel="noopener noreferrer nofollow" target="_blank">Visit their studio ↗</a>{{end}}
         {{with connectBadgeFollow $d.Person.Login}}{{template "connect-follow-badge" .}}{{end}}
+      </section>
+      {{else if $d.Waiting}}
+      <section class="gh-atelier gh-atelier-waiting stack-sm" aria-label="Atelier">
+        <p class="row gap-sm">{{template "gh-badge" $d.Person}}<span class="small">{{$d.Person.Login}} is waiting for Atelier.</span></p>
       </section>
       {{end}}
       {{with $d.Bio}}<p class="gh-bio">{{.}}</p>{{end}}

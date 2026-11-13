@@ -1008,3 +1008,94 @@ func TestTetherIssueAndCommentSync(t *testing.T) {
 		t.Errorf("GitHub #4 landed on #%d = %q", it.Number, got.Title)
 	}
 }
+
+// The second badge state: {"waiting": true} is a supporter without a studio.
+func TestTetherBadgeWaiting(t *testing.T) {
+	f := newTetherFixture(t)
+	a, ctx := f.a, context.Background()
+	f.connect(t)
+	c, _, err := a.tetherClient(ctx, f.me(t).ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	big := `{"waiting":true,"pad":"` + strings.Repeat("x", 5000) + `"}`
+	cases := []struct {
+		login, file      string
+		present, waiting bool
+		studio           string
+		early            bool
+	}{
+		{"wendy", `{"waiting": true}`, false, true, "", false},
+		{"both", `{"atelier":true,"waiting":true,"studio":"https://studio.example/both"}`, true, false, "https://studio.example/both", false},
+		{"neither", `{"atelier":false,"waiting":false}`, false, false, "", false},
+		{"empty", `{}`, false, false, "", false},
+		// A studio link means nothing without atelier:true.
+		{"shy", `{"waiting":true,"studio":"https://studio.example/shy"}`, false, true, "", false},
+		{"huge", big, false, false, "", false},
+		{"broken", `{"waiting": true`, false, false, "", false},
+		{"wrongtype", `{"waiting": "yes"}`, false, false, "", false},
+		// Early users: only together with atelier:true.
+		{"earl", `{"atelier":true,"early":true,"studio":"https://studio.example/earl"}`, true, false, "https://studio.example/earl", true},
+		{"late", `{"atelier":true,"early":false}`, true, false, "", false},
+		{"keen", `{"early":true}`, false, false, "", false},
+		{"keenwait", `{"waiting":true,"early":true}`, false, true, "", false},
+		{"hugeearly", `{"atelier":true,"early":true,"pad":"` + strings.Repeat("x", 5000) + `"}`, false, false, "", false},
+	}
+	f.gh.mu.Lock()
+	for _, tc := range cases {
+		f.gh.files[tc.login+"/"+tc.login+"/.atelier"] = fakeFile{data: []byte(tc.file), sha: "s-" + tc.login}
+	}
+	f.gh.mu.Unlock()
+	for _, tc := range cases {
+		b, err := a.tetherCheckBadge(ctx, c, tc.login)
+		if err != nil || b.Present != tc.present || b.Waiting != tc.waiting || b.Early != tc.early || b.Studio != tc.studio {
+			t.Errorf("%s: checked badge = %+v, %v", tc.login, b, err)
+		}
+		// The cache says the same.
+		got, err := a.db.TetherBadge(ctx, tc.login)
+		if err != nil || got.Present != tc.present || got.Waiting != tc.waiting || got.Early != tc.early || got.Studio != tc.studio || got.ETag != "s-"+tc.login {
+			t.Errorf("%s: cached badge = %+v, %v", tc.login, got, err)
+		}
+		p := a.tetherPersonView(tc.login, "", map[string]store.TetherBadge{tc.login: got})
+		if p.Atelier != tc.present || p.Waiting != tc.waiting || p.Early != tc.early || p.Studio != tc.studio {
+			t.Errorf("%s: person = %+v", tc.login, p)
+		}
+	}
+	// Someone who was waiting and now runs Atelier stops waiting.
+	f.gh.mu.Lock()
+	f.gh.files["wendy/wendy/.atelier"] = fakeFile{data: []byte(`{"atelier":true}`), sha: "w2"}
+	f.gh.mu.Unlock()
+	if b, err := a.tetherCheckBadge(ctx, c, "wendy"); err != nil || !b.Present || b.Waiting {
+		t.Errorf("wendy with a studio = %+v, %v", b, err)
+	}
+	if got, _ := a.db.TetherBadge(ctx, "wendy"); !got.Present || got.Waiting {
+		t.Errorf("wendy cached = %+v", got)
+	}
+
+	// Atelier's own badge is still atelier:true, with no "waiting" key, and
+	// says "early" exactly while tetherEarlyAccess is on.
+	f.gh.addRepo("zoe-gh/zoe-gh", false)
+	expectStatus(t, do(t, a, "POST", "/settings/tether/badge", url.Values{"on": {"1"}}, f.ck), 303, "badge on")
+	f.gh.mu.Lock()
+	own := string(f.gh.files["zoe-gh/zoe-gh/.atelier"].data)
+	f.gh.mu.Unlock()
+	var ownJSON map[string]any
+	if err := json.Unmarshal([]byte(own), &ownJSON); err != nil {
+		t.Fatalf("own badge file = %q: %v", own, err)
+	}
+	_, hasEarly := ownJSON["early"]
+	_, hasWaiting := ownJSON["waiting"]
+	if ownJSON["atelier"] != true || hasWaiting || hasEarly != tetherEarlyAccess || (hasEarly && ownJSON["early"] != true) {
+		t.Errorf("own badge file = %q (early access %v)", own, tetherEarlyAccess)
+	}
+	if !tetherEarlyAccess {
+		t.Error("tetherEarlyAccess is off: fine at the first release, then update this test")
+	}
+	// The cache of the owner's own badge agrees, and reading the file back gives the same.
+	if got, err := a.db.TetherBadge(ctx, "zoe-gh"); err != nil || !got.Present || got.Early != tetherEarlyAccess {
+		t.Errorf("own cached badge = %+v, %v", got, err)
+	}
+	if b, err := a.tetherCheckBadge(ctx, c, "zoe-gh"); err != nil || !b.Present || b.Waiting || b.Early != tetherEarlyAccess {
+		t.Errorf("own badge read back = %+v, %v", b, err)
+	}
+}
