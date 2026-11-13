@@ -112,6 +112,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		<-ctx.Done()
 		return nil
 	}
+	go r.cleanupLoop(ctx) // leftovers from a crash, old caches (cleanup.go)
 	labels := AllLabels(r.Config.Labels)
 	r.logger().Info("runner started", "name", r.Config.Name, "server", r.Config.ServerURL, "labels", labels,
 		"capabilities", r.Config.Caps(), "parallel", r.maxParallel(), "os", runtime.GOOS, "arch", runtime.GOARCH)

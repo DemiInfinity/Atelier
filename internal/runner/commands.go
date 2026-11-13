@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -109,6 +110,35 @@ func (j *jobRun) handleLine(step int, stream, line string, cs *cmdState) {
 	j.log.Line(step, stream, line)
 }
 
+// After a step's main process exits, its output is read until the pipes
+// close; if something it started keeps them open, until they have been quiet
+// for drainQuiet (at most drainMax). Then they are closed.
+var (
+	drainQuiet = time.Second
+	drainMax   = 10 * time.Second
+)
+
+func drainAfterExit(wg *sync.WaitGroup, lastRead *atomic.Int64, closePipes func()) {
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	lastRead.Store(time.Now().UnixNano()) // give what the process wrote last time to arrive
+	limit := time.Now().Add(drainMax)
+	t := time.NewTicker(100 * time.Millisecond)
+	defer t.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case now := <-t.C:
+			if now.After(limit) || now.Sub(time.Unix(0, lastRead.Load())) > drainQuiet {
+				closePipes()
+				<-done
+				return
+			}
+		}
+	}
+}
+
 // run starts a process and streams its output through handleLine.
 func (j *jobRun) run(ctx context.Context, step int, argv []string, cmdLine, dir string, env envMap, cs *cmdState) (int, error) {
 	if len(argv) == 0 {
@@ -132,24 +162,40 @@ func (j *jobRun) run(ctx context.Context, step int, argv []string, cmdLine, dir 
 	if cmdLine != "" {
 		setCmdLine(cmd, cmdLine)
 	}
-	stdout, err := cmd.StdoutPipe()
+	// Our own pipes rather than StdoutPipe: a program the step leaves running
+	// in the background (`server &`) keeps the pipe open, and the step must
+	// still end when its main process does (see drainAfterExit).
+	rOut, wOut, err := os.Pipe()
 	if err != nil {
 		return 1, err
 	}
-	stderr, err := cmd.StderrPipe()
+	rErr, wErr, err := os.Pipe()
+	if err != nil {
+		rOut.Close()
+		wOut.Close()
+		return 1, err
+	}
+	defer rOut.Close()
+	defer rErr.Close()
+	cmd.Stdout, cmd.Stderr = wOut, wErr
+	err = cmd.Start()
+	wOut.Close() // the child has its copies
+	wErr.Close()
 	if err != nil {
 		return 1, err
 	}
-	if err := cmd.Start(); err != nil {
-		return 1, err
-	}
-	var wg sync.WaitGroup
+	var (
+		wg       sync.WaitGroup
+		lastRead atomic.Int64
+	)
+	lastRead.Store(time.Now().UnixNano())
 	pump := func(r io.Reader, stream string) {
 		defer wg.Done()
 		br := bufio.NewReaderSize(r, 64*1024)
 		for {
 			line, err := br.ReadString('\n')
 			if line != "" {
+				lastRead.Store(time.Now().UnixNano())
 				j.handleLine(step, stream, strings.TrimSuffix(line, "\n"), cs)
 			}
 			if err != nil {
@@ -158,10 +204,13 @@ func (j *jobRun) run(ctx context.Context, step int, argv []string, cmdLine, dir 
 		}
 	}
 	wg.Add(2)
-	go pump(stdout, "stdout")
-	go pump(stderr, "stderr")
-	wg.Wait()
+	go pump(rOut, "stdout")
+	go pump(rErr, "stderr")
 	err = cmd.Wait()
+	drainAfterExit(&wg, &lastRead, func() { rOut.Close(); rErr.Close() })
+	if runtimeGOOS() != "windows" && groupAlive(cmd.Process.Pid) {
+		j.addLeftover(cmd.Process.Pid)
+	}
 	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
