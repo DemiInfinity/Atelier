@@ -560,6 +560,7 @@ func TestMCPOutputCapsAndLog(t *testing.T) {
 	lines = append(lines, actions.LogLine{Step: 0, Stream: "stdout", Text: "\x1b[32m✓\x1b[39m colour-free"},
 		actions.LogLine{Step: 0, Stream: "stdout", Text: "10%\r100%"})
 	b, _ := json.Marshal(lines)
+	b0 := b
 	if _, err := f.a.db.AppendActionsLog(ctx, jobs[0].ID, string(b), int64(len(b)), 1<<30); err != nil {
 		t.Fatal(err)
 	}
@@ -601,6 +602,28 @@ func TestMCPOutputCapsAndLog(t *testing.T) {
 	if !strings.HasSuffix(l, want) || strings.Contains(l, "line 0") || strings.Contains(l, "debconf") || strings.Contains(l, "set-output") {
 		t.Errorf("step log =\n%s", l)
 	}
+	// Several jobs: the one that passed sends only its end; the failed one
+	// gets the room.
+	run2, jobs2, err := f.a.db.CreateActionsRun(ctx, store.ActionsRun{RepoID: f.repo.ID, WorkflowPath: ".atelier/workflows/ci.yml",
+		WorkflowName: "CI", Event: "push", Ref: "refs/heads/main", Status: actions.StatusRunning},
+		[]store.ActionsJob{{JobKey: "ok", Name: "ok", Status: actions.StatusSuccess}, {JobKey: "bad", Name: "bad", Status: actions.StatusFailure}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, jb := range jobs2 {
+		if _, err := f.a.db.AppendActionsLog(ctx, jb.ID, string(b0), int64(len(b0)), 1<<30); err != nil {
+			t.Fatal(err)
+		}
+	}
+	two := call(t, s, "actions.logs", map[string]any{"repo": "zoe/demo", "run": run2.Seq})
+	for _, x := range two["jobs"].([]any) {
+		jm := x.(map[string]any)
+		n := len(jm["log"].(string))
+		if (jm["name"] == "ok" && n > mcpQuietTail+256) || (jm["name"] == "bad" && n < 16<<10) {
+			t.Errorf("job %v sent %d bytes of log", jm["name"], n)
+		}
+	}
+
 	probs, _ := j["problems"].([]any)
 	if len(probs) != 4 {
 		t.Fatalf("problems = %v", probs)

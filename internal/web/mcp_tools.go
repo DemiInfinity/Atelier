@@ -1303,8 +1303,9 @@ type mcpActionsLogsIn struct {
 }
 
 const (
-	mcpLogBudget   = 256 << 10
-	mcpMaxProblems = 30 // error and warning lines listed per job
+	mcpLogBudget   = 64 << 10 // all jobs' logs in one answer
+	mcpQuietTail   = 4 << 10  // the end of each job that passed
+	mcpMaxProblems = 30       // error and warning lines listed per job
 )
 
 func mcpStepName(names map[int]string, i int) string {
@@ -1428,10 +1429,25 @@ func mcpActionsLogs(ctx context.Context, c *mcpCall, in mcpActionsLogsIn) (any, 
 		}
 		jobs = one
 	}
-	per := mcpMaxText
-	if len(jobs) > 1 {
-		per = max(mcpLogBudget/len(jobs), 8<<10)
-		per = min(per, mcpMaxText)
+	// One job: up to mcpMaxText. Several: jobs that passed only send their
+	// end (mcpQuietTail), and the jobs that failed, were cancelled or are
+	// still running share the rest of mcpLogBudget, so a whole release run
+	// fits in what an AI client takes in one answer.
+	loud := 0
+	for _, j := range jobs {
+		if j.Status != actions.StatusSuccess && j.Status != actions.StatusSkipped {
+			loud++
+		}
+	}
+	perLoud := mcpMaxText
+	if len(jobs) > 1 && loud > 0 {
+		perLoud = min(max((mcpLogBudget-mcpQuietTail*(len(jobs)-loud))/loud, 8<<10), mcpMaxText)
+	}
+	perJob := func(j store.ActionsJob) int {
+		if len(jobs) > 1 && (j.Status == actions.StatusSuccess || j.Status == actions.StatusSkipped) {
+			return mcpQuietTail
+		}
+		return perLoud
 	}
 	type stepOut struct {
 		Index  int    `json:"step"`
@@ -1472,7 +1488,7 @@ func mcpActionsLogs(ctx context.Context, c *mcpCall, in mcpActionsLogsIn) (any, 
 		}
 		want := mcpStepFilter(in.Step, names)
 		text, errs, warns := mcpPlainLog(chunks, names, want)
-		jo.Log, jo.Truncated = capTail(text, per)
+		jo.Log, jo.Truncated = capTail(text, perJob(j))
 		for _, list := range [][]logRow{errs, warns} {
 			for _, r := range list {
 				if len(jo.Problems) == mcpMaxProblems {
