@@ -78,11 +78,13 @@ func (c *Client) Register(ctx context.Context, req actions.RegisterRequest) (*ac
 
 // Poll returns the next job (nil when none). The job is decoded into JobSpec,
 // which also carries optional fields the contract may grow.
-func (c *Client) Poll(ctx context.Context, req actions.PollRequest) (*JobSpec, error) {
+func (c *Client) Poll(ctx context.Context, req actions.PollRequest) (*JobSpec, *actions.UpdateOffer, error) {
 	var out struct {
-		Job *JobSpec `json:"job,omitempty"`
+		Job    *JobSpec             `json:"job,omitempty"`
+		Update *actions.UpdateOffer `json:"update,omitempty"`
 	}
-	return out.Job, c.do(ctx, "/poll", req, &out)
+	err := c.do(ctx, "/poll", req, &out)
+	return out.Job, out.Update, err
 }
 
 func (c *Client) Logs(ctx context.Context, jobID int64, lines []actions.LogLine) (*actions.LogsResponse, error) {

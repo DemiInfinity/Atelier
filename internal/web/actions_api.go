@@ -43,6 +43,7 @@ func actionsAPIRoutes(a *App, m *http.ServeMux) {
 	p := actions.APIPrefix
 	m.HandleFunc("POST "+p+"/register", a.runnerRegister)
 	m.HandleFunc("POST "+p+"/poll", a.runnerAuthed(a.runnerPoll))
+	m.HandleFunc("GET "+p+"/update", a.runnerAuthed(a.runnerDownload))
 	m.HandleFunc("POST "+p+"/jobs/{id}/logs", a.runnerAuthed(a.runnerLogs))
 	m.HandleFunc("POST "+p+"/jobs/{id}/steps/{index}", a.runnerAuthed(a.runnerStep))
 	m.HandleFunc("POST "+p+"/jobs/{id}/finish", a.runnerAuthed(a.runnerFinish))
@@ -282,8 +283,13 @@ func (a *App) runnerPoll(w http.ResponseWriter, r *http.Request, rn store.Action
 		runnerError(w, http.StatusInternalServerError, "server error")
 		return
 	}
-	if req.Busy {
-		runnerJSON(w, http.StatusOK, actions.PollResponse{})
+	if v := cleanRunnerText(req.Version, 40); v != "" {
+		rn.Version = v
+	}
+	failed := cleanRunnerText(req.UpdateFailed, 40)
+	if upd := a.runnerUpdateOffer(ctx, rn, failed); upd != nil || req.Busy {
+		// An update waits for the runner to go idle; no new job meanwhile.
+		runnerJSON(w, http.StatusOK, actions.PollResponse{Update: upd})
 		return
 	}
 	st := a.actions()
@@ -304,6 +310,10 @@ func (a *App) runnerPoll(w http.ResponseWriter, r *http.Request, rn store.Action
 				rn.Enabled = fresh.Enabled
 			} else {
 				runnerError(w, http.StatusUnauthorized, "the runner was removed")
+				return
+			}
+			if upd := a.runnerUpdateOffer(ctx, rn, failed); upd != nil {
+				runnerJSON(w, http.StatusOK, actions.PollResponse{Update: upd})
 				return
 			}
 		case <-deadline.C:

@@ -11,6 +11,16 @@ COPY . .
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/atelier ./cmd/atelier
 
+# ---- atelier-runner builds the server hands to runners (Settings → Runners → Update) ----
+FROM build AS runner-builds
+RUN set -e; mkdir -p /out/runners; \
+    for t in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do \
+      os=${t%/*}; arch=${t#*/}; ext=""; [ "$os" = windows ] && ext=.exe; \
+      CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
+        -o /out/runners/atelier-runner-$os-$arch$ext ./cmd/atelier-runner; \
+    done; \
+    echo "${VERSION}" > /out/runners/VERSION
+
 # ---- atelier-runner image: docker build --target runner -t atelier-runner . ----
 # Kept before the server's runtime stage so a plain `docker build` still
 # produces the Atelier server image.
@@ -97,6 +107,8 @@ RUN apk add --no-cache git git-daemon ca-certificates tzdata \
 COPY deploy/ca/ /tmp/ca/
 RUN find /tmp/ca -maxdepth 1 -type f -name '*.crt' -exec cp {} /usr/local/share/ca-certificates/ \; ; rm -rf /tmp/ca; update-ca-certificates 2>/dev/null; true
 COPY --from=build /out/atelier /usr/local/bin/atelier
+# atelier-runner for every OS and CPU, from the same commit (ATELIER_RUNNER_DIR)
+COPY --from=runner-builds /out/runners/ /usr/share/atelier/runners/
 # Remote access is off until turned on in Settings; Atelier runs cloudflared
 # itself and it connects back to 127.0.0.1:3001 inside the container only.
 COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared

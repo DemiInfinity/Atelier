@@ -98,7 +98,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 			fmt.Fprintln(stderr, "atelier-runner: forced exit")
 			os.Exit(130)
 		}()
-		return runCmd(ctx, rest, stderr)
+		err := runCmd(ctx, rest, stderr)
+		if errors.Is(err, runner.ErrRestart) {
+			stop()
+			return runner.RestartSelf() // updated (internal/runner/update.go)
+		}
+		return err
 	case "install":
 		return installCmd(rest, stdout, false)
 	case "uninstall":

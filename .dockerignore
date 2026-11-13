@@ -15,3 +15,5 @@ bin/
 Dockerfile
 deploy/
 !deploy/ca/
+docs/brand/
+clients/

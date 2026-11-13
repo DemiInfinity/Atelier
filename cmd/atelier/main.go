@@ -66,6 +66,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("repositories: %w", err)
 	}
+	cfg.Version = version
 	app, err := web.New(cfg, db, repos)
 	if err != nil {
 		return fmt.Errorf("web: %w", err)

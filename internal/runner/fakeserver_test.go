@@ -35,6 +35,9 @@ type fakeServer struct {
 	registered []actions.RegisterRequest
 	badAuth    int
 	finishCh   chan int64
+	update     *actions.UpdateOffer // offered on polls once jobsHanded reaches updateAfter
+	updateBody []byte
+	updateAfter, jobsHanded int
 }
 
 func newFakeServer(t *testing.T) *fakeServer {
@@ -45,6 +48,12 @@ func newFakeServer(t *testing.T) *fakeServer {
 	p := actions.APIPrefix
 	mux.HandleFunc("POST "+p+"/register", f.register)
 	mux.HandleFunc("POST "+p+"/poll", f.auth(f.poll))
+	mux.HandleFunc("GET "+p+"/update", f.auth(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		b := f.updateBody
+		f.mu.Unlock()
+		_, _ = w.Write(b)
+	}))
 	mux.HandleFunc("POST "+p+"/jobs/{id}/logs", f.auth(f.logsH))
 	mux.HandleFunc("POST "+p+"/jobs/{id}/steps/{index}", f.auth(f.stepH))
 	mux.HandleFunc("POST "+p+"/jobs/{id}/finish", f.auth(f.finishH))
@@ -108,9 +117,15 @@ func (f *fakeServer) poll(w http.ResponseWriter, r *http.Request) {
 	deadline := time.Now().Add(300 * time.Millisecond)
 	for {
 		f.mu.Lock()
+		if u := f.update; u != nil && f.jobsHanded >= f.updateAfter && req.UpdateFailed != u.Version && req.Version != u.Version {
+			f.mu.Unlock()
+			writeJSON(w, map[string]any{"update": u})
+			return
+		}
 		if !req.Busy && len(f.queue) > 0 {
 			j := f.queue[0]
 			f.queue = f.queue[1:]
+			f.jobsHanded++
 			f.mu.Unlock()
 			writeJSON(w, map[string]any{"job": j})
 			return

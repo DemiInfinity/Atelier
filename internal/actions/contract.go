@@ -100,11 +100,25 @@ type PollRequest struct {
 	Capabilities []string `json:"capabilities"`
 	Busy         bool     `json:"busy"` // true while a job is running: heartbeat only
 	Version      string   `json:"version"`
+	// UpdateFailed is a version this runner tried to update to and couldn't
+	// (download, checksum, or the new build didn't start): don't offer it again.
+	UpdateFailed string `json:"update_failed,omitempty"`
 }
 
 // PollResponse: Job is nil when there was nothing to do within PollWait.
+// Update, when set, asks the runner to update itself once it is idle; the
+// server sends no job alongside it.
 type PollResponse struct {
-	Job *Job `json:"job,omitempty"`
+	Job    *Job         `json:"job,omitempty"`
+	Update *UpdateOffer `json:"update,omitempty"`
+}
+
+// UpdateOffer is a newer atelier-runner build for the runner's OS and CPU,
+// downloaded from APIPrefix + "/update".
+type UpdateOffer struct {
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
+	Size    int64  `json:"size"`
 }
 
 // Job is one job of a workflow run, ready to execute.

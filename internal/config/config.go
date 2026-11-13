@@ -51,12 +51,20 @@ type Config struct {
 	// ATELIER_TAILSCALED, default "tailscale" and "tailscaled" on PATH.
 	TailscaleBin  string
 	TailscaledBin string
+
+	// Runner updates (internal/web/runner_update.go): atelier-runner builds for
+	// each OS and CPU, named atelier-runner-<os>-<arch>[.exe], with their
+	// version in a VERSION file. ATELIER_RUNNER_DIR; the image ships them in
+	// /usr/share/atelier/runners. Missing: runners can't be updated from here.
+	RunnerDir string
+	Version   string // this server's build, set by main
 }
 
 func FromEnv() Config {
 	c := Config{
 		Listen:             env("ATELIER_LISTEN", ":3000"),
 		DataDir:            env("ATELIER_DATA", "./data"),
+		RunnerDir:          env("ATELIER_RUNNER_DIR", "/usr/share/atelier/runners"),
 		PublicURL:          strings.TrimRight(os.Getenv("ATELIER_PUBLIC_URL"), "/"),
 		TrustProxy:         truthy(os.Getenv("ATELIER_TRUST_PROXY")),
 		GitHubClientID:     os.Getenv("GITHUB_CLIENT_ID"),

@@ -38,7 +38,8 @@
         <div class="grow min0 stack-sm">
           <p><strong>{{.Name}}</strong>
             <span class="small {{if and .Online .Enabled}}act-online{{else}}muted{{end}}">{{if not .Enabled}}Disabled{{else if and .Online .Busy}}Running a job{{else if .Online}}Online{{else}}Offline · seen {{.SeenAgo}}{{end}}</span></p>
-          <p class="small muted">{{if .OS}}{{.OS}}/{{.Arch}}{{end}}{{if .Version}} · atelier-runner {{.Version}}{{end}}{{if .LastJob}} · last job <a href="{{.LastJobURL}}">{{.LastJob}}</a>{{end}}</p>
+          <p class="small muted">{{if .OS}}{{.OS}}/{{.Arch}}{{end}}{{if .Version}} · atelier-runner <span class="mono">{{.Version}}</span>{{end}}{{if .LastJob}} · last job <a href="{{.LastJobURL}}">{{.LastJob}}</a>{{end}}</p>
+          {{if .Latest}}<p class="small act-update">{{if .Updating}}Updating to <span class="mono">{{.Latest}}</span> once its jobs finish…{{else}}Update available: <span class="mono">{{.Latest}}</span>{{end}}</p>{{else if and .Version $d.BuildsVersion}}<p class="small act-online">Up to date</p>{{end}}
           <ul class="act-labels" aria-label="Labels">
             {{range .Labels}}<li class="pill">{{.}}</li>{{end}}
             {{range .AutoLabels}}<li class="pill act-auto" title="Added automatically">{{.}}</li>{{end}}
@@ -46,6 +47,7 @@
           </ul>
         </div>
         <div class="row gap-sm wrap-gap act-rn-actions">
+          {{if and .Latest (not .Updating)}}<form method="post" action="/settings/runners/{{.ID}}/update"><button class="btn btn-sm btn-primary" type="submit" aria-label="Update {{.Name}} to {{.Latest}}">Update</button></form>{{end}}
           <a class="btn btn-sm" href="/settings/workspaces?runner={{.ID}}">Workspaces</a>
           <details class="dropdown dropdown-end">
             <summary class="btn btn-sm">Rename</summary>
@@ -63,6 +65,17 @@
       <div class="list-row muted">No runners yet.</div>
       {{end}}
     </section>
+
+    <form method="post" action="/settings/runners/auto-update" class="card stack-sm">
+      <h2 class="h-sm">Runner updates</h2>
+      {{if $d.BuildsVersion}}
+      <p class="small muted">This Atelier carries <span class="mono">atelier-runner {{$d.BuildsVersion}}</span> for macOS, Linux and Windows. A runner updates when it has no job running: it downloads the new build, checks it, swaps it in and restarts itself.</p>
+      <label class="choice"><input type="checkbox" name="auto" value="1" {{if $d.AutoUpdate}}checked{{end}}><span><strong>Update runners automatically</strong><span class="small muted">Whenever Atelier is updated, every runner moves to the matching build once it's idle.</span></span></label>
+      <div class="row-end"><button class="btn" type="submit">Save</button></div>
+      {{else}}
+      <p class="small muted">This Atelier has no runner builds to hand out (set <span class="mono">ATELIER_RUNNER_DIR</span>, or use the Docker image), so runners are updated by hand.</p>
+      {{end}}
+    </form>
 
     <form method="post" action="/settings/runners/retention" class="card stack-sm">
       <h2 class="h-sm">Job logs</h2>

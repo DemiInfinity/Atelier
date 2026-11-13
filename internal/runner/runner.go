@@ -38,6 +38,7 @@ type Runner struct {
 	jobsMu  sync.Mutex
 	jobs    map[int64]context.CancelCauseFunc
 	ctl     controlState // local control channel state (control.go)
+	upd     updateState  // self-update (update.go); used by Run's loop only
 }
 
 func (r *Runner) logger() *slog.Logger {
@@ -122,10 +123,24 @@ func (r *Runner) Run(ctx context.Context) error {
 	jobCtx := context.WithoutCancel(ctx)
 	var wg sync.WaitGroup
 	failures := 0
+	cleanOldExecutable()
+	restart := false
 	for ctx.Err() == nil {
-		// busy: every slot is taken, or the runner is paused (control.go).
-		// Either way it only heartbeats and the server sends it no job.
-		busy := r.busy()
+		// An update waits until no job is running (update.go).
+		if upd := r.upd.pending; upd != nil && r.ctl.running.Load() == 0 {
+			r.logger().Info("updating atelier-runner", "from", r.Version, "to", upd.Version)
+			if err := r.applyUpdate(ctx, upd); err != nil {
+				r.logger().Warn("update failed; carrying on with this version", "to", upd.Version, "err", err)
+				r.upd.failed, r.upd.pending = upd.Version, nil
+			} else {
+				r.logger().Info("updated; restarting", "to", upd.Version)
+				restart = true
+				break
+			}
+		}
+		// busy: every slot is taken, the runner is paused (control.go) or an
+		// update is waiting. It only heartbeats and the server sends no job.
+		busy := r.busy() || r.upd.pending != nil
 		if busy {
 			// heartbeat until a slot frees up or a setting changes
 			select {
@@ -138,7 +153,14 @@ func (r *Runner) Run(ctx context.Context) error {
 		}
 		started := time.Now()
 		pollCtx, pollDone := r.pollContext(ctx, busy)
-		job, err := r.Client.Poll(pollCtx, actions.PollRequest{Labels: labels, Capabilities: r.Config.AdvertisedCaps(), Busy: busy, Version: r.Version})
+		job, offer, err := r.Client.Poll(pollCtx, actions.PollRequest{Labels: labels, Capabilities: r.Config.AdvertisedCaps(), Busy: busy,
+			Version: r.Version, UpdateFailed: r.upd.failed})
+		if err == nil && offer != nil && offer.Version != r.upd.failed && offer.Version != r.Version {
+			if r.upd.pending == nil {
+				r.logger().Info("an update is waiting until no job is running", "to", offer.Version)
+			}
+			r.upd.pending = offer
+		}
 		interrupted := pollDone()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -188,12 +210,18 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.Grace > 0 {
 		select {
 		case <-done:
+			if restart {
+				return ErrRestart
+			}
 			return nil
 		case <-time.After(r.Grace):
 		}
 	}
 	r.cancelAll(errShutdown)
 	<-done
+	if restart {
+		return ErrRestart
+	}
 	return nil
 }
 

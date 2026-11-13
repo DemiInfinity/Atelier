@@ -230,6 +230,7 @@
 .act-rn { align-items: flex-start; }
 .act-rn > .act-dot { margin-top: 7px; }
 .act-online { color: var(--ok); }
+.act-update { color: var(--amber); }
 .act-labels { display: flex; flex-wrap: wrap; gap: 4px; }
 .act-auto { border-style: dashed; color: var(--muted); }
 .act-rename { width: min(280px, calc(100vw - 32px)); }

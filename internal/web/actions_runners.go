@@ -22,6 +22,8 @@ func actionsRunnerRoutes(a *App, m *http.ServeMux) {
 	m.HandleFunc("POST /settings/runners/{id}/rename", a.authed(a.runnerRename))
 	m.HandleFunc("POST /settings/runners/{id}/enabled", a.authed(a.runnerEnabled))
 	m.HandleFunc("POST /settings/runners/{id}/delete", a.authed(a.runnerDelete))
+	m.HandleFunc("POST /settings/runners/{id}/update", a.authed(a.runnerUpdate))
+	m.HandleFunc("POST /settings/runners/auto-update", a.authed(a.runnersAutoUpdate))
 }
 
 type actRunnerView struct {
@@ -31,6 +33,8 @@ type actRunnerView struct {
 	LastJob    string
 	LastJobURL string
 	SeenAgo    string
+	Latest     string // a newer build it can update to (runner_update.go)
+	Updating   bool   // asked to update and not there yet
 }
 
 func (a *App) runnersPage(w http.ResponseWriter, r *http.Request) {
@@ -46,12 +50,14 @@ func (a *App) renderRunners(w http.ResponseWriter, r *http.Request, token, errMs
 		return
 	}
 	off := a.actions().offlineAfter
+	auto := a.runnerAutoUpdate(ctx)
 	var views []actRunnerView
 	for _, rn := range all {
 		if !a.ownsRunner(ctx, who, rn) {
 			continue
 		}
-		v := actRunnerView{ActionsRunner: rn, Online: time.Since(rn.LastSeen) < off, SeenAgo: ago(rn.LastSeen)}
+		v := actRunnerView{ActionsRunner: rn, Online: time.Since(rn.LastSeen) < off, SeenAgo: ago(rn.LastSeen), Latest: a.runnerLatest(rn)}
+		v.Updating = v.Latest != "" && (auto || a.runnerUpdateRequested(ctx, rn.ID))
 		v.AutoLabels = []string{"self-hosted"}
 		if rn.OS != "" {
 			v.AutoLabels = append(v.AutoLabels, runnerOSLabel(rn.OS))
@@ -83,6 +89,7 @@ func (a *App) renderRunners(w http.ResponseWriter, r *http.Request, token, errMs
 	}
 	a.render(w, r, "actions_runners", page{Title: "Runners", Nav: "tokens", Error: errMsg, Notice: r.URL.Query().Get("saved"),
 		Data: map[string]any{"Runners": views, "Command": cmd, "Base": base, "LogDays": a.actionsLogDays(ctx),
+			"AutoUpdate": auto, "BuildsVersion": a.runnerBuildsVersion(),
 			"Expires": time.Now().Add(registrationTTL)}})
 }
 

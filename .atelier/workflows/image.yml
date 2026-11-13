@@ -1,26 +1,55 @@
 name: image
 
-# Builds Atelier's Docker image on the server runner and pushes it to
-# Atelier's own container registry, so Portainer can pull it from
-# atelier.infinityhomelab.lan/demiinfinity/atelier.
+# On every push to main, on the server's Linux runner:
+#   1. test (in a Go container),
+#   2. build Atelier's image and the runner image, and push both to Atelier's
+#      own registry (atelier.infinityhomelab.lan/demiinfinity/…), so Portainer
+#      can pull them; they are also tagged atelier:latest and
+#      atelier-runner:latest on the server, which the stacks use today,
+#   3. restart Atelier on the new image.
+# Runners then update themselves to the build inside that image once they are
+# idle (Settings → Runners), including the one running this job, so its own
+# container is never recreated mid-job.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: image
+  cancel-in-progress: false
+
 permissions:
   contents: read
   packages: write
 
+env:
+  REGISTRY: atelier.infinityhomelab.lan
+  IMAGE: atelier.infinityhomelab.lan/demiinfinity/atelier
+  RUNNER_IMAGE: atelier.infinityhomelab.lan/demiinfinity/atelier-runner
+  # The server's stack file (with its real settings) lives here on the host.
+  STACK_DIR: /home/demi/atelier/deploy/portainer
+
 jobs:
-  build:
-    name: build and push image
+  test:
     runs-on: [linux, docker]
     timeout-minutes: 30
-    env:
-      REGISTRY: atelier.infinityhomelab.lan
-      IMAGE: atelier.infinityhomelab.lan/demiinfinity/atelier
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vet and test
+        # The workspace has the same path on the host, so the Go container can
+        # mount it; module and build caches persist in named volumes.
+        run: |
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" \
+            -v atelier-ci-gomod:/go/pkg/mod -v atelier-ci-gobuild:/root/.cache/go-build \
+            golang:1.27 sh -c 'git config --global --add safe.directory "*" && go vet ./... && go test ./...'
+
+  build:
+    name: build, push and deploy
+    needs: test
+    runs-on: [linux, docker]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -32,13 +61,30 @@ jobs:
       - name: Build
         run: |
           short=$(echo "$GITHUB_SHA" | cut -c1-7)
-          docker build --build-arg VERSION="$short" -t "$IMAGE:$short" -t "$IMAGE:latest" .
+          docker build --build-arg VERSION="$short" -t "$IMAGE:$short" -t "$IMAGE:latest" -t atelier:latest .
+          docker build --build-arg VERSION="$short" --target runner \
+            -t "$RUNNER_IMAGE:$short" -t "$RUNNER_IMAGE:latest" -t atelier-runner:latest .
           echo "short=$short" >> "$GITHUB_ENV"
 
       - name: Push
         run: |
-          docker push "$IMAGE:$short"
-          docker push "$IMAGE:latest"
+          for i in "$IMAGE:$short" "$IMAGE:latest" "$RUNNER_IMAGE:$short" "$RUNNER_IMAGE:latest"; do docker push "$i"; done
+
+      - name: Restart Atelier on the new image
+        # docker compose runs in a throwaway container with the host's stack
+        # folder mounted at the same path, so the project keeps its labels.
+        # Atelier is down for a few seconds; this runner retries its reports.
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$STACK_DIR:$STACK_DIR" -w "$STACK_DIR" docker:27-cli \
+            docker compose -p atelier -f stack.server.yml up -d --no-build atelier
+          for i in $(seq 1 40); do
+            [ "$(docker inspect atelier --format '{{.State.Health.Status}}')" = healthy ] && { echo "Atelier $short is up"; exit 0; }
+            sleep 3
+          done
+          echo "::error::Atelier didn't report healthy after the restart"
+          docker logs --tail 30 atelier
+          exit 1
 
       - name: Log out
         if: always()
