@@ -39,6 +39,8 @@ const (
 	containerMountRoot  = "/__w"
 	containerWorkspace  = "/github/workspace"
 	containerLabelJobID = "dev.atelier.job"
+	containerLabelPID   = "dev.atelier.pid"    // the runner process that started it (cleanup.go)
+	imageLabelAction    = "dev.atelier.action" // docker action images the runner built
 )
 
 // stepDef is a step from the job or from a composite action.
@@ -108,14 +110,21 @@ type jobRun struct {
 	ctx    context.Context
 	cancel context.CancelCauseFunc
 
-	mu      sync.Mutex
-	env     envMap   // job env + GITHUB_ENV additions
-	paths   []string // GITHUB_PATH additions, newest first
-	posts   []postAction
-	github  map[string]any
-	seq     int
-	ctr     *jobContainer
-	actDirs map[string]string // uses → downloaded directory
+	mu       sync.Mutex
+	env      envMap   // job env + GITHUB_ENV additions
+	paths    []string // GITHUB_PATH additions, newest first
+	posts    []postAction
+	github   map[string]any
+	seq      int
+	ctr      *jobContainer
+	actDirs  map[string]string // uses → downloaded directory
+	leftover []int             // process groups steps left running (stopped at job end)
+}
+
+func (j *jobRun) addLeftover(pgid int) {
+	j.mu.Lock()
+	j.leftover = append(j.leftover, pgid)
+	j.mu.Unlock()
 }
 
 func randHex(n int) string {
@@ -206,7 +215,23 @@ func (j *jobRun) execute() (status string, outputs map[string]string, setupErr e
 			return actions.StatusFailure, nil, fmt.Errorf("create workspace: %w", err)
 		}
 	}
+	// Mark the folder as this process's, so a runner starting later can tell
+	// a live job's folder from one a crash left behind (cleanup.go).
+	_ = os.WriteFile(filepath.Join(j.root, jobOwnerFile), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
 	defer func() {
+		// Like GitHub's runner: whatever a step left running (`server &`,
+		// nohup) is stopped when the job ends, not when the step does, so a
+		// later step can still use it.
+		j.mu.Lock()
+		groups := j.leftover
+		j.mu.Unlock()
+		if n := stopGroups(groups, 5*time.Second); n > 0 {
+			what := "programs"
+			if n == 1 {
+				what = "program"
+			}
+			j.log.System(-1, fmt.Sprintf("Stopped %d %s that steps left running", n, what))
+		}
 		if j.ctr != nil {
 			j.ctr.stop(j)
 		}

@@ -439,13 +439,6 @@ func TestClaudeCodeFailures(t *testing.T) {
 	}
 }
 
-func pidAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	return syscall.Kill(pid, 0) == nil
-}
-
 // TestClaudeCodeTimeoutKillsProcessGroup: when the step times out, Claude
 // Code and everything it started are killed.
 func TestClaudeCodeTimeoutKillsProcessGroup(t *testing.T) {

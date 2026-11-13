@@ -25,6 +25,7 @@ func (r *Runner) fetchAction(ctx context.Context, owner, repo, sha string) (stri
 	_, cache := r.Config.Dirs()
 	dest := filepath.Join(cache, "actions", safeName(owner), safeName(repo), sha)
 	if fi, err := os.Stat(filepath.Join(dest, ".atelier-complete")); err == nil && !fi.IsDir() {
+		touchAction(dest) // last used, for pruning (cleanup.go)
 		return dest, nil
 	}
 	r.fetchMu.Lock()

@@ -20,6 +20,7 @@ func (j *jobRun) fetchAtelierAction(ctx context.Context, owner, repo, sha string
 	_, cache := j.r.Config.Dirs()
 	dest := filepath.Join(cache, "actions", "atelier", safeName(owner), safeName(repo), sha)
 	if _, err := os.Stat(filepath.Join(dest, ".atelier-complete")); err == nil {
+		touchAction(dest) // last used, for pruning (cleanup.go)
 		return dest, nil
 	}
 	j.r.fetchMu.Lock()

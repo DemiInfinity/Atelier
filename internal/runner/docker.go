@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -85,6 +86,7 @@ func (j *jobRun) startContainer(sc *scope) (*jobContainer, error) {
 	j.log.System(-1, "Starting job container "+image)
 	envArgs, proc := dockerEnvArgs(cenv)
 	args := []string{"run", "-d", "--name", name, "--label", containerLabelJobID + "=" + strconv.FormatInt(j.job.ID, 10),
+		"--label", containerLabelPID + "=" + strconv.Itoa(os.Getpid()),
 		"-v", j.root + ":" + containerMountRoot, "-v", j.ws + ":" + containerWorkspace, "-w", containerWorkspace}
 	args = append(args, envArgs...)
 	args = append(args, "--entrypoint", "tail", image, "-f", "/dev/null")
@@ -133,6 +135,7 @@ func (j *jobRun) dockerRun(ctx context.Context, sc *scope, stepEnv envMap, fc *f
 	envArgs, proc := dockerEnvArgs(env)
 	name := fmt.Sprintf("atelier-step-%d-%s", j.job.ID, randHex(3))
 	argv := []string{"docker", "run", "--rm", "--name", name, "--label", containerLabelJobID + "=" + strconv.FormatInt(j.job.ID, 10),
+		"--label", containerLabelPID + "=" + strconv.Itoa(os.Getpid()),
 		"-v", j.root + ":" + containerMountRoot, "-v", j.ws + ":" + containerWorkspace,
 		"-v", filepath.Join(j.root, "home") + ":/github/home", "-w", containerWorkspace}
 	argv = append(argv, envArgs...)
@@ -141,7 +144,16 @@ func (j *jobRun) dockerRun(ctx context.Context, sc *scope, stepEnv envMap, fc *f
 	}
 	argv = append(argv, image)
 	argv = append(argv, args...)
-	return j.run(ctx, sc.logStep, argv, "", j.root, proc, cs)
+	code, err := j.run(ctx, sc.logStep, argv, "", j.root, proc, cs)
+	if ctx.Err() != nil {
+		// Cancelled: stopping the docker command doesn't stop the container
+		// if the program in it ignores the signal, and --rm only removes it
+		// once it exits. Remove it ourselves.
+		rctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		_, _ = j.dockerOutput(rctx, "rm", "-f", name)
+		cancel()
+	}
+	return code, err
 }
 
 // runDockerAction builds (or pulls) a docker action's image and runs it.
@@ -156,7 +168,7 @@ func (j *jobRun) runDockerAction(ctx context.Context, sc *scope, st stepDef, act
 		if _, err := j.dockerOutput(ctx, "image", "inspect", tag); err != nil {
 			j.log.System(sc.logStep, "Building docker action image")
 			_, proc := dockerEnvArgs(envMap{})
-			code, err := j.run(ctx, sc.logStep, []string{"docker", "build", "-t", tag, "-f", df, filepath.Dir(df)}, "", dir, proc, newCmdState())
+			code, err := j.run(ctx, sc.logStep, []string{"docker", "build", "--label", imageLabelAction + "=1", "-t", tag, "-f", df, filepath.Dir(df)}, "", dir, proc, newCmdState())
 			if err != nil || code != 0 {
 				return fmt.Errorf("docker build failed (exit %d) %v", code, errString(err))
 			}
