@@ -180,3 +180,28 @@ func TestLogStreamRow(t *testing.T) {
 		t.Errorf("endgroup row = %+v", e)
 	}
 }
+
+// A very long step shows its end, and ?all=1 shows every line.
+func TestRunPageShowAll(t *testing.T) {
+	defer func(n int) { actMaxStepLines = n }(actMaxStepLines)
+	actMaxStepLines = 3
+	f := newActFixture(t)
+	pullsCommit(t, f.work, ".atelier/workflows/ci.yml", "name: CI\non: push\njobs:\n  b:\n    runs-on: linux\n    steps:\n      - run: x\n", "ci")
+	f.push(t, "main")
+	lx := f.registerRunner(t, "Linux box", []string{"linux"}, []string{"jobs"})
+	j := lx.poll()
+	if j == nil {
+		t.Fatal("no job")
+	}
+	lx.logs(j.ID, 0, "first-line", "two", "three", "four", "last-line")
+	body := expectStatus(t, do(t, f.a, "GET", "/zoe/demo/actions/runs/1", nil, f.ck), 200, "run page")
+	mustContain(t, body, "capped", "its first 2 lines are hidden", "last-line", "?all=1#step-")
+	if strings.Contains(body, "first-line") {
+		t.Error("capped page shows the first line")
+	}
+	body = expectStatus(t, do(t, f.a, "GET", "/zoe/demo/actions/runs/1?all=1", nil, f.ck), 200, "all lines")
+	mustContain(t, body, "all", "first-line", "last-line")
+	if strings.Contains(body, "lines are hidden") {
+		t.Error("?all=1 still hides lines")
+	}
+}

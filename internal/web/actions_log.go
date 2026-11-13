@@ -47,6 +47,7 @@ type logRow struct {
 	Kind   string
 	Label  string        // "Error", "Warning", "Notice" for workflow commands
 	Body   template.HTML // the text, ANSI rendered
+	Text   string        // the text, plain (for the MCP log tool)
 	Where  string        // file:line:col from an ::error file=…:: command
 	Title  string        // group title, or the image a Docker pull line names
 	ID     string        // anchor, set on the job's first error
@@ -82,7 +83,7 @@ var (
 // row classifies and renders one line.
 func (p *logParser) row(l actions.LogLine) logRow {
 	body, plain := ansiHTML(lastCR(l.Text))
-	r := logRow{Time: l.Time, Stream: l.Stream, Body: body}
+	r := logRow{Time: l.Time, Stream: l.Stream, Body: body, Text: plain}
 	t := strings.TrimLeft(plain, " \t")
 	if p.stop != "" {
 		if strings.TrimSpace(plain) == "::"+p.stop+"::" {
@@ -99,12 +100,12 @@ func (p *logParser) row(l actions.LogLine) logRow {
 	if ok {
 		switch name {
 		case logError, logWarning, logNotice:
-			r.Kind, r.Label, r.Body = name, strings.ToUpper(name[:1])+name[1:], escText(value)
+			r.Kind, r.Label, r.Body, r.Text = name, strings.ToUpper(name[:1])+name[1:], escText(value), value
 			r.Where = logWhere(props)
 		case logDebug:
-			r.Kind, r.Body = logDebug, escText(value)
+			r.Kind, r.Body, r.Text = logDebug, escText(value), value
 		case logGroup:
-			r.Kind, r.Title, r.Body = logGroup, value, escText(value)
+			r.Kind, r.Title, r.Body, r.Text = logGroup, value, escText(value), value
 		case logEndGroup:
 			r.Kind = logEndGroup
 		case "stop-commands":

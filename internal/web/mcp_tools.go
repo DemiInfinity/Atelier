@@ -90,7 +90,7 @@ var mcpTools = sync.OnceValue(func() []*mcpTool {
 			Desc: "List Actions workflow runs (newest first), optionally for one workflow file, branch or status."},
 			mcpActionsRuns),
 		mcpDef(mcpTool{Name: "actions.logs", Title: "Read job logs", Repo: true,
-			Desc: "Read the logs of a workflow run's jobs (run is the run number shown in Atelier). Pass job to read one job. Logs keep their end when cut; secrets are already masked."},
+			Desc: "Read the logs of a workflow run's jobs (run is the run number shown in Atelier). Each job lists its steps with their status and the run's problems (error lines, and ::warning:: lines) first, then the log as plain text: colour codes, workflow plumbing and download progress are left out, and ::error:: lines read ERROR: …. Pass job to read one job and step to read one step. Logs keep their end when cut; secrets are already masked."},
 			mcpActionsLogs),
 		mcpDef(mcpTool{Name: "actions.dispatch", Title: "Run a workflow", Repo: true, Write: true, NoJobs: true,
 			Desc: "Start a workflow that has a workflow_dispatch trigger, on a branch (default: the default branch), with optional inputs."},
@@ -1297,11 +1297,111 @@ func mcpActionsRuns(ctx context.Context, c *mcpCall, in mcpActionsRunsIn) (any, 
 
 type mcpActionsLogsIn struct {
 	mcpRepoArg
-	Run int64 `json:"run" jsonschema:"the run number (from actions.runs)"`
-	Job int64 `json:"job,omitempty" jsonschema:"only this job id (from a previous actions.logs answer)"`
+	Run  int64  `json:"run" jsonschema:"the run number (from actions.runs)"`
+	Job  int64  `json:"job,omitempty" jsonschema:"only this job id (from a previous actions.logs answer)"`
+	Step string `json:"step,omitempty" jsonschema:"only this step: its number (from steps, 0 is the first) or part of its name"`
 }
 
-const mcpLogBudget = 256 << 10
+const (
+	mcpLogBudget   = 256 << 10
+	mcpMaxProblems = 30 // error and warning lines listed per job
+)
+
+func mcpStepName(names map[int]string, i int) string {
+	if n := names[i]; n != "" {
+		return n
+	}
+	return "Step " + strconv.Itoa(i)
+}
+
+// mcpStepFilter turns the step argument into a test on step indexes (nil:
+// every step). A number is the step's index; anything else matches names.
+func mcpStepFilter(arg string, names map[int]string) func(int) bool {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return nil
+	}
+	if n, err := strconv.Atoi(arg); err == nil {
+		return func(i int) bool { return i == n }
+	}
+	low := strings.ToLower(arg)
+	return func(i int) bool { return strings.Contains(strings.ToLower(names[i]), low) }
+}
+
+// mcpPlainLog is a job's log as plain text for an AI to read, the way the
+// run page shows it (actions_log.go) but in words: no colour codes, workflow
+// plumbing left out, download progress counted instead of listed, and
+// ::error:: lines written ERROR: …. It also returns the error lines and the
+// ::warning:: lines, with N set to their step index.
+func mcpPlainLog(chunks []store.ActionsLogChunk, names map[int]string, want func(int) bool) (string, []logRow, []logRow) {
+	var (
+		b           strings.Builder
+		errs, warns []logRow
+		parsers     = map[int]*logParser{}
+		last        = -2
+		pulls       int
+	)
+	flush := func() {
+		if pulls > 0 {
+			fmt.Fprintf(&b, "[%d lines of download progress]\n", pulls)
+			pulls = 0
+		}
+	}
+	for _, ch := range chunks {
+		var lines []actions.LogLine
+		if json.Unmarshal([]byte(ch.Lines), &lines) != nil {
+			continue
+		}
+		for _, l := range lines {
+			if want != nil && !want(l.Step) {
+				continue
+			}
+			if l.Step != last {
+				flush()
+				last = l.Step
+				b.WriteString("=== " + mcpStepName(names, l.Step) + " ===\n")
+			}
+			p := parsers[l.Step]
+			if p == nil {
+				p = &logParser{}
+				parsers[l.Step] = p
+			}
+			r := p.row(l)
+			switch r.Kind {
+			case logEndGroup, logCommand, logDebug, logQuiet:
+				continue
+			case logPull:
+				pulls++
+				continue
+			}
+			flush()
+			r.N = l.Step
+			switch {
+			case r.Kind == logGroup:
+				b.WriteString("> " + r.Text)
+			case r.Label != "":
+				b.WriteString(strings.ToUpper(r.Kind) + ": " + r.Text)
+				if r.Where != "" {
+					b.WriteString(" (" + r.Where + ")")
+				}
+			default:
+				b.WriteString(r.Text)
+			}
+			b.WriteByte('\n')
+			switch {
+			case r.Kind == logError:
+				errs = append(errs, r)
+			case r.Kind == logWarning && r.Label != "":
+				warns = append(warns, r)
+			}
+			if b.Len() > 64<<20 {
+				return b.String(), errs, warns
+			}
+		}
+	}
+	flush()
+	return b.String(), errs, warns
+}
 
 func mcpActionsLogs(ctx context.Context, c *mcpCall, in mcpActionsLogsIn) (any, error) {
 	c.target = "run " + strconv.FormatInt(in.Run, 10)
@@ -1333,15 +1433,28 @@ func mcpActionsLogs(ctx context.Context, c *mcpCall, in mcpActionsLogsIn) (any, 
 		per = max(mcpLogBudget/len(jobs), 8<<10)
 		per = min(per, mcpMaxText)
 	}
+	type stepOut struct {
+		Index  int    `json:"step"`
+		Name   string `json:"name"`
+		Status string `json:"status"`
+	}
+	type problem struct {
+		Step  string `json:"step"`
+		Kind  string `json:"kind"` // error or warning
+		Text  string `json:"text"`
+		Where string `json:"where,omitempty"`
+	}
 	type jobOut struct {
-		ID         int64  `json:"job"`
-		Name       string `json:"name"`
-		Status     string `json:"status"`
-		Error      string `json:"error,omitempty"`
-		Runner     string `json:"runner,omitempty"`
-		Log        string `json:"log"`
-		Truncated  bool   `json:"truncated,omitempty"`
-		Unfinished bool   `json:"running,omitempty"`
+		ID         int64     `json:"job"`
+		Name       string    `json:"name"`
+		Status     string    `json:"status"`
+		Error      string    `json:"error,omitempty"`
+		Runner     string    `json:"runner,omitempty"`
+		Steps      []stepOut `json:"steps"`
+		Problems   []problem `json:"problems,omitempty"`
+		Log        string    `json:"log"`
+		Truncated  bool      `json:"truncated,omitempty"`
+		Unfinished bool      `json:"running,omitempty"`
 	}
 	out := []jobOut{}
 	for _, j := range jobs {
@@ -1349,23 +1462,26 @@ func mcpActionsLogs(ctx context.Context, c *mcpCall, in mcpActionsLogsIn) (any, 
 		if err != nil {
 			return nil, err
 		}
-		var b strings.Builder
-		for _, ch := range chunks {
-			var lines []actions.LogLine
-			if json.Unmarshal([]byte(ch.Lines), &lines) != nil {
-				continue
-			}
-			for _, l := range lines {
-				b.WriteString(l.Text)
-				b.WriteByte('\n')
-			}
-			if b.Len() > 64<<20 {
-				break
+		steps, _ := c.a.db.ActionsSteps(ctx, j.ID)
+		jo := jobOut{ID: j.ID, Name: j.Name, Status: j.Status, Error: truncate(j.Error, 500),
+			Runner: j.RunnerName, Unfinished: j.Status == actions.StatusRunning, Steps: []stepOut{}}
+		names := map[int]string{-1: "Set up job"}
+		for _, st := range steps {
+			names[st.Index] = st.Name
+			jo.Steps = append(jo.Steps, stepOut{Index: st.Index, Name: st.Name, Status: st.Status})
+		}
+		want := mcpStepFilter(in.Step, names)
+		text, errs, warns := mcpPlainLog(chunks, names, want)
+		jo.Log, jo.Truncated = capTail(text, per)
+		for _, list := range [][]logRow{errs, warns} {
+			for _, r := range list {
+				if len(jo.Problems) == mcpMaxProblems {
+					break
+				}
+				jo.Problems = append(jo.Problems, problem{Step: mcpStepName(names, r.N), Kind: r.Kind, Text: truncate(r.Text, 500), Where: r.Where})
 			}
 		}
-		text, cut := capTail(b.String(), per)
-		out = append(out, jobOut{ID: j.ID, Name: j.Name, Status: j.Status, Error: truncate(j.Error, 500),
-			Runner: j.RunnerName, Log: text, Truncated: cut, Unfinished: j.Status == actions.StatusRunning})
+		out = append(out, jo)
 	}
 	return map[string]any{"run": run.Seq, "workflow": run.WorkflowName, "status": run.Status,
 		"conclusion": run.Conclusion, "jobs": out}, nil

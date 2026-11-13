@@ -119,7 +119,7 @@
       {{range .Steps}}
       <details class="act-step" id="step-{{$job.ID}}-{{.Index}}" data-act-step="{{$job.ID}}:{{.Index}}" {{if .Open}}open{{end}}>
         <summary><span data-act-step-status="{{$job.ID}}:{{.Index}}">{{template "actions-status" .Status}}</span><span class="act-step-name min0">{{.Name}}</span><span class="small muted act-step-time" data-act-step-duration="{{$job.ID}}:{{.Index}}">{{.Duration}}</span></summary>
-        {{if .Hidden}}<p class="small muted act-hidden">{{.Hidden}} earlier lines aren't shown. <a href="{{$job.LogsURL}}">Open the raw log</a>.</p>{{end}}
+        {{if .Hidden}}<p class="small muted act-hidden">This step is very long, so its first {{.Hidden}} lines are hidden. <a href="{{$d.URL}}?all=1#step-{{$job.ID}}-{{.Index}}">Show every line</a> · <a href="{{$job.LogsURL}}">raw log</a></p>{{end}}
         <div class="act-log" role="log" data-act-log="{{$job.ID}}:{{.Index}}" data-n="{{.LastN}}">{{.Log}}</div>
       </details>
       {{end}}

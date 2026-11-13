@@ -271,7 +271,9 @@ type actRunData struct {
 	Agent     *agentRunInfo // agentic workflow runs (actions_agent.go)
 }
 
-const actMaxStepLines = 3000
+// actMaxStepLines guards the browser against enormous steps: past it, the
+// run page shows the end of the step unless ?all=1 asks for every line.
+var actMaxStepLines = 100000
 
 func (a *App) loadRun(w http.ResponseWriter, r *http.Request) (*repoView, *gitrepo.Repo, store.ActionsRun, bool) {
 	v, g, ok := a.loadRepo(w, r, "actions")
@@ -316,6 +318,7 @@ func (a *App) actionsRunPage(w http.ResponseWriter, r *http.Request) {
 func (a *App) renderRun(w http.ResponseWriter, r *http.Request, v *repoView, g *gitrepo.Repo, run store.ActionsRun, errMsg string, code int) {
 	ctx := r.Context()
 	who := a.actor(r)
+	showAll := r.URL.Query().Get("all") == "1"
 	d := &actRunData{V: v, Run: run, URL: actionsRunURL(v.Repo, run), CanWrite: a.can(ctx, who, v.Repo, PermWrite),
 		Duration: fmtDuration(run.Duration()), Live: !run.Done(), Commit: g.LastCommit(ctx, run.SHA, "")}
 	d.CanCancel = d.CanWrite && !run.Done()
@@ -372,7 +375,7 @@ func (a *App) renderRun(w http.ResponseWriter, r *http.Request, v *repoView, g *
 		for _, s := range steps {
 			sv := actStepView{ActionsStep: s, Lines: byStep[s.Index], Duration: fmtDuration(s.Duration()),
 				Open: s.Status == actions.StatusFailure || s.Status == actions.StatusRunning}
-			if n := len(sv.Lines); n > actMaxStepLines {
+			if n := len(sv.Lines); n > actMaxStepLines && !showAll {
 				sv.Hidden, sv.Lines = n-actMaxStepLines, sv.Lines[n-actMaxStepLines:]
 			}
 			stepBlocks = append(stepBlocks, buildLog(sv.Lines, sv.Hidden+1))
@@ -381,7 +384,7 @@ func (a *App) renderRun(w http.ResponseWriter, r *http.Request, v *repoView, g *
 				jv.Summaries = append(jv.Summaries, renderMarkdown([]byte(s.Summary)))
 			}
 		}
-		if n := len(jv.Setup); n > actMaxStepLines {
+		if n := len(jv.Setup); n > actMaxStepLines && !showAll {
 			jv.Setup = jv.Setup[n-actMaxStepLines:]
 		}
 		setupBlocks := buildLog(jv.Setup, 1)
