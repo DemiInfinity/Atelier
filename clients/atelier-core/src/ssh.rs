@@ -80,10 +80,15 @@ pub async fn ensure_public_key(ssh_dir: &Path, comment: &str) -> Result<(PublicK
             private.display()
         )));
     }
-    let output = tokio::process::Command::new("ssh-keygen")
+    let mut keygen = tokio::process::Command::new("ssh-keygen");
+    keygen
         .args(["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f"])
         .arg(&private)
-        .stdin(Stdio::null())
+        .stdin(Stdio::null());
+    // No console window on Windows (see Git::command).
+    #[cfg(windows)]
+    keygen.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let output = keygen
         .output()
         .await
         .map_err(|e| match e.kind() {

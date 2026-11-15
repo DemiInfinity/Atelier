@@ -89,6 +89,10 @@ impl Git {
 
     fn command(&self, dir: Option<&Path>) -> Command {
         let mut command = Command::new(&self.program);
+        // A windowed app has no console, so without this Windows opens a new
+        // console window for every git call.
+        #[cfg(windows)]
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         command
             .envs(self.envs.iter().map(|(k, v)| (k, v)))
             .stdin(Stdio::null())
