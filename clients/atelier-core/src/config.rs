@@ -259,11 +259,14 @@ impl Settings {
         }
     }
 
-    /// The runner's control socket: `ATELIER_RUNNER_SOCKET`, else
-    /// `control.sock` next to the runner's config.
+    /// The runner's control socket: `ATELIER_RUNNER_SOCKET`, else the fixed
+    /// named pipe on Windows, else `control.sock` next to the runner's config.
     pub fn runner_socket(&self) -> PathBuf {
         if let Some(path) = self.env.get(ENV_RUNNER_SOCKET) {
             return self.expand(&path);
+        }
+        if cfg!(windows) {
+            return PathBuf::from(crate::runner::WINDOWS_PIPE);
         }
         let config = self.runner_config_path();
         config
