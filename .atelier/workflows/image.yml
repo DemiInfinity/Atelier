@@ -62,6 +62,32 @@ jobs:
           TOKEN: ${{ secrets.ATELIER_TOKEN }}
         run: echo "$TOKEN" | docker login "$REGISTRY" -u atelier --password-stdin
 
+      - name: Add trusted CA certificates
+        # Both images trust every deploy/ca/*.crt (see deploy/ca/README.md), but
+        # git ignores those files, so a fresh checkout has none and the images
+        # would come out unable to reach a homelab address signed by a private
+        # CA (the runner then fails every poll with "certificate signed by
+        # unknown authority" and can't even run this workflow to fix itself).
+        # The public root certificate(s) live in the repository variable
+        # EXTRA_CA_CERTS instead (Settings → Variables; PEM, several allowed).
+        # Never put a private key there.
+        env:
+          EXTRA_CA_CERTS: ${{ vars.EXTRA_CA_CERTS }}
+        run: |
+          if [ -z "$EXTRA_CA_CERTS" ]; then
+            echo "::warning::EXTRA_CA_CERTS is empty: the images trust only public CAs, so a runner can't reach an address signed by a private CA."
+            exit 0
+          fi
+          printf '%s\n' "$EXTRA_CA_CERTS" > deploy/ca/extra-ca-certs.crt
+          if grep -q 'PRIVATE KEY' deploy/ca/extra-ca-certs.crt; then
+            echo "::error::EXTRA_CA_CERTS contains a private key. Put only the public root certificate there, and replace that key."
+            exit 1
+          fi
+          n=$(grep -c 'BEGIN CERTIFICATE' deploy/ca/extra-ca-certs.crt || true)
+          [ "$n" -gt 0 ] || { echo "::error::EXTRA_CA_CERTS holds no PEM certificate (expected -----BEGIN CERTIFICATE-----)"; exit 1; }
+          openssl x509 -in deploy/ca/extra-ca-certs.crt -noout -subject -enddate 2>/dev/null || true
+          echo "Added $n trusted CA certificate(s) to both images"
+
       - name: Build
         run: |
           short=$(echo "$GITHUB_SHA" | cut -c1-7)
@@ -87,7 +113,7 @@ jobs:
           [ -n "$token" ] || { echo "::error::No Watchtower HTTP API token found on the watchtower container"; exit 1; }
           echo "::add-mask::$token"
           want=$(docker image inspect "$IMAGE:latest" --format '{{.Id}}')
-          docker run --rm --network container:watchtower curlimages/curl:8.11.1 -fsS --max-time 600 \
+          docker run --rm --network container:watchtower curlimages/curl:8.11.1 -fsS -X POST --max-time 600 \
             -H "Authorization: Bearer $token" "http://localhost:8080/v1/update?image=$IMAGE"
           for i in $(seq 1 60); do
             if [ "$(docker inspect atelier --format '{{.Image}}' 2>/dev/null)" = "$want" ] &&
